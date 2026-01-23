@@ -178,7 +178,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const handleCheckout = () => {
     if (cart.length === 0) return;
     
-    // Sequential ID generation
+    // Robust Sequential ID generation: find max number and add 1
     const maxId = state.invoices.reduce((max, inv) => {
       const idNum = parseInt(inv.id);
       return !isNaN(idNum) ? Math.max(max, idNum) : max;

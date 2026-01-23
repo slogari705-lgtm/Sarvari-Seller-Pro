@@ -66,8 +66,9 @@
                 margin: 0;
                 size: auto;
             }
-            /* Complete UI blackout for browser components */
-            aside, header, nav, footer, .fixed, .no-print, button, .modal-sidebar, #root {
+            
+            /* Hide the entire React application root */
+            #root, aside, header, nav, .no-print, button {
                 display: none !important;
                 visibility: hidden !important;
             }
@@ -81,7 +82,7 @@
                 padding: 0 !important;
             }
             
-            /* High visibility for the isolation print container */
+            /* Force the isolation container to be visible and correctly positioned */
             #print-section {
                 display: block !important;
                 visibility: visible !important;
@@ -93,23 +94,20 @@
                 margin: 0 !important;
                 padding: 0 !important;
                 background-color: white !important;
-                z-index: 9999 !important;
+                z-index: 100000 !important;
             }
 
+            /* Ensure all children of the print section are visible and colored */
             #print-section * {
                 visibility: visible !important;
                 color: black !important;
-                background-color: transparent !important;
                 opacity: 1 !important;
-            }
-
-            /* Enable backgrounds for colored accents in layouts like Advice */
-            * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
         }
 
+        /* Default state of print section is hidden in normal browser view */
         #print-section {
             display: none;
         }
