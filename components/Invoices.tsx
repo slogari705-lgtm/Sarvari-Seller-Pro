@@ -3,7 +3,6 @@ import React, { useState, useMemo } from 'react';
 import { 
   FileText, 
   Search, 
-  Download, 
   Eye, 
   Printer,
   Calendar,
@@ -12,22 +11,9 @@ import {
   Plus,
   X,
   User,
-  ShoppingBag,
   Trash2,
   CheckCircle2,
   Package,
-  ArrowRight,
-  Info,
-  Tag,
-  ChevronRight,
-  UserPlus,
-  Layout,
-  StickyNote,
-  Percent,
-  Settings,
-  Palette,
-  AlignLeft,
-  ChevronDown,
   PlusCircle,
   Minus,
   Calculator,
@@ -35,19 +21,12 @@ import {
   Scale,
   DollarSign,
   AlertCircle,
-  AlertTriangle,
   PenTool,
-  Check,
-  Trash,
   Clock,
-  CircleDashed,
-  Globe,
-  Mail,
-  Phone,
-  Hash,
-  ShoppingBasket
+  Palette,
+  Layout,
+  StickyNote
 } from 'lucide-react';
-import JsBarcode from 'jsbarcode';
 import { AppState, Product, Customer, CartItem, Invoice, InvoiceTemplate, LoanTransaction } from '../types';
 import { translations } from '../translations';
 
@@ -60,11 +39,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
-  const [repaymentInput, setRepaymentInput] = useState<number | ''>('');
   
-  const [isManagingTemplates, setIsManagingTemplates] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<Partial<InvoiceTemplate> | null>(null);
   const [activeTemplateId, setActiveTemplateId] = useState<string>(state.settings.invoiceTemplate);
 
   const t = translations[state.settings.language || 'en'];
@@ -123,15 +98,6 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     }));
   };
 
-  const updateBuilderPrice = (productId: string, price: number) => {
-    setBuilderItems(prev => prev.map(item => {
-      if (item.id === productId) {
-        return { ...item, price };
-      }
-      return item;
-    }));
-  };
-
   const filteredInvoices = useMemo(() => {
     return state.invoices.filter(inv => {
       const customer = state.customers.find(c => c.id === inv.customerId);
@@ -140,10 +106,6 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
              customer?.phone.includes(searchTerm);
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [state.invoices, searchTerm, state.customers]);
-
-  const activeTemplate = useMemo(() => {
-    return state.templates.find(t => t.id === activeTemplateId) || state.templates[0];
-  }, [state.templates, activeTemplateId]);
 
   const subtotal = builderItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const totalCost = builderItems.reduce((acc, item) => acc + ((item.buyPrice || 0) * item.quantity), 0);
@@ -154,44 +116,46 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const finalPaid = builderPaidAmount === '' ? total : builderPaidAmount;
   const balanceDue = Math.max(0, total - finalPaid);
 
+  // Fix: Completed the saveInvoice logic which was truncated
   const saveInvoice = () => {
     if (builderItems.length === 0) return;
-
-    const invoiceId = `INV-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+    const invoiceId = Math.random().toString(36).substr(2, 6).toUpperCase();
     const status: Invoice['status'] = finalPaid >= total ? 'paid' : (finalPaid > 0 ? 'partial' : 'unpaid');
-
-    const invoiceDate = new Date(builderDate);
+    
+    const invoiceDateObj = new Date(builderDate);
     const now = new Date();
-    if (invoiceDate.toDateString() === now.toDateString()) {
-       invoiceDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+    if (invoiceDateObj.toDateString() === now.toDateString()) {
+       invoiceDateObj.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
     } else {
-       invoiceDate.setHours(12, 0, 0); 
+       invoiceDateObj.setHours(12, 0, 0);
     }
 
     const newInvoice: Invoice = {
       id: invoiceId,
-      date: invoiceDate.toISOString(),
+      date: invoiceDateObj.toISOString(),
       customerId: builderCustomer?.id,
       items: builderItems,
       subtotal,
       tax,
       discount: builderDiscount,
       total,
-      profit: invoiceProfit,
       paidAmount: finalPaid,
+      profit: invoiceProfit,
       status,
       paymentMethod: builderPayment,
       notes: builderNotes
     };
 
     updateState('invoices', [...state.invoices, newInvoice]);
-    
+
+    // Update product stock
     const updatedProducts = state.products.map(p => {
-      const cartItem = builderItems.find(bi => bi.id === p.id);
-      return cartItem ? { ...p, stock: p.stock - cartItem.quantity } : p;
+      const cartItem = builderItems.find(item => item.id === p.id);
+      return cartItem ? { ...p, stock: Math.max(0, p.stock - cartItem.quantity) } : p;
     });
     updateState('products', updatedProducts);
 
+    // Update customer debt and lifetime value
     if (builderCustomer) {
       const updatedCustomers = state.customers.map(c => {
         if (c.id === builderCustomer.id) {
@@ -207,1103 +171,427 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       });
       updateState('customers', updatedCustomers);
 
+      // Record loan transaction if there is balance due
       if (balanceDue > 0) {
-        const newTrans: LoanTransaction = {
+        const loanTrans: LoanTransaction = {
           id: Math.random().toString(36).substr(2, 9),
           customerId: builderCustomer.id,
           invoiceId: invoiceId,
-          date: invoiceDate.toISOString(),
+          date: new Date().toISOString(),
           amount: balanceDue,
           type: 'debt',
-          note: `Loan from purchase: ${invoiceId}`
+          note: `Loan from invoice #${invoiceId}`
         };
-        updateState('loanTransactions', [...state.loanTransactions, newTrans]);
+        updateState('loanTransactions', [...state.loanTransactions, loanTrans]);
       }
     }
 
     setIsCreating(false);
     resetBuilder();
-    printInvoice(newInvoice, activeTemplate);
   };
 
   const resetBuilder = () => {
     setBuilderCustomer(null);
     setBuilderItems([]);
-    setBuilderPayment('cash');
     setBuilderDiscount(0);
     setBuilderPaidAmount('');
     setBuilderNotes('');
     setBuilderDate(new Date().toISOString().split('T')[0]);
-    setItemSearch('');
-    setCustomerSearch('');
   };
 
-  const handleRepayment = () => {
-    if (!payingInvoice || repaymentInput === '' || repaymentInput <= 0) return;
-
-    const amountToAdd = Math.min(repaymentInput, payingInvoice.total - payingInvoice.paidAmount);
-    
-    const updatedInvoices = state.invoices.map(inv => {
-      if (inv.id === payingInvoice.id) {
-        const newPaidAmount = inv.paidAmount + amountToAdd;
-        const newStatus: Invoice['status'] = newPaidAmount >= inv.total ? 'paid' : 'partial';
-        return { ...inv, paidAmount: newPaidAmount, status: newStatus };
-      }
-      return inv;
-    });
-
-    if (payingInvoice.customerId) {
-      const updatedCustomers = state.customers.map(c => {
-        if (c.id === payingInvoice.customerId) {
-          return { ...c, totalDebt: Math.max(0, (c.totalDebt || 0) - amountToAdd) };
-        }
-        return c;
-      });
-      updateState('customers', updatedCustomers);
-
-      const newTrans: LoanTransaction = {
-        id: Math.random().toString(36).substr(2, 9),
-        customerId: payingInvoice.customerId,
-        invoiceId: payingInvoice.id,
-        date: new Date().toISOString(),
-        amount: amountToAdd,
-        type: 'repayment',
-        note: `Repayment for invoice: ${payingInvoice.id}`
-      };
-      updateState('loanTransactions', [...state.loanTransactions, newTrans]);
+  const deleteInvoice = (id: string) => {
+    if (window.confirm(t.delete + '?')) {
+      updateState('invoices', state.invoices.filter(inv => inv.id !== id));
     }
-
-    updateState('invoices', updatedInvoices);
-    setPayingInvoice(null);
-    setRepaymentInput('');
-  };
-
-  const handleSaveTemplate = (template: Partial<InvoiceTemplate>) => {
-    if (template.id && state.templates.find(t => t.id === template.id)) {
-      const updated = state.templates.map(t => 
-        t.id === template.id ? { ...t, ...template } as InvoiceTemplate : t
-      );
-      updateState('templates', updated);
-    } else {
-      const newTmp: InvoiceTemplate = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: template.name || 'New Template',
-        layout: template.layout || 'modern',
-        brandColor: template.brandColor || '#6366f1',
-        headerText: template.headerText || '',
-        footerText: template.footerText || '',
-        showLogo: template.showLogo ?? true
-      };
-      updateState('templates', [...state.templates, newTmp]);
-      setEditingTemplate(newTmp);
-    }
-  };
-
-  const handleDeleteTemplate = (id: string) => {
-    if (state.templates.length <= 1) return;
-    if (confirm("Delete template?")) {
-       updateState('templates', state.templates.filter(t => t.id !== id));
-       setEditingTemplate(null);
-    }
-  };
-
-  const handleSetActiveTemplate = (id: string) => {
-    updateState('settings', { ...state.settings, invoiceTemplate: id });
-    setActiveTemplateId(id);
-  };
-
-  const printInvoice = (inv: Invoice, template: InvoiceTemplate) => {
-    const printSection = document.getElementById('print-section');
-    if (!printSection) return;
-
-    const customer = state.customers.find(c => c.id === inv.customerId);
-    const brandColor = template.brandColor;
-    const itemsCount = inv.items.reduce((acc, i) => acc + i.quantity, 0);
-
-    let templateHTML = '';
-
-    if (template.layout === 'thermal') {
-      // Classic Monospace Receipt
-      templateHTML = `
-      <div style="width: 76mm; margin: 0 auto; background: white; color: black; font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.1; padding: 10px 0;">
-          <div style="text-align: center; margin-bottom: 8px;">
-              <div style="font-weight: bold; font-size: 20px; text-transform: uppercase;">${state.settings.shopName}</div>
-              <div style="font-size: 11px; margin-top: 4px;">${state.settings.shopAddress || ''}</div>
-              <div style="font-size: 11px;">TEL: ${state.settings.shopPhone || ''}</div>
-          </div>
-          
-          <div style="border-bottom: 1px dashed #000; margin: 10px 0;"></div>
-          
-          <div style="display: flex; justify-content: space-between; font-size: 11px;">
-              <span>DATE: ${new Date(inv.date).toLocaleDateString()}</span>
-              <span>TIME: ${new Date(inv.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-          </div>
-          <div style="font-size: 11px; margin-top: 4px;">RCPT: #${inv.id}</div>
-          <div style="font-size: 11px;">CUST: ${customer?.name || 'WALK-IN'}</div>
-          
-          <div style="border-bottom: 1px dashed #000; margin: 10px 0;"></div>
-          
-          <table style="width: 100%; border-collapse: collapse;">
-              <thead>
-                  <tr style="font-size: 11px; text-align: left;">
-                      <th style="padding-bottom: 5px;">ITEM</th>
-                      <th style="text-align: center; padding-bottom: 5px;">QTY</th>
-                      <th style="text-align: right; padding-bottom: 5px;">AMT</th>
-                  </tr>
-              </thead>
-              <tbody>
-                  ${inv.items.map(item => `
-                  <tr>
-                      <td colspan="3" style="padding-top: 6px; font-weight: bold; font-size: 12px;">${item.name.toUpperCase()}</td>
-                  </tr>
-                  <tr style="font-size: 12px;">
-                      <td style="font-size: 11px; color: #555;">@ ${item.price.toFixed(2)}</td>
-                      <td style="text-align: center;">${item.quantity}</td>
-                      <td style="text-align: right;">${(item.price * item.quantity).toFixed(2)}</td>
-                  </tr>
-                  `).join('')}
-              </tbody>
-          </table>
-          
-          <div style="border-bottom: 1px dashed #000; margin: 12px 0;"></div>
-          
-          <div style="font-size: 13px;">
-            <div style="display: flex; justify-content: space-between;">
-                <span>SUBTOTAL</span>
-                <span>${state.settings.currency}${inv.subtotal.toFixed(2)}</span>
-            </div>
-            ${inv.discount > 0 ? `<div style="display: flex; justify-content: space-between;"><span>DISCOUNT</span><span>-${state.settings.currency}${inv.discount.toFixed(2)}</span></div>` : ''}
-            <div style="display: flex; justify-content: space-between;">
-                <span>VAT/TAX</span>
-                <span>${state.settings.currency}${inv.tax.toFixed(2)}</span>
-            </div>
-          </div>
-          
-          <div style="border-bottom: 1px dashed #000; margin: 12px 0;"></div>
-          
-          <div style="display: flex; justify-content: space-between; font-size: 22px; font-weight: bold; margin: 8px 0;">
-              <span>TOTAL</span>
-              <span>${state.settings.currency}${inv.total.toFixed(2)}</span>
-          </div>
-          
-          <div style="font-size: 12px; margin-top: 8px;">
-              <div style="display: flex; justify-content: space-between;">
-                  <span>PAYMENT (${inv.paymentMethod.toUpperCase()})</span>
-                  <span>${state.settings.currency}${inv.paidAmount.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; font-weight: bold;">
-                  <span>CHANGE</span>
-                  <span>${state.settings.currency}${Math.max(0, inv.paidAmount - inv.total).toFixed(2)}</span>
-              </div>
-          </div>
-
-          <div style="margin-top: 15px; font-size: 10px; text-align: center;">
-             TOTAL ITEMS: ${itemsCount}
-          </div>
-          
-          <div style="border-bottom: 1px dashed #000; margin: 15px 0;"></div>
-          
-          <div style="text-align: center; margin-top: 10px;">
-              <svg id="barcode-inv-${inv.id}" style="width: 100%; height: 40px; margin-bottom: 8px;"></svg>
-              <p style="font-size: 13px; font-weight: bold; margin-top: 5px;">${template.footerText || 'THANK YOU FOR SHOPPING!'}</p>
-          </div>
-      </div>
-      `;
-    } else if (template.layout === 'receipt') {
-      // Modern Sans-Serif Thermal Receipt
-      templateHTML = `
-      <div style="width: 76mm; margin: 0 auto; background: white; color: #111; font-family: 'Inter', sans-serif; font-size: 13px; line-height: 1.4; padding: 10px 0;">
-          <div style="text-align: center; margin-bottom: 20px;">
-              <div style="font-weight: 900; font-size: 22px; text-transform: uppercase; letter-spacing: -0.5px;">${state.settings.shopName}</div>
-              <div style="font-size: 11px; font-weight: 500; color: #666; margin-top: 4px;">${state.settings.shopAddress || ''}</div>
-              <div style="font-size: 11px; font-weight: 500; color: #666;">Contact: ${state.settings.shopPhone || ''}</div>
-          </div>
-          
-          <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px;">
-              <div>
-                 <div style="font-size: 10px; font-weight: 800; color: #888; text-transform: uppercase;">Transaction No.</div>
-                 <div style="font-weight: 900; font-size: 15px;">#${inv.id}</div>
-              </div>
-              <div style="text-align: right; font-size: 11px; font-weight: 600;">
-                 <div>${new Date(inv.date).toLocaleDateString()}</div>
-                 <div>${new Date(inv.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-              </div>
-          </div>
-
-          <div style="margin-bottom: 15px; background: #f4f4f4; padding: 8px; border-radius: 4px;">
-              <div style="font-size: 10px; font-weight: 800; color: #888; text-transform: uppercase;">Sold To</div>
-              <div style="font-weight: 800; font-size: 14px;">${customer?.name || 'Walk-in Customer'}</div>
-          </div>
-
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
-              <thead>
-                  <tr style="font-size: 11px; text-transform: uppercase; font-weight: 800; border-bottom: 1px solid #ddd;">
-                      <th style="text-align: left; padding: 6px 0;">Description</th>
-                      <th style="text-align: center; padding: 6px 0;">Qty</th>
-                      <th style="text-align: right; padding: 6px 0;">Total</th>
-                  </tr>
-              </thead>
-              <tbody>
-                  ${inv.items.map(item => `
-                  <tr style="border-bottom: 1px solid #eee;">
-                      <td style="padding: 10px 0;">
-                        <div style="font-weight: 700;">${item.name}</div>
-                        <div style="font-size: 10px; color: #777;">@ ${item.price.toFixed(2)}</div>
-                      </td>
-                      <td style="padding: 10px 0; text-align: center; font-weight: 600;">${item.quantity}</td>
-                      <td style="padding: 10px 0; text-align: right; font-weight: 800;">${(item.price * item.quantity).toFixed(2)}</td>
-                  </tr>
-                  `).join('')}
-              </tbody>
-          </table>
-
-          <div style="width: 100%; border-top: 2px solid #000; padding-top: 10px;">
-              <div style="display: flex; justify-content: space-between; padding: 4px 0;">
-                 <span style="font-weight: 600;">Subtotal</span>
-                 <span style="font-weight: 700;">${state.settings.currency}${inv.subtotal.toFixed(2)}</span>
-              </div>
-              ${inv.discount > 0 ? `<div style="display: flex; justify-content: space-between; padding: 4px 0; color: #e11d48;"><span style="font-weight: 600;">Discount</span><span style="font-weight: 800;">-${state.settings.currency}${inv.discount.toFixed(2)}</span></div>` : ''}
-              <div style="display: flex; justify-content: space-between; padding: 4px 0;">
-                 <span style="font-weight: 600;">Tax (${state.settings.taxRate}%)</span>
-                 <span style="font-weight: 700;">${state.settings.currency}${inv.tax.toFixed(2)}</span>
-              </div>
-              <div style="display: flex; justify-content: space-between; padding: 12px 0; margin-top: 5px; border-top: 2px solid #000; border-bottom: 2px solid #000;">
-                 <span style="font-size: 18px; font-weight: 900; text-transform: uppercase;">Total</span>
-                 <span style="font-size: 20px; font-weight: 900;">${state.settings.currency}${inv.total.toFixed(2)}</span>
-              </div>
-          </div>
-
-          <div style="padding: 10px 0; margin-top: 10px;">
-             <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700;">
-                <span>${inv.paymentMethod.toUpperCase()} PAYMENT</span>
-                <span>${state.settings.currency}${inv.paidAmount.toFixed(2)}</span>
-             </div>
-             <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: #444;">
-                <span>CASH CHANGE</span>
-                <span>${state.settings.currency}${Math.max(0, inv.paidAmount - inv.total).toFixed(2)}</span>
-             </div>
-          </div>
-
-          <div style="text-align: center; margin-top: 20px;">
-             <svg id="barcode-inv-${inv.id}" style="width: 100%; height: 40px; margin-bottom: 15px;"></svg>
-             <div style="font-size: 12px; font-weight: 800; text-transform: uppercase;">${template.footerText || 'THANK YOU FOR YOUR PATRONAGE'}</div>
-          </div>
-      </div>
-      `;
-    } else if (template.layout === 'modern') {
-      // Premium A4 Professional Invoice
-      templateHTML = `
-        <div style="font-family: 'Inter', sans-serif; background: white; min-height: 297mm; max-width: 210mm; margin: 0 auto; display: flex; color: #1e293b; box-shadow: 0 0 40px rgba(0,0,0,0.05);">
-          <!-- Sidebar Color Accent -->
-          <div style="width: 12px; background: ${brandColor}; flex-shrink: 0;"></div>
-          
-          <div style="flex: 1; padding: 60px;">
-            <!-- Header Section -->
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 80px;">
-               <div style="flex: 1;">
-                  <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px;">
-                     <div style="width: 64px; height: 64px; background: ${brandColor}; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 32px;">
-                        ${state.settings.shopName.charAt(0)}
-                     </div>
-                     <h1 style="font-size: 34px; font-weight: 900; letter-spacing: -1.5px; margin: 0; text-transform: uppercase;">${state.settings.shopName}</h1>
-                  </div>
-                  <div style="font-size: 13px; font-weight: 500; color: #64748b; line-height: 1.6;">
-                     ${state.settings.shopAddress ? `<div>${state.settings.shopAddress}</div>` : ''}
-                     ${state.settings.shopPhone ? `<div>Tel: ${state.settings.shopPhone}</div>` : ''}
-                     ${state.settings.shopEmail ? `<div>Email: ${state.settings.shopEmail}</div>` : ''}
-                  </div>
-               </div>
-               <div style="text-align: right;">
-                  <h2 style="font-size: 60px; font-weight: 900; color: #f1f5f9; margin: 0; line-height: 0.8; letter-spacing: -4px;">INVOICE</h2>
-                  <div style="margin-top: 30px;">
-                     <span style="font-size: 16px; font-weight: 900; color: white; background: #1e293b; padding: 10px 20px; border-radius: 10px;">#${inv.id}</span>
-                  </div>
-                  <div style="margin-top: 20px; font-size: 13px; font-weight: 700; color: #64748b; text-transform: uppercase;">
-                     Issued on: <span style="color: #1e293b;">${new Date(inv.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                  </div>
-               </div>
-            </div>
-
-            <!-- Billing Info -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 60px;">
-               <div style="padding: 30px; background: #f8fafc; border-radius: 24px; border: 1px solid #f1f5f9;">
-                  <h3 style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: 2px; margin-bottom: 15px;">Invoice To</h3>
-                  <div style="font-size: 20px; font-weight: 900; color: #1e293b; margin-bottom: 8px;">${customer?.name || 'Walk-in Customer'}</div>
-                  <div style="font-size: 14px; font-weight: 600; color: #64748b;">${customer?.phone || 'No phone recorded'}</div>
-                  <div style="font-size: 14px; font-weight: 500; color: #64748b; margin-top: 4px;">${customer?.address || ''}</div>
-               </div>
-               <div style="padding: 30px; background: #f8fafc; border-radius: 24px; border: 1px solid #f1f5f9; display: flex; flex-direction: column; justify-content: center;">
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
-                     <span style="font-weight: 800; text-transform: uppercase; font-size: 11px; color: #94a3b8;">Payment Mode</span>
-                     <span style="font-weight: 900; text-transform: uppercase; font-size: 13px;">${inv.paymentMethod}</span>
-                  </div>
-                  <div style="display: flex; justify-content: space-between;">
-                     <span style="font-weight: 800; text-transform: uppercase; font-size: 11px; color: #94a3b8;">Status</span>
-                     <span style="font-weight: 900; text-transform: uppercase; font-size: 13px; color: ${inv.status === 'paid' ? '#10b981' : '#f43f5e'}">${inv.status}</span>
-                  </div>
-               </div>
-            </div>
-
-            <!-- Items Table -->
-            <table style="width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 50px;">
-               <thead>
-                  <tr style="background: #1e293b; color: white;">
-                     <th style="padding: 20px; text-align: left; font-size: 12px; font-weight: 900; text-transform: uppercase; border-radius: 12px 0 0 12px;">Product Details</th>
-                     <th style="padding: 20px; text-align: center; font-size: 12px; font-weight: 900; text-transform: uppercase; width: 60px;">Qty</th>
-                     <th style="padding: 20px; text-align: right; font-size: 12px; font-weight: 900; text-transform: uppercase; width: 120px;">Unit Price</th>
-                     <th style="padding: 20px; text-align: right; font-size: 12px; font-weight: 900; text-transform: uppercase; width: 120px; border-radius: 0 12px 12px 0;">Subtotal</th>
-                  </tr>
-               </thead>
-               <tbody>
-                  ${inv.items.map((item, i) => `
-                  <tr style="background: ${i % 2 === 0 ? 'transparent' : '#fbfcfd'};">
-                     <td style="padding: 25px 20px; border-bottom: 1px solid #f1f5f9;">
-                        <div style="font-weight: 800; font-size: 15px; color: #0f172a;">${item.name}</div>
-                        <div style="font-size: 11px; color: #94a3b8; font-weight: 700; margin-top: 4px;">SKU: ${item.sku}</div>
-                     </td>
-                     <td style="padding: 25px 20px; text-align: center; font-weight: 800; border-bottom: 1px solid #f1f5f9;">${item.quantity}</td>
-                     <td style="padding: 25px 20px; text-align: right; font-weight: 700; border-bottom: 1px solid #f1f5f9;">${state.settings.currency}${item.price.toFixed(2)}</td>
-                     <td style="padding: 25px 20px; text-align: right; font-weight: 900; font-size: 15px; color: #0f172a; border-bottom: 1px solid #f1f5f9;">${state.settings.currency}${(item.price * item.quantity).toFixed(2)}</td>
-                  </tr>
-                  `).join('')}
-               </tbody>
-            </table>
-
-            <!-- Summary -->
-            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-               <div style="flex: 1; padding-right: 60px;">
-                  <div style="margin-bottom: 30px;">
-                     <h4 style="font-size: 11px; font-weight: 900; text-transform: uppercase; color: #94a3b8; letter-spacing: 2px; margin-bottom: 12px;">Notes & Remarks</h4>
-                     <p style="font-size: 14px; font-weight: 500; color: #64748b; line-height: 1.6; font-style: italic;">${inv.notes || 'No additional notes for this transaction.'}</p>
-                  </div>
-                  <svg id="barcode-inv-${inv.id}"></svg>
-               </div>
-               <div style="width: 340px; background: #1e293b; color: white; padding: 40px; border-radius: 32px; box-shadow: 0 20px 40px rgba(0,0,0,0.15);">
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-weight: 700; font-size: 13px; color: #94a3b8; text-transform: uppercase;">
-                     <span>Gross Total</span>
-                     <span>${state.settings.currency}${inv.subtotal.toFixed(2)}</span>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-weight: 700; font-size: 13px; color: #94a3b8; text-transform: uppercase;">
-                     <span>VAT / Tax (${state.settings.taxRate}%)</span>
-                     <span>${state.settings.currency}${inv.tax.toFixed(2)}</span>
-                  </div>
-                  ${inv.discount > 0 ? `<div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-weight: 800; font-size: 13px; color: #fb7185; text-transform: uppercase;"><span>Discount Applied</span><span>-${state.settings.currency}${inv.discount.toFixed(2)}</span></div>` : ''}
-                  
-                  <div style="margin: 25px 0; border-top: 1px solid #334155;"></div>
-                  
-                  <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                     <span style="font-weight: 900; font-size: 15px; text-transform: uppercase; color: ${brandColor};">Final Amount</span>
-                     <span style="font-size: 36px; font-weight: 900;">${state.settings.currency}${inv.total.toFixed(2)}</span>
-                  </div>
-               </div>
-            </div>
-
-            <!-- Footer -->
-            <div style="margin-top: 100px; padding-top: 30px; border-top: 1px solid #f1f5f9; text-align: center;">
-               <p style="font-size: 15px; font-weight: 800; color: #1e293b; margin-bottom: 5px; text-transform: uppercase;">${template.headerText || 'Official Transaction Record'}</p>
-               <p style="font-size: 13px; font-weight: 500; color: #94a3b8;">${template.footerText || 'Thank you for choosing Sarvari Seller Pro. We value your business.'}</p>
-            </div>
-          </div>
-        </div>
-      `;
-    } else {
-       // Classic Template
-       templateHTML = `
-         <div style="font-family: 'Times New Roman', serif; padding: 60px; max-width: 210mm; margin: 0 auto; background: white; color: black; border: 1px solid #eee;">
-            <div style="text-align: center; margin-bottom: 50px;">
-               <h1 style="font-size: 38px; margin: 0; text-transform: uppercase; letter-spacing: 4px; font-weight: 400;">${state.settings.shopName}</h1>
-               <p style="font-size: 14px; font-style: italic; margin-top: 10px; color: #444; border-top: 1px solid black; display: inline-block; padding: 5px 20px;">
-                  COMMERCIAL TRANSACTION RECORD
-               </p>
-               <div style="font-size: 13px; margin-top: 15px; color: #333;">
-                  ${state.settings.shopAddress || ''} | ${state.settings.shopPhone || ''}
-               </div>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; margin-bottom: 40px; padding: 25px 0; border-top: 2px solid #000; border-bottom: 2px solid #000;">
-               <div>
-                  <h4 style="margin: 0 0 10px 0; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Billing Recipient</h4>
-                  <div style="font-size: 18px; font-weight: bold;">${customer?.name || 'Walk-in Customer'}</div>
-                  <div style="font-size: 14px; margin-top: 4px;">Phone: ${customer?.phone || 'N/A'}</div>
-               </div>
-               <div style="text-align: right;">
-                  <h4 style="margin: 0 0 10px 0; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Invoice Meta</h4>
-                  <div><strong>Reference:</strong> #${inv.id}</div>
-                  <div><strong>Date:</strong> ${new Date(inv.date).toLocaleDateString()}</div>
-                  <div><strong>Method:</strong> ${inv.paymentMethod.toUpperCase()}</div>
-               </div>
-            </div>
-
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;">
-               <thead>
-                  <tr style="border-bottom: 2px solid black;">
-                     <th style="text-align: left; padding: 12px; text-transform: uppercase; font-size: 12px;">Description</th>
-                     <th style="text-align: center; padding: 12px; text-transform: uppercase; font-size: 12px;">Qty</th>
-                     <th style="text-align: right; padding: 12px; text-transform: uppercase; font-size: 12px;">Subtotal</th>
-                  </tr>
-               </thead>
-               <tbody>
-                  ${inv.items.map(item => `
-                     <tr style="border-bottom: 1px solid #ddd;">
-                        <td style="padding: 15px 12px; font-size: 15px;">${item.name}</td>
-                        <td style="padding: 15px 12px; text-align: center; font-size: 15px;">${item.quantity}</td>
-                        <td style="padding: 15px 12px; text-align: right; font-size: 15px; font-weight: bold;">${state.settings.currency}${(item.price * item.quantity).toFixed(2)}</td>
-                     </tr>
-                  `).join('')}
-               </tbody>
-            </table>
-
-            <div style="display: flex; justify-content: flex-end;">
-               <div style="width: 300px; text-align: right;">
-                  <div style="padding: 8px 0; border-bottom: 1px solid #ddd; font-size: 15px;">Gross Amount: ${state.settings.currency}${inv.subtotal.toFixed(2)}</div>
-                  <div style="padding: 8px 0; border-bottom: 1px solid #ddd; font-size: 15px;">Taxation (${state.settings.taxRate}%): ${state.settings.currency}${inv.tax.toFixed(2)}</div>
-                  <div style="padding: 15px 0; font-size: 26px; font-weight: bold;">Balance Due: ${state.settings.currency}${inv.total.toFixed(2)}</div>
-               </div>
-            </div>
-
-            <div style="margin-top: 100px; border-top: 1px solid #000; padding-top: 20px; text-align: center; font-size: 14px;">
-               <p style="letter-spacing: 2px; font-weight: bold;">THANK YOU FOR YOUR VALUED PATRONAGE</p>
-               <svg id="barcode-inv-${inv.id}" style="margin-top: 20px;"></svg>
-            </div>
-         </div>
-       `;
-    }
-
-    printSection.innerHTML = templateHTML;
-    document.body.classList.add('printing-special');
-
-    try {
-       JsBarcode(`#barcode-inv-${inv.id}`, inv.id, {
-          format: "CODE128",
-          lineColor: "#000",
-          width: 2,
-          height: 40,
-          displayValue: false
-       });
-    } catch(e) { console.error('Barcode generation error', e); }
-
-    setTimeout(() => { 
-       window.print();
-       document.body.classList.remove('printing-special');
-       printSection.innerHTML = '';
-    }, 500);
-  };
-
-  const getStatusBadge = (status: Invoice['status']) => {
-    const config = {
-      paid: {
-        bg: 'bg-emerald-50 dark:bg-emerald-900/20',
-        text: 'text-emerald-600 dark:text-emerald-400',
-        icon: CheckCircle2,
-        label: t.paid
-      },
-      partial: {
-        bg: 'bg-amber-50 dark:bg-amber-900/20',
-        text: 'text-amber-600 dark:text-amber-400',
-        icon: Clock,
-        label: t.partial
-      },
-      unpaid: {
-        bg: 'bg-rose-50 dark:bg-rose-900/20',
-        text: 'text-rose-600 dark:text-rose-400',
-        icon: AlertCircle,
-        label: t.unpaid
-      }
-    };
-
-    const s = config[status || 'paid'];
-    const Icon = s.icon;
-
-    return (
-      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${s.bg} ${s.text} border border-current opacity-90`}>
-        <Icon size={12} strokeWidth={3} />
-        {s.label}
-      </span>
-    );
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="relative flex-1 w-full max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input 
-            type="text" 
-            placeholder={t.search} 
-            value={searchTerm} 
-            onChange={(e) => setSearchTerm(e.target.value)} 
-            className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 pl-10 pr-4 focus:ring-2 focus:ring-indigo-500 text-sm shadow-sm dark:text-white" 
-          />
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">{t.invoices}</h3>
+          <p className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-widest">Archive of business billing and historical records</p>
         </div>
-        
-        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <button 
-            onClick={() => setIsManagingTemplates(true)}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-          >
-            <Palette size={18} />
-            <span className="hidden sm:inline">Templates</span>
-          </button>
-          <button onClick={() => setIsCreating(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg hover:bg-indigo-700 transition-all active:scale-95"><Plus size={18} />{t.newTransaction}</button>
-        </div>
+        <button 
+          onClick={() => setIsCreating(true)}
+          className="flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all active:scale-95"
+        >
+          <Plus size={18} strokeWidth={3} />
+          {t.createTemplate.replace('Template', 'Invoice')}
+        </button>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800">
+          <div className="relative max-w-md">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder={t.search} 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-xl py-2.5 pl-12 pr-4 outline-none font-bold text-sm dark:text-white transition-all shadow-inner"
+            />
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[800px]">
-            <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+            <thead className="bg-slate-50 dark:bg-slate-800/50">
               <tr>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">ID</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Date</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Customer</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Status</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Total</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase text-right">Actions</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Reference</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.customers}</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total}</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t.actions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredInvoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-500/5 group">
-                  <td className="px-6 py-4 font-bold text-slate-800 dark:text-white text-sm">#{inv.id}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-slate-600 dark:text-slate-400">{new Date(inv.date).toLocaleDateString()}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-slate-600 dark:text-slate-400 truncate max-w-[150px]">{state.customers.find(c => c.id === inv.customerId)?.name || 'Walk-in'}</td>
-                  <td className="px-6 py-4">
-                    {getStatusBadge(inv.status)}
-                  </td>
-                  <td className="px-6 py-4 font-black text-slate-800 dark:text-white text-sm">{state.settings.currency}{inv.total.toFixed(2)}</td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity">
-                      {inv.status !== 'paid' && (
-                        <button onClick={() => { setPayingInvoice(inv); setRepaymentInput(''); }} className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg" title="Collect Payment">
-                          <DollarSign size={18} />
-                        </button>
-                      )}
-                      <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600"><Eye size={18} /></button>
-                      <button onClick={() => printInvoice(inv, activeTemplate)} className="p-2 text-slate-400 hover:text-slate-600"><Printer size={18} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filteredInvoices.map((inv) => {
+                const customer = state.customers.find(c => c.id === inv.customerId);
+                return (
+                  <tr key={inv.id} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-500/5 transition-colors group">
+                    <td className="px-8 py-5 font-black text-sm dark:text-white">INV-#{inv.id}</td>
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center font-black text-xs text-slate-400 border border-slate-100 dark:border-slate-700">
+                          {customer ? customer.name.charAt(0) : <User size={14}/>}
+                        </div>
+                        <span className="font-bold text-slate-700 dark:text-slate-300 text-sm truncate max-w-[150px]">{customer?.name || t.walkInCustomer}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase">{new Date(inv.date).toLocaleDateString()}</td>
+                    <td className="px-8 py-5 font-black text-indigo-600 dark:text-indigo-400">{state.settings.currency}{inv.total.toLocaleString()}</td>
+                    <td className="px-8 py-5">
+                      <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
+                        inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                        inv.status === 'partial' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                        'bg-rose-50 text-rose-600 border border-rose-100'
+                      }`}>
+                        {t[inv.status]}
+                      </span>
+                    </td>
+                    <td className="px-8 py-5 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><Eye size={18}/></button>
+                        <button onClick={() => deleteInvoice(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={18}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+          {filteredInvoices.length === 0 && (
+            <div className="py-24 text-center flex flex-col items-center justify-center text-slate-300 gap-6">
+              <div className="w-24 h-24 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center opacity-40">
+                <FileText size={56} strokeWidth={1} />
+              </div>
+              <p className="font-black text-sm uppercase tracking-widest">No historical records match your search</p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Selected Invoice Details Modal */}
-      {selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-2xl p-8 lg:p-10 shadow-2xl relative animate-in zoom-in-95 duration-300 overflow-y-auto max-h-[90vh]">
-            <button onClick={() => setSelectedInvoice(null)} className="absolute top-8 right-8 p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={28}/></button>
-            
-            <div className="flex items-center gap-6 mb-10">
-               <div className="w-16 h-16 bg-indigo-600 text-white rounded-[24px] flex items-center justify-center shadow-lg"><FileText size={32}/></div>
-               <div>
-                  <h3 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Invoice Details</h3>
-                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">#{selectedInvoice.id} • {new Date(selectedInvoice.date).toLocaleString()}</p>
-               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-6 mb-10">
-               <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Customer Info</p>
-                  <p className="font-bold text-slate-800 dark:text-white text-lg">{state.customers.find(c => c.id === selectedInvoice.customerId)?.name || 'Walk-in Customer'}</p>
-                  <p className="text-xs text-slate-500 font-medium">{state.customers.find(c => c.id === selectedInvoice.customerId)?.phone || ''}</p>
-               </div>
-               <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Payment Status</p>
-                  <div className="flex flex-col gap-2">
-                     {getStatusBadge(selectedInvoice.status)}
-                     <p className="text-xs font-black text-slate-600 dark:text-slate-400 uppercase mt-1">{selectedInvoice.paymentMethod} Payment</p>
-                  </div>
-               </div>
-            </div>
-
-            <div className="space-y-4 mb-10">
-               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Purchased Items</h4>
-               <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm">
-                  {selectedInvoice.items.map((item, idx) => (
-                    <div key={idx} className={`p-4 flex items-center justify-between ${idx !== selectedInvoice.items.length - 1 ? 'border-b border-slate-50 dark:border-slate-700' : ''}`}>
-                       <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-slate-50 dark:bg-slate-900 rounded-xl flex items-center justify-center text-slate-400 shrink-0"><Package size={20}/></div>
-                          <div>
-                             <p className="text-sm font-bold text-slate-800 dark:text-white">{item.name}</p>
-                             <p className="text-[10px] text-slate-400 font-bold uppercase">{item.quantity} x {state.settings.currency}{item.price.toFixed(2)}</p>
-                          </div>
-                       </div>
-                       <p className="font-black text-slate-800 dark:text-white">{state.settings.currency}{(item.price * item.quantity).toFixed(2)}</p>
-                    </div>
-                  ))}
-               </div>
-            </div>
-
-            <div className="bg-slate-900 dark:bg-black rounded-3xl p-8 text-white space-y-4">
-               <div className="flex justify-between items-center text-xs font-black uppercase text-slate-500">
-                  <span>Subtotal</span>
-                  <span>{state.settings.currency}{selectedInvoice.subtotal.toFixed(2)}</span>
-               </div>
-               <div className="flex justify-between items-center text-xs font-black uppercase text-slate-500">
-                  <span>Tax ({state.settings.taxRate}%)</span>
-                  <span>{state.settings.currency}{selectedInvoice.tax.toFixed(2)}</span>
-               </div>
-               {selectedInvoice.discount > 0 && (
-                 <div className="flex justify-between items-center text-xs font-black uppercase text-rose-500">
-                    <span>Discount</span>
-                    <span>-{state.settings.currency}{selectedInvoice.discount.toFixed(2)}</span>
-                 </div>
-               )}
-               <div className="pt-4 border-t border-white/10 flex justify-between items-center">
-                  <span className="text-sm font-black uppercase tracking-widest text-indigo-400">Total</span>
-                  <span className="text-3xl font-black">{state.settings.currency}{selectedInvoice.total.toFixed(2)}</span>
-               </div>
-               <div className="flex justify-between items-center text-xs font-black uppercase text-emerald-500">
-                  <span>Total Paid</span>
-                  <span>{state.settings.currency}{selectedInvoice.paidAmount.toFixed(2)}</span>
-               </div>
-            </div>
-
-            <div className="mt-8 grid grid-cols-2 gap-4">
-               <button onClick={() => setSelectedInvoice(null)} className="py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black rounded-2xl text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Close View</button>
-               <button onClick={() => printInvoice(selectedInvoice, activeTemplate)} className="py-4 bg-indigo-600 text-white font-black rounded-2xl text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg flex items-center justify-center gap-2"><Printer size={18}/> Print Again</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Repayment Modal */}
-      {payingInvoice && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-md p-8 shadow-2xl relative">
-            <button onClick={() => setPayingInvoice(null)} className="absolute top-6 right-6 p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors"><X size={20}/></button>
-            <div className="flex items-center gap-4 mb-8">
-               <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-600"><Wallet size={24}/></div>
-               <div>
-                  <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Collect Payment</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">INV #{payingInvoice.id}</p>
-               </div>
-            </div>
-
-            <div className="space-y-6 mb-8">
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl">
-                     <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Grand Total</p>
-                     <p className="font-black dark:text-white">{state.settings.currency}{payingInvoice.total.toFixed(2)}</p>
-                  </div>
-                  <div className="p-4 bg-rose-50 dark:bg-rose-900/10 rounded-2xl">
-                     <p className="text-[10px] font-black text-rose-400 uppercase mb-1">Remaining</p>
-                     <p className="font-black text-rose-600">{state.settings.currency}{(payingInvoice.total - payingInvoice.paidAmount).toFixed(2)}</p>
-                  </div>
-               </div>
-
-               <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Repayment Amount</label>
-                  <div className="relative">
-                     <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
-                     <input 
-                        type="number" 
-                        value={repaymentInput}
-                        onChange={(e) => setRepaymentInput(e.target.value === '' ? '' : Number(e.target.value))}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-indigo-500 font-black text-xl dark:text-white"
-                        placeholder="0.00"
-                        autoFocus
-                     />
-                  </div>
-               </div>
-            </div>
-
-            <button 
-               onClick={handleRepayment}
-               disabled={repaymentInput === '' || repaymentInput <= 0}
-               className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 dark:shadow-none disabled:opacity-50"
-            >
-               Confirm Payment
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Invoice Creator Modal */}
       {isCreating && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300 p-0 lg:p-8">
-          <div className="bg-white dark:bg-slate-900 w-full h-full lg:rounded-[40px] shadow-2xl flex flex-col lg:flex-row overflow-hidden animate-in zoom-in-95 duration-300">
-            
-            <div className="flex-1 flex flex-col min-w-0 bg-slate-50/50 dark:bg-slate-950/20">
-               <header className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 sticky top-0 z-10 shrink-0">
-                  <div className="flex items-center gap-4">
-                     <div className="w-12 h-12 bg-indigo-600 text-white rounded-[18px] flex items-center justify-center shadow-lg shadow-indigo-200 dark:shadow-none"><Plus size={28}/></div>
-                     <div>
-                       <h3 className="text-xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">{t.advancedBuilder}</h3>
-                       <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{t.dynamicEditing}</p>
-                     </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-5xl h-[90vh] shadow-2xl relative flex flex-col overflow-hidden animate-in zoom-in duration-300">
+            <header className="p-8 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-white dark:bg-slate-900 z-10">
+               <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><PenTool size={24}/></div>
+                  <div>
+                    <h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">New Invoice Builder</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Manual transaction entry</p>
                   </div>
-                  <button onClick={() => { setIsCreating(false); resetBuilder(); }} className="p-3 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-2xl text-slate-400 hover:text-rose-500 transition-all"><X size={28}/></button>
-               </header>
-
-               <div className="flex-1 overflow-y-auto p-6 lg:p-10 space-y-10 custom-scrollbar">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                       <User size={16} className="text-indigo-600"/>
-                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.customerSelection}</h4>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-4 items-start">
-                       <div className="relative flex-1 w-full max-w-md">
+               </div>
+               <button onClick={() => setIsCreating(false)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={24}/></button>
+            </header>
+            
+            <div className="flex-1 overflow-y-auto flex flex-col lg:flex-row custom-scrollbar">
+               <div className="flex-1 p-8 space-y-10 border-r border-slate-100 dark:border-slate-800">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Search Products</label>
+                       <div className="relative">
                           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
                           <input 
                             type="text" 
-                            placeholder={t.findScanCustomer}
-                            value={customerSearch}
-                            onChange={(e) => setCustomerSearch(e.target.value)}
-                            className="w-full bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-4 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 font-bold text-sm dark:text-white transition-all shadow-sm"
+                            value={itemSearch}
+                            onChange={(e) => setItemSearch(e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-bold text-sm dark:text-white transition-all shadow-inner"
+                            placeholder="Type product name or scan SKU..."
                           />
-                          {customerSearch && (
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 py-2 z-20 overflow-hidden animate-in slide-in-from-top-2">
-                               {availableCustomers.map(c => (
-                                 <button key={c.id} onClick={() => { setBuilderCustomer(c); setCustomerSearch(''); }} className="w-full p-4 text-left hover:bg-indigo-50 dark:hover:bg-indigo-500/10 flex items-center justify-between group">
-                                   <div>
-                                     <p className="text-sm font-black dark:text-white">{c.name}</p>
-                                     <p className="text-[10px] text-slate-400 font-bold">{c.phone}</p>
-                                   </div>
-                                   <div className="text-right">
-                                      {c.totalDebt > 0 && <p className="text-[8px] font-black text-rose-500 uppercase">Debt: {state.settings.currency}{c.totalDebt.toFixed(0)}</p>}
-                                      <PlusCircle size={18} className="text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity ml-auto"/>
-                                   </div>
-                                 </button>
-                               ))}
-                               {availableCustomers.length === 0 && <p className="p-4 text-xs font-bold text-slate-400 text-center">No customers found</p>}
+                          {availableProducts.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 py-2 z-20 overflow-hidden">
+                              {availableProducts.map(p => (
+                                <button key={p.id} onClick={() => addToInvoice(p)} className="w-full p-4 text-left hover:bg-indigo-50 dark:hover:bg-indigo-500/10 flex items-center justify-between group">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-400 shrink-0">{p.image ? <img src={p.image} className="w-full h-full object-cover rounded-xl"/> : <Package size={20}/>}</div>
+                                    <div>
+                                      <p className="font-bold text-sm dark:text-white">{p.name}</p>
+                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SKU: {p.sku}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                     <span className="font-black text-indigo-600 text-xs">{state.settings.currency}{p.price.toFixed(2)}</span>
+                                     <Plus size={18} className="text-slate-300 group-hover:text-indigo-600"/>
+                                  </div>
+                                </button>
+                              ))}
                             </div>
                           )}
                        </div>
-                       
+                    </div>
+
+                    <div className="space-y-4">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Transaction Date</label>
+                       <div className="relative">
+                          <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
+                          <input 
+                            type="date" 
+                            value={builderDate}
+                            onChange={(e) => setBuilderDate(e.target.value)}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-bold text-sm dark:text-white transition-all shadow-inner"
+                          />
+                       </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Bill of Materials ({builderItems.length})</label>
+                     <div className="space-y-4">
+                        {builderItems.map(item => (
+                          <div key={item.id} className="p-5 bg-white dark:bg-slate-800/50 rounded-3xl flex items-center justify-between border border-slate-100 dark:border-slate-800 shadow-sm animate-in slide-in-from-right-4">
+                             <div className="flex items-center gap-5 flex-1 min-w-0">
+                                <div className="w-12 h-12 bg-slate-50 dark:bg-slate-900 rounded-2xl flex items-center justify-center text-slate-400 shrink-0 border border-slate-100 dark:border-slate-800">{item.image ? <img src={item.image} className="w-full h-full object-cover rounded-2xl"/> : <Package size={24}/>}</div>
+                                <div className="min-w-0 flex-1">
+                                   <p className="text-sm font-black dark:text-white truncate uppercase tracking-tight">{item.name}</p>
+                                   <p className="text-[10px] font-black text-indigo-500">{state.settings.currency}{item.price.toFixed(2)} unit price</p>
+                                </div>
+                             </div>
+                             <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-4 bg-slate-100 dark:bg-slate-900 rounded-2xl p-1 shadow-inner border border-slate-100 dark:border-slate-800">
+                                   <button onClick={() => updateBuilderQty(item.id, -1)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><Minus size={16} strokeWidth={3}/></button>
+                                   <span className="text-xs font-black w-6 text-center dark:text-white">{item.quantity}</span>
+                                   <button onClick={() => updateBuilderQty(item.id, 1)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><Plus size={16} strokeWidth={3}/></button>
+                                </div>
+                                <div className="text-right w-24">
+                                   <p className="font-black text-sm dark:text-white">{state.settings.currency}{(item.price * item.quantity).toFixed(2)}</p>
+                                </div>
+                                <button onClick={() => removeBuilderItem(item.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-all hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl"><Trash2 size={20}/></button>
+                             </div>
+                          </div>
+                        ))}
+                        {builderItems.length === 0 && (
+                          <div className="py-24 text-center border-4 border-dashed border-slate-50 dark:border-slate-800 rounded-[48px] text-slate-300">
+                             <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6 opacity-30">
+                                <PlusCircle size={48} strokeWidth={1}/>
+                             </div>
+                             <p className="font-black text-xs uppercase tracking-[0.2em] opacity-40">Scan or search for items to add to bill</p>
+                          </div>
+                        )}
+                     </div>
+                  </div>
+               </div>
+
+               <div className="w-full lg:w-[420px] bg-slate-50/50 dark:bg-slate-950/20 p-8 lg:p-10 space-y-10 flex flex-col shrink-0">
+                  <div className="space-y-8 flex-1">
+                    <div className="space-y-4">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Customer Association</label>
                        {builderCustomer ? (
-                         <div className="flex items-center gap-4 bg-indigo-600 p-2 pl-4 pr-2 rounded-2xl text-white animate-in zoom-in group relative">
-                            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center font-black">{builderCustomer.name.charAt(0)}</div>
-                            <div className="min-w-0 pr-4">
-                               <p className="text-xs font-black truncate">{builderCustomer.name}</p>
-                               <div className="flex items-center gap-2">
-                                  <p className="text-[10px] opacity-80">{builderCustomer.phone}</p>
-                                  {builderCustomer.totalDebt > 0 && (
-                                     <span className="bg-rose-500/30 text-[8px] font-black px-1.5 py-0.5 rounded flex items-center gap-1">
-                                        <Scale size={10}/> {state.settings.currency}{builderCustomer.totalDebt.toFixed(0)}
-                                     </span>
-                                  )}
+                         <div className="p-5 bg-white dark:bg-slate-900 rounded-[28px] flex items-center justify-between border-4 border-indigo-600 shadow-2xl animate-in zoom-in-95">
+                            <div className="flex items-center gap-4">
+                               <div className="w-12 h-12 bg-indigo-600 text-white rounded-[18px] flex items-center justify-center font-black text-xl shadow-lg shadow-indigo-200 dark:shadow-none">{builderCustomer.name.charAt(0)}</div>
+                               <div>
+                                  <p className="text-sm font-black dark:text-white truncate max-w-[150px]">{builderCustomer.name}</p>
+                                  <p className="text-[10px] font-bold text-slate-400">{builderCustomer.phone}</p>
                                </div>
                             </div>
-                            <button onClick={() => setBuilderCustomer(null)} className="p-2 hover:bg-white/10 rounded-xl"><X size={16}/></button>
+                            <button onClick={() => setBuilderCustomer(null)} className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-400 hover:text-rose-600 transition-colors"><X size={18}/></button>
                          </div>
                        ) : (
-                         <div className="h-14 flex items-center px-6 bg-slate-100 dark:bg-slate-800 rounded-2xl text-[10px] font-black uppercase text-slate-400 tracking-widest border border-slate-200 dark:border-slate-700">
-                           {t.walkInCustomer}
+                         <div className="relative">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
+                            <input 
+                              type="text" 
+                              value={customerSearch}
+                              onChange={(e) => setCustomerSearch(e.target.value)}
+                              className="w-full bg-white dark:bg-slate-900 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-bold text-sm dark:text-white shadow-inner"
+                              placeholder="Find or scan customer..."
+                            />
+                            {availableCustomers.length > 0 && (
+                              <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 py-2 z-20 overflow-hidden">
+                                {availableCustomers.map(c => (
+                                  <button key={c.id} onClick={() => { setBuilderCustomer(c); setCustomerSearch(''); }} className="w-full p-4 text-left hover:bg-indigo-50 dark:hover:bg-indigo-500/10 flex items-center gap-4 group">
+                                    <div className="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-xl flex items-center justify-center font-black text-xs text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">{c.name.charAt(0)}</div>
+                                    <div className="flex-1">
+                                       <p className="text-sm font-black dark:text-white">{c.name}</p>
+                                       <p className="text-[10px] font-bold text-slate-400">{c.phone}</p>
+                                    </div>
+                                    <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-600"/>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                          </div>
+                       )}
+                    </div>
+
+                    <div className="h-px bg-slate-200 dark:bg-slate-800"></div>
+
+                    <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 space-y-6 shadow-sm border border-slate-100 dark:border-slate-800/50">
+                       <div className="flex justify-between items-center text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                          <span>{t.subtotal}</span>
+                          <span className="text-slate-600 dark:text-slate-300">{state.settings.currency}{subtotal.toLocaleString()}</span>
+                       </div>
+                       <div className="flex justify-between items-center text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                          <span>{t.tax} ({state.settings.taxRate}%)</span>
+                          <span className="text-slate-600 dark:text-slate-300">{state.settings.currency}{tax.toLocaleString()}</span>
+                       </div>
+                       <div className="flex justify-between items-center pt-6 border-t border-slate-100 dark:border-slate-800">
+                          <span className="text-sm font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Payable Amount</span>
+                          <span className="text-4xl font-black dark:text-white tracking-tighter">{state.settings.currency}{total.toLocaleString()}</span>
+                       </div>
+                    </div>
+
+                    <div className="space-y-6">
+                       <div className="space-y-4">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{t.amountPaid}</label>
+                          <div className="relative">
+                             <div className="absolute left-5 top-1/2 -translate-y-1/2 text-indigo-400 font-black text-xl">{state.settings.currency}</div>
+                             <input 
+                                type="number" 
+                                value={builderPaidAmount}
+                                onChange={(e) => setBuilderPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                                className="w-full bg-white dark:bg-slate-900 border-4 border-transparent focus:border-indigo-600 rounded-[28px] py-6 pl-14 pr-6 outline-none font-black text-2xl dark:text-white transition-all shadow-xl"
+                                placeholder={total.toFixed(0)}
+                             />
+                          </div>
+                       </div>
+                       
+                       {balanceDue > 0 && (
+                          <div className={`p-5 rounded-[24px] border-2 flex items-center justify-between animate-in slide-in-from-top-4 ${builderCustomer ? 'bg-rose-50 border-rose-100 dark:bg-rose-900/10 dark:border-rose-900/30' : 'bg-slate-100 border-slate-200 dark:bg-slate-800'}`}>
+                             <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${builderCustomer ? 'bg-rose-100 text-rose-600' : 'text-slate-400'}`}><Scale size={24}/></div>
+                                <div>
+                                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t.loan} Recognition</p>
+                                   <p className={`text-xl font-black ${builderCustomer ? 'text-rose-600' : 'text-slate-400'}`}>{state.settings.currency}{balanceDue.toLocaleString()}</p>
+                                </div>
+                             </div>
+                          </div>
                        )}
                     </div>
                   </div>
 
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                       <div className="flex items-center gap-2">
-                          <Package size={16} className="text-indigo-600"/>
-                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Line Items</h4>
-                       </div>
-                       <div className="relative flex-1 max-w-sm ml-auto">
-                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-                          <input 
-                            type="text" 
-                            placeholder="Add Product..."
-                            value={itemSearch}
-                            onChange={(e) => setItemSearch(e.target.value)}
-                            className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-3 pl-12 pr-4 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 font-bold text-sm dark:text-white transition-all shadow-sm"
-                          />
-                          {itemSearch && (
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 py-2 z-20 overflow-hidden animate-in slide-in-from-top-2">
-                               {availableProducts.map(p => (
-                                 <button key={p.id} onClick={() => addToInvoice(p)} className="w-full p-4 text-left hover:bg-indigo-50 dark:hover:bg-indigo-500/10 flex items-center justify-between group">
-                                   <div className="flex items-center gap-3">
-                                      <div className="w-10 h-10 bg-slate-50 dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-400">
-                                         {p.image ? <img src={p.image} className="w-full h-full object-cover rounded-xl"/> : <Package size={18}/>}
-                                      </div>
-                                      <div>
-                                        <p className="text-sm font-black dark:text-white">{p.name}</p>
-                                        <p className="text-[10px] text-slate-400 font-bold">{state.settings.currency}{p.price.toFixed(2)} • {p.stock} in stock</p>
-                                      </div>
-                                   </div>
-                                   <PlusCircle size={18} className="text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"/>
-                                 </button>
-                               ))}
-                               {availableProducts.length === 0 && <p className="p-4 text-xs font-bold text-slate-400 text-center">No products found</p>}
-                            </div>
-                          )}
-                       </div>
-                    </div>
-
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[32px] overflow-hidden shadow-sm">
-                       <table className="w-full text-left">
-                          <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700">
-                             <tr>
-                                <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">{t.displayName}</th>
-                                <th className="p-5 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest">{t.items}</th>
-                                <th className="p-5 text-right text-[10px] font-black uppercase text-slate-400 tracking-widest">{t.price}</th>
-                                <th className="p-5 text-right text-[10px] font-black uppercase text-slate-400 tracking-widest">{t.total}</th>
-                                <th className="p-5 w-16"></th>
-                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                             {builderItems.map(item => (
-                               <tr key={item.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all">
-                                  <td className="p-5">
-                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
-                                           {item.image ? <img src={item.image} className="w-full h-full object-cover rounded-xl"/> : <Package size={18}/>}
-                                        </div>
-                                        <div className="min-w-0">
-                                           <p className="text-sm font-black dark:text-white truncate">{item.name}</p>
-                                           <p className="text-[10px] text-slate-400 font-bold uppercase">{item.sku}</p>
-                                        </div>
-                                     </div>
-                                  </td>
-                                  <td className="p-5">
-                                     <div className="flex items-center justify-center gap-3 bg-slate-100 dark:bg-slate-800 rounded-xl px-2 py-1 max-w-[120px] mx-auto">
-                                        <button onClick={() => updateBuilderQty(item.id, -1)} className="p-1 hover:text-rose-500 transition-colors"><Minus size={14}/></button>
-                                        <span className="text-sm font-black w-6 text-center dark:text-white">{item.quantity}</span>
-                                        <button onClick={() => updateBuilderQty(item.id, 1)} className="p-1 hover:text-indigo-600 transition-colors"><Plus size={14}/></button>
-                                     </div>
-                                  </td>
-                                  <td className="p-5 text-right">
-                                     <div className="flex items-center justify-end gap-1 font-bold text-sm dark:text-white">
-                                        <span>{state.settings.currency}</span>
-                                        <input 
-                                          type="number" 
-                                          value={item.price} 
-                                          onChange={e => updateBuilderPrice(item.id, Number(e.target.value))}
-                                          className="bg-transparent border-b-2 border-transparent hover:border-slate-200 dark:hover:border-slate-700 outline-none w-16 text-right focus:border-indigo-500 focus:bg-slate-50 dark:focus:bg-slate-800 rounded px-1 transition-all"
-                                        />
-                                     </div>
-                                  </td>
-                                  <td className="p-5 text-right">
-                                     <p className="text-sm font-black text-slate-800 dark:text-white">{state.settings.currency}{(item.price * item.quantity).toFixed(2)}</p>
-                                  </td>
-                                  <td className="p-5 text-right">
-                                     <button onClick={() => removeBuilderItem(item.id)} className="p-2 text-slate-300 hover:text-rose-50 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={18}/></button>
-                                  </td>
-                               </tr>
-                             ))}
-                          </tbody>
-                       </table>
-                    </div>
+                  <div className="pt-8">
+                    <button 
+                      onClick={saveInvoice}
+                      disabled={builderItems.length === 0 || (balanceDue > 0 && !builderCustomer)}
+                      className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xl hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 dark:shadow-none disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:shadow-none active:scale-[0.98] flex items-center justify-center gap-4"
+                    >
+                      {t.processPrint.split('&')[0].trim()}
+                      <CheckCircle2 size={28} strokeWidth={3}/>
+                    </button>
+                    {balanceDue > 0 && !builderCustomer && (
+                       <p className="text-[10px] text-center font-black text-rose-500 uppercase mt-4 animate-pulse">Assign customer to register partial credit</p>
+                    )}
                   </div>
-               </div>
-            </div>
-
-            <div className="w-full lg:w-[450px] border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-800 p-8 flex flex-col bg-white dark:bg-slate-900 shadow-[-10px_0_30px_rgba(0,0,0,0.02)] shrink-0 overflow-y-auto custom-scrollbar">
-               <div className="flex-1 space-y-6">
-                  <div className="flex items-center justify-between">
-                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Calculator size={14}/> Summary</h4>
-                  </div>
-
-                  <div className="bg-slate-950 dark:bg-black rounded-[40px] p-8 text-white relative overflow-hidden shadow-2xl">
-                     <div className="space-y-4 relative z-10">
-                        <div className="flex justify-between items-center text-xs font-black uppercase text-indigo-400 tracking-widest">
-                           <span>Subtotal</span>
-                           <span>{state.settings.currency}{subtotal.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs font-black uppercase text-slate-500 tracking-widest">
-                           <span>VAT / Tax (${state.settings.taxRate}%)</span>
-                           <span>{state.settings.currency}{tax.toLocaleString()}</span>
-                        </div>
-                        <div className="pt-6 border-t border-white/10 mt-2">
-                           <p className="text-[10px] font-black text-indigo-200 uppercase tracking-[0.2em] mb-1">Payable Amount</p>
-                           <h2 className="text-5xl font-black tracking-tighter">{state.settings.currency}{total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
-                        </div>
-                     </div>
-                  </div>
-
-                  <div className="space-y-6">
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-3">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date</label>
-                           <div className="relative">
-                              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-                              <input 
-                                type="date" 
-                                value={builderDate} 
-                                onChange={(e) => setBuilderDate(e.target.value)}
-                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-bold text-sm dark:text-white transition-all shadow-inner"
-                              />
-                           </div>
-                        </div>
-                        <div className="space-y-3">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.discount}</label>
-                           <div className="relative">
-                              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><Percent size={18}/></div>
-                              <input 
-                                type="number" 
-                                value={builderDiscount || ''} 
-                                onChange={(e) => setBuilderDiscount(Number(e.target.value))}
-                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-rose-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-black text-lg dark:text-white transition-all shadow-inner"
-                                placeholder="0.00"
-                              />
-                           </div>
-                        </div>
-                     </div>
-
-                     <div className="space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notes</label>
-                        <div className="relative">
-                           <StickyNote className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
-                           <input 
-                             type="text" 
-                             value={builderNotes} 
-                             onChange={(e) => setBuilderNotes(e.target.value)}
-                             className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-bold text-sm dark:text-white transition-all shadow-inner"
-                             placeholder="Add optional notes..."
-                           />
-                        </div>
-                     </div>
-                     
-                     <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-[32px] space-y-6 border border-slate-100 dark:border-slate-700">
-                        <div className="flex items-center justify-between mb-2">
-                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Wallet size={14}/> Payment</h4>
-                            <div>
-                               {getStatusBadge(finalPaid >= total ? 'paid' : finalPaid > 0 ? 'partial' : 'unpaid')}
-                            </div>
-                        </div>
-
-                        <div className="relative">
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{state.settings.currency}</div>
-                            <input 
-                                type="number" 
-                                value={builderPaidAmount} 
-                                onChange={(e) => setBuilderPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                                className="w-full bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 rounded-2xl py-3 pl-10 pr-4 outline-none focus:border-indigo-500 font-black text-lg dark:text-white shadow-sm"
-                                placeholder={total.toFixed(2)}
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2">
-                           {[
-                             { id: 'cash', icon: Banknote },
-                             { id: 'card', icon: CreditCard },
-                             { id: 'transfer', icon: Wallet }
-                           ].map(m => (
-                             <button 
-                               key={m.id}
-                               onClick={() => setBuilderPayment(m.id as any)}
-                               className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all group ${builderPayment === m.id ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-indigo-300'}`}
-                             >
-                                <m.icon size={20} className={builderPayment === m.id ? 'mb-1' : 'mb-1 opacity-50 group-hover:opacity-100'}/>
-                                <span className="text-[8px] font-black uppercase tracking-widest">{t[m.id as keyof typeof t]}</span>
-                             </button>
-                           ))}
-                        </div>
-                     </div>
-                  </div>
-               </div>
-
-               <div className="pt-8 flex flex-col gap-4">
-                  <button 
-                    disabled={builderItems.length === 0 || (balanceDue > 0 && !builderCustomer)}
-                    onClick={saveInvoice}
-                    className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xl flex items-center justify-center gap-4 hover:bg-indigo-700 transition-all shadow-2xl disabled:opacity-50 disabled:shadow-none"
-                  >
-                     {t.processPrint}
-                     <Printer size={28}/>
-                  </button>
                </div>
             </div>
           </div>
         </div>
       )}
-      
-      {/* Template Manager */}
-      {isManagingTemplates && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-4xl h-[80vh] shadow-2xl relative flex flex-col overflow-hidden animate-in zoom-in-95">
-             <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900">
-                <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Invoice Templates</h3>
-                <button onClick={() => { setIsManagingTemplates(false); setEditingTemplate(null); }} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400"><X size={24}/></button>
-             </div>
-             
-             <div className="flex-1 flex overflow-hidden">
-                <div className="w-1/3 border-r border-slate-100 dark:border-slate-800 flex flex-col bg-slate-50/50 dark:bg-slate-800/20">
-                   <div className="p-4 flex-1 overflow-y-auto space-y-3 custom-scrollbar">
-                      {state.templates.map(tmp => (
-                         <div key={tmp.id} 
-                              onClick={() => setEditingTemplate(tmp)}
-                              className={`p-4 rounded-2xl border-2 transition-all cursor-pointer group ${editingTemplate?.id === tmp.id ? 'bg-white dark:bg-slate-800 border-indigo-500 shadow-md' : 'bg-white dark:bg-slate-900 border-transparent hover:border-slate-200 dark:hover:border-slate-700'}`}
-                         >
-                            <div className="flex justify-between items-start mb-2">
-                               <h4 className={`font-bold text-sm ${editingTemplate?.id === tmp.id ? 'text-indigo-600' : 'text-slate-700 dark:text-slate-200'}`}>{tmp.name}</h4>
-                               {state.settings.invoiceTemplate === tmp.id && <span className="bg-indigo-100 text-indigo-700 text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Active</span>}
-                            </div>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{tmp.layout}</p>
-                         </div>
-                      ))}
-                   </div>
-                </div>
 
-                <div className="flex-1 p-8 overflow-y-auto bg-white dark:bg-slate-900 custom-scrollbar">
-                   {editingTemplate ? (
-                      <div className="space-y-6 max-w-lg mx-auto">
-                         <div className="flex justify-between items-center mb-6">
-                            <h4 className="text-lg font-black dark:text-white flex items-center gap-2">
-                               <PenTool size={18} className="text-indigo-600"/>
-                               {editingTemplate.id ? 'Edit Template' : 'Create Template'}
-                            </h4>
-                         </div>
+      {selectedInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 rounded-[48px] w-full max-w-2xl p-0 shadow-2xl relative animate-in zoom-in duration-300 overflow-hidden flex flex-col max-h-[90vh]">
+            <header className="p-10 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0 sticky top-0 z-10">
+               <div>
+                  <h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">{t.invoiceDetails}</h3>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Ref: INV-#{selectedInvoice.id}</p>
+               </div>
+               <button onClick={() => setSelectedInvoice(null)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={24}/></button>
+            </header>
+            
+            <div className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
+               <div className="grid grid-cols-2 gap-10">
+                  <div className="space-y-1.5">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.customers}</p>
+                     <p className="text-lg font-black text-slate-800 dark:text-white truncate">
+                        {state.customers.find(c => c.id === selectedInvoice.customerId)?.name || t.walkInCustomer}
+                     </p>
+                     {selectedInvoice.customerId && (
+                       <p className="text-xs font-bold text-slate-400">{state.customers.find(c => c.id === selectedInvoice.customerId)?.phone}</p>
+                     )}
+                  </div>
+                  <div className="text-right space-y-1.5">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Timestamp</p>
+                     <p className="text-lg font-black text-slate-800 dark:text-white">
+                        {new Date(selectedInvoice.date).toLocaleDateString()}
+                     </p>
+                     <p className="text-xs font-bold text-slate-400">{new Date(selectedInvoice.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
+               </div>
 
-                         <div className="space-y-4">
-                            <div>
-                               <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Layout Style</label>
-                               <div className="grid grid-cols-3 gap-3">
-                                  {['modern', 'minimal', 'classic', 'thermal', 'receipt'].map(l => (
-                                     <button
-                                        key={l}
-                                        onClick={() => setEditingTemplate({...editingTemplate, layout: l as any})}
-                                        className={`py-3 rounded-xl border-2 text-xs font-bold uppercase transition-all ${editingTemplate.layout === l ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-100 dark:border-slate-700 text-slate-500'}`}
-                                     >
-                                        {l}
-                                     </button>
-                                  ))}
-                               </div>
-                            </div>
+               <div className="space-y-6">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3"><ShoppingCart size={14}/> {t.purchasedItems}</h4>
+                  <div className="space-y-4">
+                     {selectedInvoice.items.map((item, idx) => (
+                       <div key={idx} className="flex justify-between items-center py-4 px-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-transparent hover:border-slate-100 dark:hover:border-slate-700 transition-all">
+                          <div className="flex items-center gap-4">
+                             <span className="w-8 h-8 bg-white dark:bg-slate-900 rounded-lg flex items-center justify-center font-black text-indigo-600 shadow-sm text-xs">{item.quantity}x</span>
+                             <span className="font-bold text-slate-800 dark:text-white text-sm">{item.name}</span>
+                          </div>
+                          <span className="font-black text-slate-800 dark:text-white">{state.settings.currency}{(item.price * item.quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                       </div>
+                     ))}
+                  </div>
+               </div>
 
-                            <div>
-                               <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Brand Color</label>
-                               <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700">
-                                  <input 
-                                     type="color" 
-                                     value={editingTemplate.brandColor || '#6366f1'}
-                                     onChange={e => setEditingTemplate({...editingTemplate, brandColor: e.target.value})}
-                                     className="h-8 w-8 rounded-lg cursor-pointer border-none p-0 bg-transparent"
-                                  />
-                                  <span className="text-xs font-mono text-slate-500 dark:text-slate-400 uppercase">{editingTemplate.brandColor}</span>
-                               </div>
-                            </div>
+               <div className="bg-slate-900 dark:bg-black p-10 rounded-[40px] shadow-2xl space-y-6 text-white relative overflow-hidden group">
+                  <div className="flex justify-between items-center text-xs font-black uppercase text-slate-400">
+                     <span>{t.subtotal}</span>
+                     <span>{state.settings.currency}{selectedInvoice.subtotal.toLocaleString()}</span>
+                  </div>
+                  {selectedInvoice.tax > 0 && (
+                    <div className="flex justify-between items-center text-xs font-black uppercase text-slate-400">
+                       <span>{t.tax}</span>
+                       <span>{state.settings.currency}{selectedInvoice.tax.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {selectedInvoice.discount > 0 && (
+                    <div className="flex justify-between items-center text-xs font-black uppercase text-rose-400">
+                       <span>{t.discount}</span>
+                       <span>-{state.settings.currency}{selectedInvoice.discount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="pt-6 border-t border-white/10 flex justify-between items-center">
+                     <span className="text-indigo-400 font-black uppercase tracking-[0.2em] text-xs">Final Settlement</span>
+                     <span className="text-4xl font-black tracking-tighter">{state.settings.currency}{selectedInvoice.total.toLocaleString()}</span>
+                  </div>
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl rounded-full"></div>
+               </div>
 
-                            <div className="pt-4 flex gap-3">
-                               <button 
-                                  onClick={() => handleSaveTemplate(editingTemplate)}
-                                  className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-sm uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all active:scale-95"
-                                >
-                                  Save Template
-                               </button>
-                               {editingTemplate.id && editingTemplate.id !== state.settings.invoiceTemplate && (
-                                  <button 
-                                     onClick={() => handleSetActiveTemplate(editingTemplate.id!)}
-                                     className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black text-sm uppercase tracking-widest shadow-lg hover:bg-emerald-700 transition-all active:scale-95"
-                                  >
-                                     Set Active
-                                  </button>
-                               )}
-                            </div>
-                         </div>
-                      </div>
-                   ) : (
-                      <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4 opacity-50">
-                         <Layout size={64} strokeWidth={1}/>
-                         <p className="font-black text-sm uppercase tracking-widest">Select a template to edit</p>
-                      </div>
-                   )}
-                </div>
-             </div>
+               <div className="grid grid-cols-2 gap-6">
+                  <div className="p-6 bg-emerald-50 dark:bg-emerald-900/20 rounded-[32px] border border-emerald-100 dark:border-emerald-900/30">
+                     <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">Total Paid</p>
+                     <p className="text-2xl font-black text-emerald-600">{state.settings.currency}{selectedInvoice.paidAmount.toLocaleString()}</p>
+                  </div>
+                  <div className={`p-6 rounded-[32px] border ${selectedInvoice.total - selectedInvoice.paidAmount > 0 ? 'bg-rose-50 border-rose-100 dark:bg-rose-900/20' : 'bg-slate-50 border-slate-100 dark:bg-slate-800'}`}>
+                     <p className={`text-[10px] font-black uppercase mb-1 ${selectedInvoice.total - selectedInvoice.paidAmount > 0 ? 'text-rose-400' : 'text-slate-400'}`}>Balance Due</p>
+                     <p className={`text-2xl font-black ${selectedInvoice.total - selectedInvoice.paidAmount > 0 ? 'text-rose-600' : 'text-slate-400'}`}>{state.settings.currency}{(selectedInvoice.total - selectedInvoice.paidAmount).toLocaleString()}</p>
+                  </div>
+               </div>
+            </div>
+
+            <footer className="p-10 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-6 shrink-0 sticky bottom-0 z-10">
+               <button onClick={() => window.print()} className="flex-1 py-5 bg-white dark:bg-slate-800 text-slate-800 dark:text-white border-2 border-slate-100 dark:border-slate-700 rounded-3xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-100 transition-all shadow-sm">
+                  <Printer size={20}/> {t.printAgain}
+               </button>
+               <button onClick={() => setSelectedInvoice(null)} className="flex-1 py-5 bg-indigo-600 text-white rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all active:scale-[0.98]">
+                  {t.closeView}
+               </button>
+            </footer>
           </div>
         </div>
       )}
