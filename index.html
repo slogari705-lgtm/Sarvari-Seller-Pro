@@ -66,9 +66,11 @@
                 margin: 0;
                 size: auto;
             }
-            aside, header, .fixed, .no-print, button, .modal-sidebar {
+            /* Hide all UI components */
+            aside, header, nav, .fixed, .no-print, button, .modal-sidebar, #root {
                 display: none !important;
             }
+            
             body {
                 background: white !important;
                 color: black !important;
@@ -77,20 +79,24 @@
                 margin: 0 !important;
                 padding: 0 !important;
             }
-            #root {
-                display: none !important;
-            }
+            
+            /* Show only the print section */
             #print-section {
                 display: block !important;
-                width: 100%;
-                margin: 0;
-                padding: 0;
+                width: 100% !important;
+                height: auto !important;
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                visibility: visible !important;
             }
-            body.printing-special #print-section {
-                display: block !important;
-                position: absolute;
-                top: 0;
-                left: 0;
+
+            /* Fix rendering issues for background colors during print */
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
             }
         }
 

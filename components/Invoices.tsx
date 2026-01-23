@@ -29,7 +29,8 @@ import {
   ChevronRight,
   Download,
   Smartphone,
-  Maximize2
+  Maximize2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { AppState, Product, Customer, CartItem, Invoice, InvoiceTemplate, LoanTransaction } from '../types';
 import { translations } from '../translations';
@@ -43,7 +44,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [printLayout, setPrintLayout] = useState<'a4' | 'thermal' | 'modern'>('a4');
+  const [printLayout, setPrintLayout] = useState<'a4' | 'thermal' | 'advice'>('advice');
   
   const t = translations[state.settings.language || 'en'];
 
@@ -104,10 +105,10 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const filteredInvoices = useMemo(() => {
     return state.invoices.filter(inv => {
       const customer = state.customers.find(c => c.id === inv.customerId);
-      return inv.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      return inv.id.toString().includes(searchTerm) || 
              customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
              customer?.phone.includes(searchTerm);
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }).sort((a, b) => Number(b.id) - Number(a.id));
   }, [state.invoices, searchTerm, state.customers]);
 
   const subtotal = builderItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
@@ -121,7 +122,14 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
 
   const saveInvoice = () => {
     if (builderItems.length === 0) return;
-    const invoiceId = Math.random().toString(36).substr(2, 6).toUpperCase();
+    
+    // Sequential ID generation: Find max ID and add 1
+    const maxId = state.invoices.reduce((max, inv) => {
+      const idNum = parseInt(inv.id);
+      return !isNaN(idNum) ? Math.max(max, idNum) : max;
+    }, 0);
+    const nextId = (maxId + 1).toString();
+    
     const status: Invoice['status'] = finalPaid >= total ? 'paid' : (finalPaid > 0 ? 'partial' : 'unpaid');
     
     const invoiceDateObj = new Date(builderDate);
@@ -133,7 +141,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     }
 
     const newInvoice: Invoice = {
-      id: invoiceId,
+      id: nextId,
       date: invoiceDateObj.toISOString(),
       customerId: builderCustomer?.id,
       items: builderItems,
@@ -175,11 +183,11 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
         const loanTrans: LoanTransaction = {
           id: Math.random().toString(36).substr(2, 9),
           customerId: builderCustomer.id,
-          invoiceId: invoiceId,
+          invoiceId: nextId,
           date: new Date().toISOString(),
           amount: balanceDue,
           type: 'debt',
-          note: `Loan from invoice #${invoiceId}`
+          note: `Loan from invoice #${nextId}`
         };
         updateState('loanTransactions', [...state.loanTransactions, loanTrans]);
       }
@@ -204,30 +212,114 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     }
   };
 
-  const generatePrintHTML = (inv: Invoice, layout: 'a4' | 'thermal' | 'modern') => {
+  const generatePrintHTML = (inv: Invoice, layout: 'a4' | 'thermal' | 'advice') => {
     const customer = state.customers.find(c => c.id === inv.customerId);
     const dateStr = new Date(inv.date).toLocaleDateString();
     const timeStr = new Date(inv.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const currency = state.settings.currency;
 
-    const itemsHTML = inv.items.map(item => `
-      <tr>
-        <td style="padding: 12px 8px; border-bottom: 1px solid #f1f5f9;">
-          <div style="font-weight: 700; font-size: 13px;">${item.name}</div>
+    const itemsHTML = inv.items.map((item, idx) => `
+      <tr style="border-bottom: 1px solid #f1f5f9;">
+        <td style="padding: 12px 8px; text-align: center; color: #64748b; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 12px 8px;">
+          <div style="font-weight: 700; font-size: 13px; color: #0f172a;">${item.name}</div>
           <div style="font-size: 10px; color: #94a3b8; text-transform: uppercase;">SKU: ${item.sku}</div>
         </td>
-        <td style="padding: 12px 8px; border-bottom: 1px solid #f1f5f9; text-align: center; font-weight: 600;">${item.quantity}</td>
-        <td style="padding: 12px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: 600;">${currency}${item.price.toLocaleString()}</td>
-        <td style="padding: 12px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: 800;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
+        <td style="padding: 12px 8px; text-align: center; font-weight: 600; color: #334155;">${item.quantity}</td>
+        <td style="padding: 12px 8px; text-align: right; font-weight: 600; color: #334155;">${currency}${item.price.toLocaleString()}</td>
+        <td style="padding: 12px 8px; text-align: right; font-weight: 800; color: #0f172a;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
       </tr>
     `).join('');
 
-    const thermalItemsHTML = inv.items.map(item => `
-      <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-        <span style="flex: 1; padding-right: 8px;">${item.quantity}x ${item.name}</span>
-        <span>${currency}${(item.price * item.quantity).toLocaleString()}</span>
-      </div>
-    `).join('');
+    if (layout === 'advice') {
+      return `
+        <div style="width: 210mm; min-height: 297mm; padding: 15mm; font-family: 'Inter', sans-serif; color: #1e293b; background: #fff; box-sizing: border-box;">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 40px; border-bottom: 4px solid ${state.settings.brandColor}; padding-bottom: 20px;">
+            <div style="display: flex; gap: 20px; align-items: center;">
+              <div style="width: 80px; height: 80px; background: ${state.settings.brandColor}; border-radius: 20px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 900; font-size: 36px;">S</div>
+              <div>
+                <h1 style="margin: 0; font-size: 28px; font-weight: 900; letter-spacing: -0.05em; color: #0f172a;">${state.settings.shopName}</h1>
+                <p style="margin: 4px 0; color: #64748b; font-size: 12px; font-weight: 500;">${state.settings.shopAddress || ''}</p>
+                <p style="margin: 2px 0; color: #64748b; font-size: 12px; font-weight: 500;">Tel: ${state.settings.shopPhone || ''} | ${state.settings.shopEmail || ''}</p>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <h2 style="margin: 0; font-size: 32px; font-weight: 900; color: ${state.settings.brandColor}; letter-spacing: -0.02em; text-transform: uppercase;">Invoice Advice</h2>
+              <div style="margin-top: 15px; background: #f8fafc; padding: 10px 20px; border-radius: 12px;">
+                <p style="margin: 0; font-size: 14px; font-weight: 800; color: #475569;">NO: <span style="color: #0f172a;">#${inv.id.padStart(4, '0')}</span></p>
+                <p style="margin: 4px 0 0 0; font-size: 14px; font-weight: 800; color: #475569;">DATE: <span style="color: #0f172a;">${dateStr}</span></p>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-cols: 1fr 1fr; gap: 40px; margin-bottom: 40px;">
+            <div style="padding: 20px; border: 1px solid #e2e8f0; border-radius: 20px;">
+              <h4 style="margin: 0 0 12px 0; font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em;">Customer Details</h4>
+              <p style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">${customer?.name || 'Walk-in Customer'}</p>
+              <p style="margin: 6px 0; font-size: 13px; color: #64748b; font-weight: 500;">${customer?.phone || ''}</p>
+              <p style="margin: 0; font-size: 12px; color: #64748b; font-weight: 500; line-height: 1.5;">${customer?.address || 'No address provided'}</p>
+            </div>
+            <div style="padding: 20px; border: 1px solid #e2e8f0; border-radius: 20px;">
+              <h4 style="margin: 0 0 12px 0; font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em;">Settlement Info</h4>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 12px; color: #64748b; font-weight: 600;">Payment Mode:</span>
+                <span style="font-size: 12px; color: #0f172a; font-weight: 800; text-transform: uppercase;">${inv.paymentMethod}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="font-size: 12px; color: #64748b; font-weight: 600;">Status:</span>
+                <span style="font-size: 12px; color: ${inv.status === 'paid' ? '#10b981' : '#f43f5e'}; font-weight: 800; text-transform: uppercase;">${inv.status}</span>
+              </div>
+            </div>
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px; border-radius: 12px; overflow: hidden;">
+            <thead>
+              <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                <th style="padding: 16px 8px; text-align: center; font-size: 10px; font-weight: 900; text-transform: uppercase; color: #64748b; width: 40px;">#</th>
+                <th style="padding: 16px 8px; text-align: left; font-size: 10px; font-weight: 900; text-transform: uppercase; color: #64748b;">Description</th>
+                <th style="padding: 16px 8px; text-align: center; font-size: 10px; font-weight: 900; text-transform: uppercase; color: #64748b; width: 60px;">Qty</th>
+                <th style="padding: 16px 8px; text-align: right; font-size: 10px; font-weight: 900; text-transform: uppercase; color: #64748b; width: 100px;">Unit Price</th>
+                <th style="padding: 16px 8px; text-align: right; font-size: 10px; font-weight: 900; text-transform: uppercase; color: #64748b; width: 120px;">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHTML}
+            </tbody>
+          </table>
+
+          <div style="display: flex; justify-content: space-between; align-items: end;">
+            <div style="flex: 1; margin-right: 40px;">
+              <div style="padding: 20px; background: #f8fafc; border-radius: 20px;">
+                <h4 style="margin: 0 0 8px 0; font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em;">Terms & Conditions</h4>
+                <p style="margin: 0; font-size: 11px; color: #64748b; line-height: 1.5;">${inv.notes || 'Please verify items before leaving. Goods once sold are typically not returnable unless defective. Payments should be settled within the agreed timeframe.'}</p>
+              </div>
+            </div>
+            <div style="width: 300px; padding: 24px; background: #0f172a; border-radius: 32px; color: #fff; box-shadow: 0 10px 30px -5px rgba(0,0,0,0.2);">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #94a3b8;">
+                <span>Subtotal</span>
+                <span style="color: #fff;">${currency}${inv.subtotal.toLocaleString()}</span>
+              </div>
+              ${inv.tax > 0 ? `<div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #94a3b8;"><span>Tax (${state.settings.taxRate}%)</span><span style="color: #fff;">${currency}${inv.tax.toLocaleString()}</span></div>` : ''}
+              ${inv.discount > 0 ? `<div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #f43f5e;"><span>Discount</span><span>-${currency}${inv.discount.toLocaleString()}</span></div>` : ''}
+              <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 14px; font-weight: 900; color: ${state.settings.brandColor}; text-transform: uppercase;">Payable</span>
+                <span style="font-size: 28px; font-weight: 900; color: #fff;">${currency}${inv.total.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 60px; padding-top: 30px; border-top: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
+             <div style="text-align: center; border-top: 1px solid #e2e8f0; width: 150px; padding-top: 8px;">
+                <p style="margin: 0; font-size: 10px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Customer Sig.</p>
+             </div>
+             <div style="text-align: right;">
+                <p style="margin: 0; font-size: 11px; font-weight: 700; color: #cbd5e1;">Generated on ${dateStr} via</p>
+                <p style="margin: 2px 0 0 0; font-size: 13px; font-weight: 900; color: #1e293b;">Seller Pro Digital POS</p>
+             </div>
+          </div>
+        </div>
+      `;
+    }
 
     if (layout === 'thermal') {
       return `
@@ -245,7 +337,12 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
           </div>
 
           <div style="margin-bottom: 16px;">
-            ${thermalItemsHTML}
+            ${inv.items.map(item => `
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+                <span style="flex: 1; padding-right: 8px;">${item.quantity}x ${item.name}</span>
+                <span>${currency}${(item.price * item.quantity).toLocaleString()}</span>
+              </div>
+            `).join('')}
           </div>
 
           <div style="border-top: 1px dashed #000; padding-top: 8px; font-size: 12px; font-weight: bold;">
@@ -267,95 +364,75 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       `;
     }
 
-    // A4 Modern Layout
+    // A4 Generic Layout
     return `
       <div style="width: 210mm; min-height: 297mm; padding: 20mm; font-family: 'Inter', sans-serif; color: #1e293b; background: #fff; box-sizing: border-box;">
         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 50px;">
           <div>
-            <div style="width: 60px; hieght: 60px; background: ${state.settings.brandColor}; border-radius: 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 900; font-size: 24px;">S</div>
-            <h1 style="margin: 0; font-size: 32px; font-weight: 900; letter-spacing: -0.05em; color: #0f172a;">${state.settings.shopName}</h1>
+            <h1 style="margin: 0; font-size: 32px; font-weight: 900; color: #0f172a;">${state.settings.shopName}</h1>
             <p style="margin: 4px 0; color: #64748b; font-weight: 500;">${state.settings.shopAddress || ''}</p>
-            <p style="margin: 2px 0; color: #64748b; font-weight: 500;">${state.settings.shopPhone || ''} | ${state.settings.shopEmail || ''}</p>
           </div>
           <div style="text-align: right;">
-            <h2 style="margin: 0; font-size: 48px; font-weight: 900; color: #f1f5f9; letter-spacing: -0.02em; line-height: 1;">INVOICE</h2>
-            <div style="margin-top: 20px;">
-              <p style="margin: 0; font-size: 14px; font-weight: 800; color: #475569;">REFERENCE: <span style="color: ${state.settings.brandColor};">#${inv.id}</span></p>
-              <p style="margin: 4px 0; font-size: 14px; font-weight: 800; color: #475569;">DATE: <span>${dateStr}</span></p>
-            </div>
+            <h2 style="margin: 0; font-size: 40px; font-weight: 900; color: #cbd5e1;">INVOICE</h2>
+            <p style="margin: 10px 0; font-size: 16px; font-weight: 800; color: #475569;">#${inv.id}</p>
+            <p style="margin: 0; font-size: 14px; font-weight: 600; color: #94a3b8;">${dateStr}</p>
           </div>
         </div>
-
-        <div style="display: flex; gap: 40px; margin-bottom: 40px; padding: 24px; background: #f8fafc; border-radius: 24px;">
-          <div style="flex: 1;">
-            <h4 style="margin: 0 0 12px 0; font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em;">Bill To</h4>
-            <p style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">${customer?.name || 'Walk-in Customer'}</p>
-            <p style="margin: 4px 0; font-size: 13px; color: #64748b; font-weight: 500;">${customer?.phone || ''}</p>
-            <p style="margin: 2px 0; font-size: 13px; color: #64748b; font-weight: 500;">${customer?.address || ''}</p>
-          </div>
-          <div style="flex: 1;">
-            <h4 style="margin: 0 0 12px 0; font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em;">Payment Details</h4>
-            <p style="margin: 0; font-size: 14px; font-weight: 700; color: #475569;">Method: <span style="text-transform: capitalize;">${inv.paymentMethod}</span></p>
-            <p style="margin: 4px 0; font-size: 14px; font-weight: 700; color: #475569;">Status: <span style="text-transform: uppercase; color: ${inv.status === 'paid' ? '#10b981' : '#f43f5e'};">${inv.status}</span></p>
-          </div>
+        <div style="margin-bottom: 40px; padding: 24px; background: #f8fafc; border-radius: 24px;">
+           <h4 style="margin: 0 0 10px 0; font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase;">Customer</h4>
+           <p style="margin: 0; font-size: 18px; font-weight: 800; color: #0f172a;">${customer?.name || 'Walk-in Customer'}</p>
         </div>
-
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;">
           <thead>
             <tr style="background: #f1f5f9;">
-              <th style="padding: 16px 8px; text-align: left; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; border-radius: 12px 0 0 12px;">Item Description</th>
-              <th style="padding: 16px 8px; text-align: center; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;">Qty</th>
-              <th style="padding: 16px 8px; text-align: right; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;">Price</th>
-              <th style="padding: 16px 8px; text-align: right; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; border-radius: 0 12px 12px 0;">Amount</th>
+              <th style="padding: 16px 8px; text-align: left;">Item</th>
+              <th style="padding: 16px 8px; text-align: center;">Qty</th>
+              <th style="padding: 16px 8px; text-align: right;">Total</th>
             </tr>
           </thead>
           <tbody>
-            ${itemsHTML}
+            ${inv.items.map(item => `
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 16px 8px; font-weight: 700;">${item.name}</td>
+                <td style="padding: 16px 8px; text-align: center;">${item.quantity}</td>
+                <td style="padding: 16px 8px; text-align: right; font-weight: 800;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
+              </tr>
+            `).join('')}
           </tbody>
         </table>
-
         <div style="display: flex; justify-content: flex-end;">
-          <div style="width: 300px; padding: 24px; background: #0f172a; border-radius: 32px; color: #fff;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #94a3b8;">
-              <span>Subtotal</span>
-              <span style="color: #fff;">${currency}${inv.subtotal.toLocaleString()}</span>
-            </div>
-            ${inv.tax > 0 ? `<div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #94a3b8;"><span>Tax (${state.settings.taxRate}%)</span><span style="color: #fff;">${currency}${inv.tax.toLocaleString()}</span></div>` : ''}
-            ${inv.discount > 0 ? `<div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #f43f5e;"><span>Discount</span><span>-${currency}${inv.discount.toLocaleString()}</span></div>` : ''}
-            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-size: 14px; font-weight: 900; color: ${state.settings.brandColor}; text-transform: uppercase;">Total Due</span>
-              <span style="font-size: 28px; font-weight: 900;">${currency}${inv.total.toLocaleString()}</span>
+          <div style="width: 250px; padding-top: 20px; border-top: 2px solid #0f172a;">
+            <div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: 900;">
+              <span>Total:</span>
+              <span>${currency}${inv.total.toLocaleString()}</span>
             </div>
           </div>
-        </div>
-
-        <div style="margin-top: 80px; padding-top: 40px; border-top: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
-           <div>
-              <p style="margin: 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">Terms & Notes</p>
-              <p style="margin: 4px 0 0 0; font-size: 11px; color: #94a3b8; max-width: 400px;">${inv.notes || 'No special terms applied. Please settle payment by the due date if applicable. Thank you for your business!'}</p>
-           </div>
-           <div style="text-align: right;">
-              <p style="margin: 0; font-size: 11px; font-weight: 700; color: #cbd5e1;">Invoice generated via</p>
-              <p style="margin: 2px 0 0 0; font-size: 12px; font-weight: 900; color: #1e293b;">Sarvari Seller Pro POS</p>
-           </div>
         </div>
       </div>
     `;
   };
 
-  const handlePrint = (inv: Invoice, layout: 'a4' | 'thermal' | 'modern') => {
+  const handlePrint = (inv: Invoice, layout: 'a4' | 'thermal' | 'advice') => {
     const printSection = document.getElementById('print-section');
     if (!printSection) return;
 
-    printSection.innerHTML = generatePrintHTML(inv, layout);
-    document.body.classList.add('printing-special');
+    // Clear previous print content
+    printSection.innerHTML = '';
+    
+    // Create container for print
+    const container = document.createElement('div');
+    container.innerHTML = generatePrintHTML(inv, layout);
+    printSection.appendChild(container);
 
-    // Small delay to ensure styles and images render
+    // Give browser time to render styles and images
+    document.body.classList.add('printing-special');
+    
+    // Small delay ensures layout calculation completes
     setTimeout(() => {
       window.print();
       document.body.classList.remove('printing-special');
       printSection.innerHTML = '';
-    }, 300);
+    }, 500);
   };
 
   return (
@@ -391,7 +468,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead className="bg-slate-50 dark:bg-slate-800/50">
               <tr>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Reference</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">ID</th>
                 <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.customers}</th>
                 <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
                 <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total}</th>
@@ -404,7 +481,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                 const customer = state.customers.find(c => c.id === inv.customerId);
                 return (
                   <tr key={inv.id} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-500/5 transition-colors group">
-                    <td className="px-8 py-5 font-black text-sm dark:text-white">INV-#{inv.id}</td>
+                    <td className="px-8 py-5 font-black text-sm dark:text-white">#{inv.id.padStart(4, '0')}</td>
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center font-black text-xs text-slate-400 border border-slate-100 dark:border-slate-700">
@@ -426,8 +503,8 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                     </td>
                     <td className="px-8 py-5 text-right">
                       <div className="flex justify-end gap-2">
-                        <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><Eye size={18}/></button>
-                        <button onClick={() => handlePrint(inv, 'a4')} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors" title="Quick Print A4"><Printer size={18}/></button>
+                        <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="View Details"><Eye size={18}/></button>
+                        <button onClick={() => handlePrint(inv, 'advice')} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors" title="Advice Print"><FileSpreadsheet size={18}/></button>
                         <button onClick={() => deleteInvoice(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={18}/></button>
                       </div>
                     </td>
@@ -675,9 +752,9 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Select Print Layout</p>
                      <div className="grid grid-cols-1 gap-3">
                         {[
+                          { id: 'advice', label: 'Advice Print', icon: FileSpreadsheet, desc: 'Professional Business Form' },
                           { id: 'a4', label: 'Corporate A4', icon: FileText, desc: 'Official business layout' },
-                          { id: 'thermal', label: 'Thermal POS', icon: Smartphone, desc: '80mm narrow receipt' },
-                          { id: 'modern', label: 'Modern Digital', icon: Maximize2, desc: 'High contrast branding' }
+                          { id: 'thermal', label: 'Thermal POS', icon: Smartphone, desc: '80mm narrow receipt' }
                         ].map(opt => (
                           <button 
                             key={opt.id}
@@ -698,8 +775,8 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
 
                   <div className="p-6 bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 space-y-4">
                      <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        <span>Invoice #</span>
-                        <span className="text-slate-800 dark:text-white">INV-${selectedInvoice.id}</span>
+                        <span>Invoice ID</span>
+                        <span className="text-slate-800 dark:text-white">#${selectedInvoice.id.padStart(4, '0')}</span>
                      </div>
                      <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         <span>Status</span>
