@@ -66,9 +66,10 @@
                 margin: 0;
                 size: auto;
             }
-            /* Hide all UI components */
-            aside, header, nav, .fixed, .no-print, button, .modal-sidebar, #root {
+            /* Complete UI blackout for browser components */
+            aside, header, nav, footer, .fixed, .no-print, button, .modal-sidebar, #root {
                 display: none !important;
+                visibility: hidden !important;
             }
             
             body {
@@ -80,9 +81,10 @@
                 padding: 0 !important;
             }
             
-            /* Show only the print section */
+            /* High visibility for the isolation print container */
             #print-section {
                 display: block !important;
+                visibility: visible !important;
                 width: 100% !important;
                 height: auto !important;
                 position: absolute !important;
@@ -90,16 +92,18 @@
                 left: 0 !important;
                 margin: 0 !important;
                 padding: 0 !important;
-                visibility: visible !important;
                 background-color: white !important;
+                z-index: 9999 !important;
             }
 
             #print-section * {
                 visibility: visible !important;
                 color: black !important;
+                background-color: transparent !important;
+                opacity: 1 !important;
             }
 
-            /* Fix rendering issues for background colors during print */
+            /* Enable backgrounds for colored accents in layouts like Advice */
             * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;

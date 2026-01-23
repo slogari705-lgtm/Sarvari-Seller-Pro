@@ -177,9 +177,17 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
+    
+    // Sequential ID generation
+    const maxId = state.invoices.reduce((max, inv) => {
+      const idNum = parseInt(inv.id);
+      return !isNaN(idNum) ? Math.max(max, idNum) : max;
+    }, 0);
+    const nextId = (maxId + 1).toString();
+
     const status: Invoice['status'] = finalPaid >= total ? 'paid' : (finalPaid > 0 ? 'partial' : 'unpaid');
     const newInvoice: Invoice = {
-      id: Math.random().toString(36).substring(7).toUpperCase(),
+      id: nextId,
       date: new Date().toISOString(),
       customerId: selectedCustomer?.id,
       items: cart,
@@ -592,7 +600,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
             <button 
               disabled={balanceDue > 0 && !selectedCustomer}
               onClick={handleCheckout}
-              className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xl hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 dark:shadow-none disabled:opacity-50 active:scale-95"
+              className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xl hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 dark:shadow-none disabled:opacity-50 active:scale-95"
             >
               {t.confirmFinish}
             </button>
