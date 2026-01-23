@@ -13,7 +13,8 @@ import {
   FileText,
   Package,
   AlertTriangle,
-  Scale
+  Scale,
+  Layout
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AppState, View } from '../types';
@@ -28,6 +29,12 @@ interface Props {
 const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
   const [insights, setInsights] = useState<string>('');
   const [loadingInsights, setLoadingInsights] = useState(false);
+  
+  const [visibleWidgets, setVisibleWidgets] = useState<string[]>(() => {
+    const saved = localStorage.getItem('dashboard_costume');
+    return saved ? JSON.parse(saved) : ['totalSales', 'orders', 'totalDebt', 'netProfit'];
+  });
+
   const t = translations[state.settings.language || 'en'];
 
   const totalSales = state.invoices.reduce((acc, inv) => acc + inv.total, 0);
@@ -35,10 +42,7 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
   const totalExpenses = state.expenses.reduce((acc, exp) => acc + exp.amount, 0);
   const totalDebt = state.customers.reduce((acc, cust) => acc + (cust.totalDebt || 0), 0);
   
-  // Net Profit = Gross Profit (from invoices) - Expenses
-  // If historical invoices don't have 'profit' field, fallback to estimating (simplified) or 0
   const netProfit = totalInvoiceProfit - totalExpenses;
-  
   const recentInvoices = [...state.invoices].reverse().slice(0, 5);
 
   const chartData = useMemo(() => {
@@ -52,7 +56,6 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
       const dayData = state.invoices.filter(inv => inv.date.startsWith(date));
       const daySales = dayData.reduce((sum, inv) => sum + inv.total, 0);
       const dayProfit = dayData.reduce((sum, inv) => sum + (inv.profit || 0), 0);
-      
       const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short' });
       return { name: dayName, sales: daySales, profit: dayProfit };
     });
@@ -73,7 +76,7 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
     fetchInsights();
   }, [state.invoices.length]);
 
-  const stats = [
+  const allStats = [
     { id: 'totalSales', label: t.totalSales, value: `${state.settings.currency}${totalSales.toLocaleString()}`, icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-500/10', trend: totalSales > 0 ? '+100%' : '0%' },
     { id: 'orders', label: t.orders, value: state.invoices.length.toString(), icon: ShoppingBag, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-500/10', trend: state.invoices.length > 0 ? '+100%' : '0%' },
     { id: 'totalDebt', label: t.totalDebt, value: `${state.settings.currency}${totalDebt.toLocaleString()}`, icon: Scale, color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-900/20', trend: totalDebt > 0 ? 'Active Loans' : '' },
@@ -87,8 +90,19 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex items-center justify-between">
+         <h3 className="font-black text-2xl uppercase tracking-tighter dark:text-white">Business pulse</h3>
+         <button 
+           onClick={() => setCurrentView('dashboard-costume')}
+           className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 hover:text-indigo-600"
+         >
+           <Layout size={14} />
+           Costume Dashboard
+         </button>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
+        {allStats.filter(s => visibleWidgets.includes(s.id)).map((stat, i) => (
           <div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-start justify-between transition-all hover:shadow-md group">
             <div>
               <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">{stat.label}</p>
@@ -98,9 +112,6 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
                   <div className={`flex items-center gap-1 text-xs font-bold ${stat.id === 'totalDebt' ? 'text-rose-500' : 'text-emerald-600'}`}>
                     <span>{stat.trend}</span>
                   </div>
-                )}
-                {stat.id === 'totalDebt' && totalDebt > 0 && (
-                  <button onClick={() => setCurrentView('loans')} className="text-[10px] font-black text-rose-500 uppercase hover:underline ml-2 opacity-0 group-hover:opacity-100 transition-opacity">View All</button>
                 )}
               </div>
             </div>

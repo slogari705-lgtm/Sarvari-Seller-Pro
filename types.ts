@@ -25,20 +25,20 @@ export interface Customer {
   company?: string;
   notes?: string;
   tags?: string[];
-  skills?: string[]; // Added field for customer expertise or interests
+  skills?: string[]; 
   loyaltyPoints?: number;
   transactionCount?: number;
 }
 
 export interface CartItem extends Product {
   quantity: number;
-  buyPrice: number; // Snapshot of costPrice at moment of sale
+  buyPrice: number;
 }
 
 export interface InvoiceTemplate {
   id: string;
   name: string;
-  layout: 'modern' | 'minimal' | 'classic';
+  layout: 'modern' | 'minimal' | 'classic' | 'thermal' | 'receipt';
   brandColor: string;
   headerText?: string;
   footerText?: string;
@@ -55,7 +55,7 @@ export interface Invoice {
   discount: number;
   total: number;
   paidAmount: number; 
-  profit: number; // Calculated profit for this invoice
+  profit: number; 
   status: 'paid' | 'partial' | 'unpaid'; 
   paymentMethod: 'cash' | 'card' | 'transfer';
   notes?: string;
@@ -97,7 +97,7 @@ export interface AppState {
     shopPhone?: string;
     shopEmail?: string;
     shopWebsite?: string;
-    businessId?: string; // Tax ID, VAT, etc.
+    businessId?: string;
     currency: string;
     taxRate: number;
     lowStockThreshold: number;
@@ -109,4 +109,4 @@ export interface AppState {
   };
 }
 
-export type View = 'dashboard' | 'customers' | 'products' | 'terminal' | 'invoices' | 'expenses' | 'reports' | 'settings' | 'loans';
+export type View = 'dashboard' | 'customers' | 'products' | 'terminal' | 'invoices' | 'expenses' | 'reports' | 'settings' | 'loans' | 'dashboard-costume';

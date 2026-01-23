@@ -31,7 +31,9 @@ import {
   History,
   User,
   ArrowRight,
-  Fingerprint
+  Fingerprint,
+  Receipt,
+  ScrollText
 } from 'lucide-react';
 import { AppState, Language, Theme } from '../types';
 import { translations } from '../translations';
@@ -145,7 +147,9 @@ const Settings: React.FC<Props> = ({ state, updateState }) => {
   const templates = [
     { id: 'modern', label: t.modernStudio, icon: LayoutList },
     { id: 'minimal', label: t.thermalSlim, icon: FileText },
-    { id: 'classic', label: t.corporate, icon: Briefcase }
+    { id: 'classic', label: t.corporate, icon: Briefcase },
+    { id: 'thermal', label: 'Classic Receipt', icon: Receipt },
+    { id: 'receipt', label: 'Modern Receipt', icon: ScrollText }
   ];
 
   return (

@@ -331,7 +331,192 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
 
     let templateHTML = '';
 
-    if (template.layout === 'modern') {
+    if (template.layout === 'thermal') {
+      // Classic Thermal Receipt (Courier style)
+      templateHTML = `
+      <div style="width: 76mm; margin: 0 auto; background: white; color: black; font-family: 'Courier New', Courier, monospace; font-size: 12px; line-height: 1.2;">
+          <div style="text-align: center; margin-bottom: 10px;">
+              ${template.showLogo ? `
+              <div style="font-weight: bold; font-size: 18px; text-transform: uppercase; margin-bottom: 5px;">${state.settings.shopName}</div>
+              ` : `<div style="font-weight: bold; font-size: 18px; text-transform: uppercase; margin-bottom: 5px;">${state.settings.shopName}</div>`}
+              <div style="font-size: 10px;">${state.settings.shopAddress || ''}</div>
+              <div style="font-size: 10px;">Tel: ${state.settings.shopPhone || ''}</div>
+          </div>
+          
+          <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
+          
+          <div style="display: flex; justify-content: space-between; font-size: 10px;">
+              <span>${new Date(inv.date).toLocaleDateString()}</span>
+              <span>${new Date(inv.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+          </div>
+          <div style="font-size: 10px; margin-top: 2px;">Receipt #: ${inv.id}</div>
+          <div style="font-size: 10px;">Cust: ${customer?.name || 'Walk-in'}</div>
+          
+          <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
+          
+          <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                  <tr style="font-size: 10px;">
+                      <th style="text-align: left; padding-bottom: 4px;">ITEM</th>
+                      <th style="text-align: center; padding-bottom: 4px;">QTY</th>
+                      <th style="text-align: right; padding-bottom: 4px;">PRICE</th>
+                      <th style="text-align: right; padding-bottom: 4px;">AMT</th>
+                  </tr>
+              </thead>
+              <tbody>
+                  ${inv.items.map(item => `
+                  <tr>
+                      <td colspan="4" style="padding-top: 4px; font-weight: bold; font-size: 11px;">${item.name}</td>
+                  </tr>
+                  <tr style="font-size: 11px;">
+                      <td></td>
+                      <td style="text-align: center;">${item.quantity}</td>
+                      <td style="text-align: right;">${item.price.toFixed(2)}</td>
+                      <td style="text-align: right;">${(item.price * item.quantity).toFixed(2)}</td>
+                  </tr>
+                  `).join('')}
+              </tbody>
+          </table>
+          
+          <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
+          
+          <div style="font-size: 11px;">
+            <div style="display: flex; justify-content: space-between;">
+                <span>Subtotal</span>
+                <span>${state.settings.currency}${inv.subtotal.toFixed(2)}</span>
+            </div>
+            ${inv.discount > 0 ? `
+            <div style="display: flex; justify-content: space-between;">
+                <span>Discount</span>
+                <span>-${state.settings.currency}${inv.discount.toFixed(2)}</span>
+            </div>` : ''}
+            <div style="display: flex; justify-content: space-between;">
+                <span>Tax</span>
+                <span>${state.settings.currency}${inv.tax.toFixed(2)}</span>
+            </div>
+          </div>
+          
+          <div style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
+          
+          <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; margin: 5px 0;">
+              <span>TOTAL</span>
+              <span>${state.settings.currency}${inv.total.toFixed(2)}</span>
+          </div>
+          
+          <div style="font-size: 11px; margin-top: 5px;">
+              <div style="display: flex; justify-content: space-between;">
+                  <span>Payment (${inv.paymentMethod})</span>
+                  <span>${state.settings.currency}${inv.paidAmount.toFixed(2)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                  <span>Change/Due</span>
+                  <span>${state.settings.currency}${(inv.paidAmount - inv.total).toFixed(2)}</span>
+              </div>
+          </div>
+          
+          <div style="border-bottom: 1px dashed #000; margin: 10px 0;"></div>
+          
+          <div style="text-align: center; margin-top: 10px;">
+              <svg id="barcode-inv-${inv.id}" style="width: 100%; height: 40px; margin-bottom: 5px;"></svg>
+              <p style="font-size: 11px; font-weight: bold; text-transform: uppercase;">${template.footerText || 'THANK YOU!'}</p>
+          </div>
+      </div>
+      `;
+    } else if (template.layout === 'receipt') {
+      // Modern Receipt (Clean Sans Serif)
+      templateHTML = `
+      <div style="width: 76mm; margin: 0 auto; background: white; color: #1e293b; font-family: 'Inter', sans-serif; font-size: 12px; line-height: 1.4;">
+          <div style="text-align: center; margin-bottom: 15px;">
+              <div style="font-weight: 900; font-size: 20px; text-transform: uppercase; letter-spacing: -0.5px; margin-bottom: 4px;">${state.settings.shopName}</div>
+              <div style="font-size: 11px; color: #64748b;">${state.settings.shopAddress || ''}</div>
+              <div style="font-size: 11px; color: #64748b;">${state.settings.shopPhone || ''}</div>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px;">
+              <div>
+                 <div style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Receipt No</div>
+                 <div style="font-weight: 800; font-size: 14px;">#${inv.id}</div>
+              </div>
+              <div style="text-align: right;">
+                 <div style="font-size: 10px; color: #64748b;">${new Date(inv.date).toLocaleDateString()}</div>
+                 <div style="font-size: 10px; color: #64748b;">${new Date(inv.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+              </div>
+          </div>
+
+          <div style="margin-bottom: 15px;">
+              <div style="font-size: 11px; font-weight: 600; color: #64748b;">Customer</div>
+              <div style="font-weight: 800; font-size: 13px;">${customer?.name || 'Walk-in Customer'}</div>
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+              <thead>
+                  <tr style="font-size: 10px; text-transform: uppercase; color: #94a3b8; border-bottom: 1px solid #e2e8f0;">
+                      <th style="text-align: left; padding: 4px 0;">Item</th>
+                      <th style="text-align: center; padding: 4px 0;">Qty</th>
+                      <th style="text-align: right; padding: 4px 0;">Price</th>
+                      <th style="text-align: right; padding: 4px 0;">Total</th>
+                  </tr>
+              </thead>
+              <tbody>
+                  ${inv.items.map(item => `
+                  <tr style="border-bottom: 1px solid #f1f5f9;">
+                      <td style="padding: 8px 0; font-weight: 600;">
+                        <div style="line-height: 1.2;">${item.name}</div>
+                      </td>
+                      <td style="padding: 8px 0; text-align: center;">${item.quantity}</td>
+                      <td style="padding: 8px 0; text-align: right;">${item.price.toFixed(2)}</td>
+                      <td style="padding: 8px 0; text-align: right; font-weight: 800;">${(item.price * item.quantity).toFixed(2)}</td>
+                  </tr>
+                  `).join('')}
+              </tbody>
+          </table>
+
+          <div style="display: flex; justify-content: flex-end; margin-bottom: 15px;">
+             <div style="width: 100%;">
+                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                   <span style="font-size: 12px; font-weight: 600; color: #64748b;">Subtotal</span>
+                   <span style="font-weight: 700;">${state.settings.currency}${inv.subtotal.toFixed(2)}</span>
+                </div>
+                ${inv.discount > 0 ? `
+                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                   <span style="font-size: 12px; font-weight: 600; color: #f43f5e;">Discount</span>
+                   <span style="font-weight: 700; color: #f43f5e;">-${state.settings.currency}${inv.discount.toFixed(2)}</span>
+                </div>` : ''}
+                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                   <span style="font-size: 12px; font-weight: 600; color: #64748b;">Tax</span>
+                   <span style="font-weight: 700;">${state.settings.currency}${inv.tax.toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 10px 0; margin-top: 5px; border-top: 2px solid #000; border-bottom: 2px solid #000;">
+                   <span style="font-size: 16px; font-weight: 900; text-transform: uppercase;">Total</span>
+                   <span style="font-size: 18px; font-weight: 900;">${state.settings.currency}${inv.total.toFixed(2)}</span>
+                </div>
+             </div>
+          </div>
+
+          <div style="background: #f8fafc; padding: 10px; border-radius: 8px; margin-bottom: 20px;">
+             <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-bottom: 4px;">
+                <span>Paid via ${inv.paymentMethod.toUpperCase()}</span>
+                <span>${state.settings.currency}${inv.paidAmount.toFixed(2)}</span>
+             </div>
+             ${(inv.paidAmount - inv.total) > 0 ? `
+             <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: #64748b;">
+                <span>Change</span>
+                <span>${state.settings.currency}${(inv.paidAmount - inv.total).toFixed(2)}</span>
+             </div>` : ''}
+              ${(inv.total - inv.paidAmount) > 0 ? `
+             <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: #ef4444;">
+                <span>Balance Due</span>
+                <span>${state.settings.currency}${(inv.total - inv.paidAmount).toFixed(2)}</span>
+             </div>` : ''}
+          </div>
+
+          <div style="text-align: center;">
+             <svg id="barcode-inv-${inv.id}" style="width: 100%; height: 40px; margin-bottom: 10px;"></svg>
+             <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">${template.footerText || 'Thank you for your business'}</div>
+          </div>
+      </div>
+      `;
+    } else if (template.layout === 'modern') {
       templateHTML = `
         <div style="font-family: 'Inter', sans-serif; background: white; padding: 40px; max-width: 210mm; margin: 0 auto; color: #0f172a;">
           <div style="display: flex; justify-content: space-between; border-bottom: 4px solid ${brandColor}; padding-bottom: 30px; margin-bottom: 40px;">
@@ -1231,7 +1416,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                             <div>
                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Layout Style</label>
                                <div className="grid grid-cols-3 gap-3">
-                                  {['modern', 'minimal', 'classic'].map(l => (
+                                  {['modern', 'minimal', 'classic', 'thermal', 'receipt'].map(l => (
                                      <button
                                         key={l}
                                         onClick={() => setEditingTemplate({...editingTemplate, layout: l as any})}
