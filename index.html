@@ -64,8 +64,9 @@
         @media print {
             @page {
                 margin: 0;
+                size: auto;
             }
-            aside, header, .fixed, .no-print, button {
+            aside, header, .fixed, .no-print, button, .modal-sidebar {
                 display: none !important;
             }
             body {
@@ -76,25 +77,20 @@
                 margin: 0 !important;
                 padding: 0 !important;
             }
-            main {
-                margin: 0 !important;
-                padding: 0 !important;
-                height: auto !important;
-                overflow: visible !important;
-            }
-            body.printing-special #root {
+            #root {
                 display: none !important;
+            }
+            #print-section {
+                display: block !important;
+                width: 100%;
+                margin: 0;
+                padding: 0;
             }
             body.printing-special #print-section {
                 display: block !important;
                 position: absolute;
                 top: 0;
                 left: 0;
-                width: 100%;
-                background: white;
-                z-index: 9999;
-                margin: 0;
-                padding: 0;
             }
         }
 
@@ -104,6 +100,11 @@
 
         input, select, textarea {
             font-size: 16px !important;
+        }
+
+        /* Prevent zooming on interaction for mobile */
+        input[type="text"], input[type="number"], select, textarea {
+            font-size: 16px;
         }
     </style>
     <script type="importmap">

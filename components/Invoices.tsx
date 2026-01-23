@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
   Search, 
@@ -25,7 +25,11 @@ import {
   Clock,
   Palette,
   Layout,
-  StickyNote
+  StickyNote,
+  ChevronRight,
+  Download,
+  Smartphone,
+  Maximize2
 } from 'lucide-react';
 import { AppState, Product, Customer, CartItem, Invoice, InvoiceTemplate, LoanTransaction } from '../types';
 import { translations } from '../translations';
@@ -39,9 +43,8 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [printLayout, setPrintLayout] = useState<'a4' | 'thermal' | 'modern'>('a4');
   
-  const [activeTemplateId, setActiveTemplateId] = useState<string>(state.settings.invoiceTemplate);
-
   const t = translations[state.settings.language || 'en'];
 
   // Invoice Builder State
@@ -116,7 +119,6 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const finalPaid = builderPaidAmount === '' ? total : builderPaidAmount;
   const balanceDue = Math.max(0, total - finalPaid);
 
-  // Fix: Completed the saveInvoice logic which was truncated
   const saveInvoice = () => {
     if (builderItems.length === 0) return;
     const invoiceId = Math.random().toString(36).substr(2, 6).toUpperCase();
@@ -148,14 +150,12 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
 
     updateState('invoices', [...state.invoices, newInvoice]);
 
-    // Update product stock
     const updatedProducts = state.products.map(p => {
       const cartItem = builderItems.find(item => item.id === p.id);
       return cartItem ? { ...p, stock: Math.max(0, p.stock - cartItem.quantity) } : p;
     });
     updateState('products', updatedProducts);
 
-    // Update customer debt and lifetime value
     if (builderCustomer) {
       const updatedCustomers = state.customers.map(c => {
         if (c.id === builderCustomer.id) {
@@ -171,7 +171,6 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       });
       updateState('customers', updatedCustomers);
 
-      // Record loan transaction if there is balance due
       if (balanceDue > 0) {
         const loanTrans: LoanTransaction = {
           id: Math.random().toString(36).substr(2, 9),
@@ -205,6 +204,160 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     }
   };
 
+  const generatePrintHTML = (inv: Invoice, layout: 'a4' | 'thermal' | 'modern') => {
+    const customer = state.customers.find(c => c.id === inv.customerId);
+    const dateStr = new Date(inv.date).toLocaleDateString();
+    const timeStr = new Date(inv.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const currency = state.settings.currency;
+
+    const itemsHTML = inv.items.map(item => `
+      <tr>
+        <td style="padding: 12px 8px; border-bottom: 1px solid #f1f5f9;">
+          <div style="font-weight: 700; font-size: 13px;">${item.name}</div>
+          <div style="font-size: 10px; color: #94a3b8; text-transform: uppercase;">SKU: ${item.sku}</div>
+        </td>
+        <td style="padding: 12px 8px; border-bottom: 1px solid #f1f5f9; text-align: center; font-weight: 600;">${item.quantity}</td>
+        <td style="padding: 12px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: 600;">${currency}${item.price.toLocaleString()}</td>
+        <td style="padding: 12px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: 800;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
+      </tr>
+    `).join('');
+
+    const thermalItemsHTML = inv.items.map(item => `
+      <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+        <span style="flex: 1; padding-right: 8px;">${item.quantity}x ${item.name}</span>
+        <span>${currency}${(item.price * item.quantity).toLocaleString()}</span>
+      </div>
+    `).join('');
+
+    if (layout === 'thermal') {
+      return `
+        <div style="width: 80mm; padding: 10mm 4mm; font-family: 'Courier New', Courier, monospace; color: #000; background: #fff; margin: 0 auto; line-height: 1.4;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 20px; font-weight: 900; text-transform: uppercase;">${state.settings.shopName}</h2>
+            <p style="margin: 4px 0; font-size: 11px;">${state.settings.shopAddress || ''}</p>
+            <p style="margin: 2px 0; font-size: 11px;">TEL: ${state.settings.shopPhone || ''}</p>
+          </div>
+          
+          <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 8px 0; margin-bottom: 16px; font-size: 11px;">
+            <div style="display: flex; justify-content: space-between;"><span>INV:</span> <span>#${inv.id}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span>DATE:</span> <span>${dateStr} ${timeStr}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span>CUST:</span> <span>${customer?.name || 'WALK-IN'}</span></div>
+          </div>
+
+          <div style="margin-bottom: 16px;">
+            ${thermalItemsHTML}
+          </div>
+
+          <div style="border-top: 1px dashed #000; padding-top: 8px; font-size: 12px; font-weight: bold;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>SUBTOTAL</span> <span>${currency}${inv.subtotal.toLocaleString()}</span></div>
+            ${inv.tax > 0 ? `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>TAX</span> <span>${currency}${inv.tax.toLocaleString()}</span></div>` : ''}
+            ${inv.discount > 0 ? `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>DISCOUNT</span> <span>-${currency}${inv.discount.toLocaleString()}</span></div>` : ''}
+            <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: 900; margin-top: 8px; border-top: 1px solid #000; padding-top: 8px;">
+              <span>TOTAL</span> <span>${currency}${inv.total.toLocaleString()}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px;"><span>PAID (${inv.paymentMethod.toUpperCase()})</span> <span>${currency}${inv.paidAmount.toLocaleString()}</span></div>
+            <div style="display: flex; justify-content: space-between; margin-top: 2px; font-size: 11px;"><span>BALANCE</span> <span>${currency}${(inv.total - inv.paidAmount).toLocaleString()}</span></div>
+          </div>
+
+          <div style="text-align: center; margin-top: 30px; font-size: 10px; border-top: 1px dashed #000; padding-top: 10px;">
+            <p style="margin: 0; font-weight: bold;">THANK YOU FOR YOUR PURCHASE!</p>
+            <p style="margin: 4px 0 0 0;">POWERED BY SELLER PRO POS</p>
+          </div>
+        </div>
+      `;
+    }
+
+    // A4 Modern Layout
+    return `
+      <div style="width: 210mm; min-height: 297mm; padding: 20mm; font-family: 'Inter', sans-serif; color: #1e293b; background: #fff; box-sizing: border-box;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 50px;">
+          <div>
+            <div style="width: 60px; hieght: 60px; background: ${state.settings.brandColor}; border-radius: 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 900; font-size: 24px;">S</div>
+            <h1 style="margin: 0; font-size: 32px; font-weight: 900; letter-spacing: -0.05em; color: #0f172a;">${state.settings.shopName}</h1>
+            <p style="margin: 4px 0; color: #64748b; font-weight: 500;">${state.settings.shopAddress || ''}</p>
+            <p style="margin: 2px 0; color: #64748b; font-weight: 500;">${state.settings.shopPhone || ''} | ${state.settings.shopEmail || ''}</p>
+          </div>
+          <div style="text-align: right;">
+            <h2 style="margin: 0; font-size: 48px; font-weight: 900; color: #f1f5f9; letter-spacing: -0.02em; line-height: 1;">INVOICE</h2>
+            <div style="margin-top: 20px;">
+              <p style="margin: 0; font-size: 14px; font-weight: 800; color: #475569;">REFERENCE: <span style="color: ${state.settings.brandColor};">#${inv.id}</span></p>
+              <p style="margin: 4px 0; font-size: 14px; font-weight: 800; color: #475569;">DATE: <span>${dateStr}</span></p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 40px; margin-bottom: 40px; padding: 24px; background: #f8fafc; border-radius: 24px;">
+          <div style="flex: 1;">
+            <h4 style="margin: 0 0 12px 0; font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em;">Bill To</h4>
+            <p style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a;">${customer?.name || 'Walk-in Customer'}</p>
+            <p style="margin: 4px 0; font-size: 13px; color: #64748b; font-weight: 500;">${customer?.phone || ''}</p>
+            <p style="margin: 2px 0; font-size: 13px; color: #64748b; font-weight: 500;">${customer?.address || ''}</p>
+          </div>
+          <div style="flex: 1;">
+            <h4 style="margin: 0 0 12px 0; font-size: 10px; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em;">Payment Details</h4>
+            <p style="margin: 0; font-size: 14px; font-weight: 700; color: #475569;">Method: <span style="text-transform: capitalize;">${inv.paymentMethod}</span></p>
+            <p style="margin: 4px 0; font-size: 14px; font-weight: 700; color: #475569;">Status: <span style="text-transform: uppercase; color: ${inv.status === 'paid' ? '#10b981' : '#f43f5e'};">${inv.status}</span></p>
+          </div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;">
+          <thead>
+            <tr style="background: #f1f5f9;">
+              <th style="padding: 16px 8px; text-align: left; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; border-radius: 12px 0 0 12px;">Item Description</th>
+              <th style="padding: 16px 8px; text-align: center; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;">Qty</th>
+              <th style="padding: 16px 8px; text-align: right; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;">Price</th>
+              <th style="padding: 16px 8px; text-align: right; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; border-radius: 0 12px 12px 0;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHTML}
+          </tbody>
+        </table>
+
+        <div style="display: flex; justify-content: flex-end;">
+          <div style="width: 300px; padding: 24px; background: #0f172a; border-radius: 32px; color: #fff;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #94a3b8;">
+              <span>Subtotal</span>
+              <span style="color: #fff;">${currency}${inv.subtotal.toLocaleString()}</span>
+            </div>
+            ${inv.tax > 0 ? `<div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #94a3b8;"><span>Tax (${state.settings.taxRate}%)</span><span style="color: #fff;">${currency}${inv.tax.toLocaleString()}</span></div>` : ''}
+            ${inv.discount > 0 ? `<div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #f43f5e;"><span>Discount</span><span>-${currency}${inv.discount.toLocaleString()}</span></div>` : ''}
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 14px; font-weight: 900; color: ${state.settings.brandColor}; text-transform: uppercase;">Total Due</span>
+              <span style="font-size: 28px; font-weight: 900;">${currency}${inv.total.toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 80px; padding-top: 40px; border-top: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center;">
+           <div>
+              <p style="margin: 0; font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">Terms & Notes</p>
+              <p style="margin: 4px 0 0 0; font-size: 11px; color: #94a3b8; max-width: 400px;">${inv.notes || 'No special terms applied. Please settle payment by the due date if applicable. Thank you for your business!'}</p>
+           </div>
+           <div style="text-align: right;">
+              <p style="margin: 0; font-size: 11px; font-weight: 700; color: #cbd5e1;">Invoice generated via</p>
+              <p style="margin: 2px 0 0 0; font-size: 12px; font-weight: 900; color: #1e293b;">Sarvari Seller Pro POS</p>
+           </div>
+        </div>
+      </div>
+    `;
+  };
+
+  const handlePrint = (inv: Invoice, layout: 'a4' | 'thermal' | 'modern') => {
+    const printSection = document.getElementById('print-section');
+    if (!printSection) return;
+
+    printSection.innerHTML = generatePrintHTML(inv, layout);
+    document.body.classList.add('printing-special');
+
+    // Small delay to ensure styles and images render
+    setTimeout(() => {
+      window.print();
+      document.body.classList.remove('printing-special');
+      printSection.innerHTML = '';
+    }, 300);
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -217,7 +370,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
           className="flex items-center justify-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all active:scale-95"
         >
           <Plus size={18} strokeWidth={3} />
-          {t.createTemplate.replace('Template', 'Invoice')}
+          Create Invoice
         </button>
       </div>
 
@@ -274,6 +427,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                     <td className="px-8 py-5 text-right">
                       <div className="flex justify-end gap-2">
                         <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><Eye size={18}/></button>
+                        <button onClick={() => handlePrint(inv, 'a4')} className="p-2 text-slate-400 hover:text-emerald-600 transition-colors" title="Quick Print A4"><Printer size={18}/></button>
                         <button onClick={() => deleteInvoice(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={18}/></button>
                       </div>
                     </td>
@@ -441,11 +595,11 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
 
                     <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 space-y-6 shadow-sm border border-slate-100 dark:border-slate-800/50">
                        <div className="flex justify-between items-center text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                          <span>{t.subtotal}</span>
+                          <span>Subtotal</span>
                           <span className="text-slate-600 dark:text-slate-300">{state.settings.currency}{subtotal.toLocaleString()}</span>
                        </div>
                        <div className="flex justify-between items-center text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                          <span>{t.tax} ({state.settings.taxRate}%)</span>
+                          <span>Tax (${state.settings.taxRate}%)</span>
                           <span className="text-slate-600 dark:text-slate-300">{state.settings.currency}{tax.toLocaleString()}</span>
                        </div>
                        <div className="flex justify-between items-center pt-6 border-t border-slate-100 dark:border-slate-800">
@@ -456,7 +610,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
 
                     <div className="space-y-6">
                        <div className="space-y-4">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{t.amountPaid}</label>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Amount Paid</label>
                           <div className="relative">
                              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-indigo-400 font-black text-xl">{state.settings.currency}</div>
                              <input 
@@ -474,7 +628,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                              <div className="flex items-center gap-4">
                                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${builderCustomer ? 'bg-rose-100 text-rose-600' : 'text-slate-400'}`}><Scale size={24}/></div>
                                 <div>
-                                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t.loan} Recognition</p>
+                                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Loan Recognition</p>
                                    <p className={`text-xl font-black ${builderCustomer ? 'text-rose-600' : 'text-slate-400'}`}>{state.settings.currency}{balanceDue.toLocaleString()}</p>
                                 </div>
                              </div>
@@ -487,9 +641,9 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                     <button 
                       onClick={saveInvoice}
                       disabled={builderItems.length === 0 || (balanceDue > 0 && !builderCustomer)}
-                      className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xl hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-100 dark:shadow-none disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:shadow-none active:scale-[0.98] flex items-center justify-center gap-4"
+                      className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xl hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 dark:shadow-none disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:shadow-none active:scale-[0.98] flex items-center justify-center gap-4"
                     >
-                      {t.processPrint.split('&')[0].trim()}
+                      Process & Print
                       <CheckCircle2 size={28} strokeWidth={3}/>
                     </button>
                     {balanceDue > 0 && !builderCustomer && (
@@ -503,95 +657,76 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       )}
 
       {selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-900 rounded-[48px] w-full max-w-2xl p-0 shadow-2xl relative animate-in zoom-in duration-300 overflow-hidden flex flex-col max-h-[90vh]">
-            <header className="p-10 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0 sticky top-0 z-10">
-               <div>
-                  <h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">{t.invoiceDetails}</h3>
-                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Ref: INV-#{selectedInvoice.id}</p>
-               </div>
-               <button onClick={() => setSelectedInvoice(null)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={24}/></button>
-            </header>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-10 bg-slate-900/80 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-900 rounded-[48px] w-full max-w-6xl h-full lg:max-h-[90vh] shadow-2xl relative animate-in zoom-in duration-300 overflow-hidden flex flex-col lg:flex-row">
             
-            <div className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
-               <div className="grid grid-cols-2 gap-10">
-                  <div className="space-y-1.5">
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.customers}</p>
-                     <p className="text-lg font-black text-slate-800 dark:text-white truncate">
-                        {state.customers.find(c => c.id === selectedInvoice.customerId)?.name || t.walkInCustomer}
-                     </p>
-                     {selectedInvoice.customerId && (
-                       <p className="text-xs font-bold text-slate-400">{state.customers.find(c => c.id === selectedInvoice.customerId)?.phone}</p>
-                     )}
+            {/* Sidebar View Control */}
+            <div className="w-full lg:w-[320px] bg-slate-50 dark:bg-slate-950/20 border-b lg:border-b-0 lg:border-r border-slate-100 dark:border-slate-800 flex flex-col shrink-0">
+               <div className="p-8 space-y-10 flex-1 overflow-y-auto custom-scrollbar">
+                  <header className="flex items-center justify-between">
+                     <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg"><FileText size={20}/></div>
+                        <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Receipt View</h3>
+                     </div>
+                     <button onClick={() => setSelectedInvoice(null)} className="lg:hidden p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400"><X size={24}/></button>
+                  </header>
+
+                  <div className="space-y-6">
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Select Print Layout</p>
+                     <div className="grid grid-cols-1 gap-3">
+                        {[
+                          { id: 'a4', label: 'Corporate A4', icon: FileText, desc: 'Official business layout' },
+                          { id: 'thermal', label: 'Thermal POS', icon: Smartphone, desc: '80mm narrow receipt' },
+                          { id: 'modern', label: 'Modern Digital', icon: Maximize2, desc: 'High contrast branding' }
+                        ].map(opt => (
+                          <button 
+                            key={opt.id}
+                            onClick={() => setPrintLayout(opt.id as any)}
+                            className={`p-5 rounded-[24px] border-4 transition-all text-left flex items-center gap-4 group ${printLayout === opt.id ? 'border-indigo-600 bg-white dark:bg-slate-800 shadow-xl' : 'border-transparent bg-white dark:bg-slate-900/50 grayscale opacity-60'}`}
+                          >
+                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${printLayout === opt.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                               <opt.icon size={20}/>
+                             </div>
+                             <div>
+                                <p className="font-black text-xs uppercase tracking-widest dark:text-white">{opt.label}</p>
+                                <p className="text-[10px] font-bold text-slate-400">{opt.desc}</p>
+                             </div>
+                          </button>
+                        ))}
+                     </div>
                   </div>
-                  <div className="text-right space-y-1.5">
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Timestamp</p>
-                     <p className="text-lg font-black text-slate-800 dark:text-white">
-                        {new Date(selectedInvoice.date).toLocaleDateString()}
-                     </p>
-                     <p className="text-xs font-bold text-slate-400">{new Date(selectedInvoice.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+
+                  <div className="p-6 bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 space-y-4">
+                     <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <span>Invoice #</span>
+                        <span className="text-slate-800 dark:text-white">INV-${selectedInvoice.id}</span>
+                     </div>
+                     <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <span>Status</span>
+                        <span className={`px-2 py-0.5 rounded-md ${selectedInvoice.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{selectedInvoice.status}</span>
+                     </div>
                   </div>
                </div>
 
-               <div className="space-y-6">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3"><ShoppingCart size={14}/> {t.purchasedItems}</h4>
-                  <div className="space-y-4">
-                     {selectedInvoice.items.map((item, idx) => (
-                       <div key={idx} className="flex justify-between items-center py-4 px-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-transparent hover:border-slate-100 dark:hover:border-slate-700 transition-all">
-                          <div className="flex items-center gap-4">
-                             <span className="w-8 h-8 bg-white dark:bg-slate-900 rounded-lg flex items-center justify-center font-black text-indigo-600 shadow-sm text-xs">{item.quantity}x</span>
-                             <span className="font-bold text-slate-800 dark:text-white text-sm">{item.name}</span>
-                          </div>
-                          <span className="font-black text-slate-800 dark:text-white">{state.settings.currency}{(item.price * item.quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                       </div>
-                     ))}
-                  </div>
-               </div>
-
-               <div className="bg-slate-900 dark:bg-black p-10 rounded-[40px] shadow-2xl space-y-6 text-white relative overflow-hidden group">
-                  <div className="flex justify-between items-center text-xs font-black uppercase text-slate-400">
-                     <span>{t.subtotal}</span>
-                     <span>{state.settings.currency}{selectedInvoice.subtotal.toLocaleString()}</span>
-                  </div>
-                  {selectedInvoice.tax > 0 && (
-                    <div className="flex justify-between items-center text-xs font-black uppercase text-slate-400">
-                       <span>{t.tax}</span>
-                       <span>{state.settings.currency}{selectedInvoice.tax.toLocaleString()}</span>
-                    </div>
-                  )}
-                  {selectedInvoice.discount > 0 && (
-                    <div className="flex justify-between items-center text-xs font-black uppercase text-rose-400">
-                       <span>{t.discount}</span>
-                       <span>-{state.settings.currency}{selectedInvoice.discount.toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div className="pt-6 border-t border-white/10 flex justify-between items-center">
-                     <span className="text-indigo-400 font-black uppercase tracking-[0.2em] text-xs">Final Settlement</span>
-                     <span className="text-4xl font-black tracking-tighter">{state.settings.currency}{selectedInvoice.total.toLocaleString()}</span>
-                  </div>
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl rounded-full"></div>
-               </div>
-
-               <div className="grid grid-cols-2 gap-6">
-                  <div className="p-6 bg-emerald-50 dark:bg-emerald-900/20 rounded-[32px] border border-emerald-100 dark:border-emerald-900/30">
-                     <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">Total Paid</p>
-                     <p className="text-2xl font-black text-emerald-600">{state.settings.currency}{selectedInvoice.paidAmount.toLocaleString()}</p>
-                  </div>
-                  <div className={`p-6 rounded-[32px] border ${selectedInvoice.total - selectedInvoice.paidAmount > 0 ? 'bg-rose-50 border-rose-100 dark:bg-rose-900/20' : 'bg-slate-50 border-slate-100 dark:bg-slate-800'}`}>
-                     <p className={`text-[10px] font-black uppercase mb-1 ${selectedInvoice.total - selectedInvoice.paidAmount > 0 ? 'text-rose-400' : 'text-slate-400'}`}>Balance Due</p>
-                     <p className={`text-2xl font-black ${selectedInvoice.total - selectedInvoice.paidAmount > 0 ? 'text-rose-600' : 'text-slate-400'}`}>{state.settings.currency}{(selectedInvoice.total - selectedInvoice.paidAmount).toLocaleString()}</p>
-                  </div>
+               <div className="p-8 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                  <button 
+                    onClick={() => handlePrint(selectedInvoice, printLayout)}
+                    className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
+                  >
+                    <Printer size={18} /> Print Now
+                  </button>
+                  <button onClick={() => setSelectedInvoice(null)} className="w-full py-4 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-rose-500 transition-colors">Close Viewer</button>
                </div>
             </div>
 
-            <footer className="p-10 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-6 shrink-0 sticky bottom-0 z-10">
-               <button onClick={() => window.print()} className="flex-1 py-5 bg-white dark:bg-slate-800 text-slate-800 dark:text-white border-2 border-slate-100 dark:border-slate-700 rounded-3xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-100 transition-all shadow-sm">
-                  <Printer size={20}/> {t.printAgain}
-               </button>
-               <button onClick={() => setSelectedInvoice(null)} className="flex-1 py-5 bg-indigo-600 text-white rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all active:scale-[0.98]">
-                  {t.closeView}
-               </button>
-            </footer>
+            {/* Preview Area */}
+            <div className="flex-1 bg-slate-200 dark:bg-black/50 p-6 lg:p-10 flex items-center justify-center overflow-hidden group">
+               <div className="w-full h-full max-w-[800px] bg-white dark:bg-white rounded-lg shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)] transition-transform duration-500 origin-top overflow-y-auto custom-scrollbar p-10 text-slate-900">
+                  {/* Dynamic HTML Preview */}
+                  <div className="print-preview-container" dangerouslySetInnerHTML={{ __html: generatePrintHTML(selectedInvoice, printLayout) }} />
+               </div>
+            </div>
+
           </div>
         </div>
       )}
