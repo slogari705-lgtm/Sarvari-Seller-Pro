@@ -28,7 +28,7 @@ import {
 import { AppState, Product, CartItem, Invoice, Customer } from '../types';
 import { translations } from '../translations';
 
-// Fix: Defining QuickAddCustInline before Terminal to avoid reference issues
+// QuickAddCustInline defined here to avoid scoping errors
 const QuickAddCustInline = ({ t, onClose, onSave }: any) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -110,18 +110,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
 
     return result;
   }, [state.products, searchTerm, categoryFilter, sortConfig]);
-
-  const favoriteProducts = useMemo(() => {
-    return state.products.filter(p => p.isFavorite);
-  }, [state.products]);
-
-  const toggleFavorite = (e: React.MouseEvent, productId: string) => {
-    e.stopPropagation();
-    const updatedProducts = state.products.map(p => 
-      p.id === productId ? { ...p, isFavorite: !p.isFavorite } : p
-    );
-    updateState('products', updatedProducts);
-  };
 
   const addToCart = (product: Product) => {
     if (product.stock <= 0) return;
@@ -318,15 +306,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
                   isOut ? 'opacity-50 grayscale border-slate-100 dark:border-slate-800 cursor-not-allowed' : 'border-slate-100 dark:border-slate-800 hover:border-indigo-500'
                 }`}
               >
-                <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div 
-                    onClick={(e) => toggleFavorite(e, product.id)}
-                    className="p-2 bg-white/90 dark:bg-slate-800/90 rounded-xl shadow-lg hover:scale-110 transition-transform"
-                  >
-                    <Star size={16} className={`${product.isFavorite ? 'text-amber-500 fill-amber-500' : 'text-slate-300 dark:text-slate-600'}`} />
-                  </div>
-                </div>
-
                 <div>
                   <div className={`w-full aspect-square rounded-[24px] mb-4 flex items-center justify-center text-slate-400 transition-all border shadow-inner overflow-hidden ${
                     isOut ? 'bg-slate-200 dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800 group-hover:bg-indigo-50/50 border-transparent'

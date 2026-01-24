@@ -66,7 +66,7 @@
                 size: auto;
             }
             
-            /* Hide the entire React application root and fixed UI elements */
+            /* Hide the main app to prevent interference */
             #root, aside, header, nav, footer, button, .no-print, .fixed {
                 display: none !important;
                 visibility: hidden !important;
@@ -81,7 +81,7 @@
                 padding: 0 !important;
             }
             
-            /* Isolation container for the document being printed */
+            /* The only section visible during print */
             #print-section {
                 display: block !important;
                 visibility: visible !important;
@@ -96,7 +96,6 @@
                 z-index: 100000 !important;
             }
 
-            /* Ensure background colors and borders show up on paper */
             #print-section * {
                 visibility: visible !important;
                 color: black !important;
@@ -106,7 +105,6 @@
             }
         }
 
-        /* Standard hidden state for the print section */
         #print-section {
             display: none;
         }
