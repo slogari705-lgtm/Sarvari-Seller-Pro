@@ -177,7 +177,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const handleCheckout = () => {
     if (cart.length === 0) return;
     
-    // Robust Sequential ID generation: find max number among current invoices and add 1
+    // SEQUENTIAL NUMERIC ID GENERATION
     const maxId = state.invoices.reduce((max, inv) => {
       const idNum = parseInt(inv.id);
       return !isNaN(idNum) ? Math.max(max, idNum) : max;
@@ -531,7 +531,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
 
       {paymentModal && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-t-[40px] sm:rounded-[48px] w-full max-w-md p-8 lg:p-12 shadow-2xl relative animate-in slide-in-from-bottom sm:zoom-in duration-300">
+          <div className="bg-white dark:bg-slate-900 rounded-t-[40px] sm:rounded-[48px] w-full max-md p-8 lg:p-12 shadow-2xl relative animate-in slide-in-from-bottom sm:zoom-in duration-300">
             <button onClick={() => setPaymentModal(false)} className="absolute top-8 right-8 p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={24} /></button>
             <h3 className="text-3xl font-black mb-8 text-center uppercase tracking-tighter dark:text-white">{t.finalizeSale}</h3>
             
