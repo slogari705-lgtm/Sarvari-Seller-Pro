@@ -1,4 +1,3 @@
-
 export const translations = {
   en: {
     dashboard: 'Dashboard',
@@ -166,7 +165,6 @@ export const translations = {
     headerTitle: 'Header Title',
     footerMessage: 'Footer Message',
     manageCategories: 'Manage Categories',
-    // Loan System
     loan: 'Loan',
     debt: 'Debt',
     totalDebt: 'Total Debt',
@@ -179,7 +177,6 @@ export const translations = {
     partial: 'Partial Payment',
     unpaid: 'Unpaid',
     paid: 'Paid',
-    // Loyalty Tiers
     loyalty: 'Loyalty',
     bronze: 'Bronze',
     silver: 'Silver',

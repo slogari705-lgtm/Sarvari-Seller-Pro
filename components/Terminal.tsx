@@ -23,12 +23,14 @@ import {
   SortDesc,
   ChevronDown,
   Layers,
-  AlertCircle
+  AlertCircle,
+  Printer,
+  Smartphone,
+  FileText
 } from 'lucide-react';
 import { AppState, Product, CartItem, Invoice, Customer } from '../types';
 import { translations } from '../translations';
 
-// QuickAddCustInline defined here to avoid scoping errors
 const QuickAddCustInline = ({ t, onClose, onSave }: any) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -78,6 +80,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   });
   const [paymentModal, setPaymentModal] = useState(false);
   const [successModal, setSuccessModal] = useState(false);
+  const [lastInvoice, setLastInvoice] = useState<Invoice | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [paidAmountInput, setPaidAmountInput] = useState<number | ''>(''); 
   const [showCartMobile, setShowCartMobile] = useState(false);
@@ -85,7 +88,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   
   const t = translations[state.settings.language || 'en'];
 
-  // Extract unique categories
   const categories = useMemo(() => {
     const cats = new Set(state.products.map(p => p.category));
     return ['All', ...Array.from(cats)].sort();
@@ -162,10 +164,99 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const finalPaid = paidAmountInput === '' ? total : paidAmountInput;
   const balanceDue = Math.max(0, total - finalPaid);
 
+  const generatePrintHTML = (inv: Invoice, layout: 'advice' | 'thermal') => {
+    const customer = state.customers.find(c => c.id === inv.customerId);
+    const dateStr = new Date(inv.date).toLocaleDateString();
+    const timeStr = new Date(inv.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const currency = state.settings.currency;
+
+    const itemsHTML = inv.items.map((item, idx) => `
+      <tr style="border-bottom: 1px solid #000;">
+        <td style="padding: 10px; text-align: center; border-right: 1px solid #000;">${idx + 1}</td>
+        <td style="padding: 10px; border-right: 1px solid #000;">
+          <div style="font-weight: 800;">${item.name}</div>
+          <div style="font-size: 10px; color: #444;">SKU: ${item.sku}</div>
+        </td>
+        <td style="padding: 10px; text-align: center; border-right: 1px solid #000;">${item.quantity}</td>
+        <td style="padding: 10px; text-align: right; border-right: 1px solid #000;">${currency}${item.price.toLocaleString()}</td>
+        <td style="padding: 10px; text-align: right; font-weight: 800;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
+      </tr>
+    `).join('');
+
+    if (layout === 'advice') {
+      return `
+        <div style="width: 210mm; padding: 20mm; font-family: 'Inter', sans-serif; color: #000; background: #fff;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 4px solid #000; padding-bottom: 20px; margin-bottom: 30px;">
+            <div>
+              <h1 style="margin: 0; font-size: 28px; font-weight: 900;">${state.settings.shopName}</h1>
+              <p style="margin: 5px 0; font-size: 12px; font-weight: 600;">${state.settings.shopAddress || ''}</p>
+              <p style="margin: 0; font-size: 12px; font-weight: 600;">TEL: ${state.settings.shopPhone || ''}</p>
+            </div>
+            <div style="text-align: right;">
+              <h2 style="margin: 0; font-size: 32px; font-weight: 950; letter-spacing: 2px;">ADVICE</h2>
+              <p style="margin: 10px 0 0 0; font-weight: 800;">SERIAL: #${inv.id.padStart(5, '0')}</p>
+              <p style="margin: 4px 0 0 0; font-size: 12px;">${dateStr} ${timeStr}</p>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+            <div style="padding: 15px; border: 2px solid #000; border-radius: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 10px; text-transform: uppercase; font-weight: 900; color: #666;">Customer</h4>
+              <p style="margin: 0; font-size: 16px; font-weight: 800;">${customer?.name || 'Walk-in'}</p>
+              <p style="margin: 4px 0 0 0; font-size: 12px;">${customer?.phone || ''}</p>
+            </div>
+            <div style="padding: 15px; border: 2px solid #000; border-radius: 12px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 10px; text-transform: uppercase; font-weight: 900; color: #666;">Summary</h4>
+              <p style="margin: 0; font-size: 14px; font-weight: 800;">Status: ${inv.status.toUpperCase()}</p>
+              <p style="margin: 4px 0 0 0; font-size: 12px;">Method: ${inv.paymentMethod.toUpperCase()}</p>
+            </div>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; border: 2px solid #000;">
+            <thead style="background: #f0f0f0; border-bottom: 2px solid #000;">
+              <tr>
+                <th style="padding: 10px; border-right: 1px solid #000;">#</th>
+                <th style="padding: 10px; text-align: left; border-right: 1px solid #000;">Item</th>
+                <th style="padding: 10px; border-right: 1px solid #000;">Qty</th>
+                <th style="padding: 10px; text-align: right; border-right: 1px solid #000;">Price</th>
+                <th style="padding: 10px; text-align: right;">Total</th>
+              </tr>
+            </thead>
+            <tbody>${itemsHTML}</tbody>
+          </table>
+          <div style="display: flex; justify-content: flex-end; margin-top: 30px;">
+            <div style="width: 250px; border: 2px solid #000; padding: 15px; border-radius: 12px;">
+              <div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: 900;">
+                <span>TOTAL</span>
+                <span>${currency}${inv.total.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div style="width: 80mm; padding: 10mm 4mm; font-family: 'Courier New', Courier, monospace; color: #000;">
+        <div style="text-align: center; margin-bottom: 15px;">
+          <h2 style="margin: 0; font-size: 18px;">${state.settings.shopName}</h2>
+          <p style="margin: 4px 0; font-size: 10px;">${state.settings.shopAddress || ''}</p>
+        </div>
+        <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 8px 0; margin-bottom: 15px; font-size: 11px;">
+          <div>INV: #${inv.id}</div>
+          <div>DATE: ${dateStr} ${timeStr}</div>
+          <div>CUST: ${customer?.name || 'WALK-IN'}</div>
+        </div>
+        ${inv.items.map(i => `<div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;"><span>${i.quantity}x ${i.name}</span><span>${currency}${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
+        <div style="border-top: 1px solid #000; margin-top: 10px; padding-top: 8px; font-weight: 900; font-size: 14px; display: flex; justify-content: space-between;">
+          <span>TOTAL</span>
+          <span>${currency}${inv.total.toLocaleString()}</span>
+        </div>
+      </div>
+    `;
+  };
+
   const handleCheckout = () => {
     if (cart.length === 0) return;
     
-    // SEQUENTIAL NUMERIC ID GENERATION
     const maxId = state.invoices.reduce((max, inv) => {
       const idNum = parseInt(inv.id);
       return !isNaN(idNum) ? Math.max(max, idNum) : max;
@@ -187,12 +278,15 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
       status,
       paymentMethod
     };
+
     updateState('invoices', [...state.invoices, newInvoice]);
+    
     const updatedProducts = state.products.map(p => {
       const cartItem = cart.find(item => item.id === p.id);
       return cartItem ? { ...p, stock: p.stock - cartItem.quantity } : p;
     });
     updateState('products', updatedProducts);
+
     if (selectedCustomer) {
       const updatedCustomers = state.customers.map(c => {
         if (c.id === selectedCustomer.id) {
@@ -208,18 +302,28 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
       });
       updateState('customers', updatedCustomers);
     }
+
+    setLastInvoice(newInvoice);
     setCart([]);
-    const defaultCust = state.customers.find(c => c.id === state.settings.defaultCustomerId) || null;
-    setSelectedCustomer(defaultCust);
     setPaidAmountInput('');
     setPaymentModal(false);
     setSuccessModal(true);
     setShowCartMobile(false);
   };
 
+  const handlePrintInstant = (layout: 'advice' | 'thermal') => {
+    if (!lastInvoice) return;
+    const printSection = document.getElementById('print-section');
+    if (!printSection) return;
+    printSection.innerHTML = generatePrintHTML(lastInvoice, layout);
+    setTimeout(() => {
+      window.print();
+      printSection.innerHTML = '';
+    }, 250);
+  };
+
   return (
     <div className="h-full flex flex-col lg:flex-row gap-4 lg:gap-6 relative">
-      {/* Product Area */}
       <div className="flex-1 flex flex-col gap-4 lg:gap-6 min-h-0">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-[32px] shadow-sm border border-slate-100 dark:border-slate-800 space-y-4 sticky top-0 z-10">
           <div className="flex flex-col sm:flex-row gap-4 items-center">
@@ -416,9 +520,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
                           <button onClick={() => updateQuantity(item.id, 1)} className="text-white hover:scale-125 transition-transform"><Plus size={14} /></button>
                         </div>
                      </div>
-                     <div className="mt-2 text-right">
-                        <span className="font-black text-sm text-indigo-600 dark:text-indigo-400">{state.settings.currency}{(item.price * item.quantity).toFixed(2)}</span>
-                     </div>
                    </div>
                  </div>
                ))}
@@ -510,15 +611,27 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
 
       {successModal && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in zoom-in duration-300">
-          <div className="bg-white dark:bg-slate-900 rounded-[64px] w-full max-w-md p-12 shadow-2xl text-center border-8 border-slate-50 dark:border-slate-800">
-            <div className="w-32 h-32 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-10 animate-bounce ring-[16px] ring-emerald-50 dark:ring-emerald-900/10">
-              <CheckCircle2 size={72} strokeWidth={3} />
+          <div className="bg-white dark:bg-slate-900 rounded-[64px] w-full max-w-md p-10 shadow-2xl text-center border-8 border-slate-50 dark:border-slate-800">
+            <div className="w-24 h-24 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
+              <CheckCircle2 size={56} strokeWidth={3} />
             </div>
-            <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter dark:text-white">{t.saleSuccess}</h3>
-            <p className="text-slate-500 dark:text-slate-400 mb-12 font-bold uppercase tracking-widest text-xs">{t.invoiceSuccess}</p>
+            <h3 className="text-2xl font-black mb-2 uppercase tracking-tighter dark:text-white">{t.saleSuccess}</h3>
+            <p className="text-slate-500 dark:text-slate-400 mb-8 font-bold uppercase tracking-widest text-[10px]">{t.invoiceSuccess}</p>
+            
+            <div className="grid grid-cols-2 gap-3 mb-8">
+               <button onClick={() => handlePrintInstant('advice')} className="flex items-center justify-center gap-2 p-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-2xl transition-all group">
+                  <FileText size={18} className="text-indigo-600 group-hover:scale-110 transition-transform" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">A4 Advice</span>
+               </button>
+               <button onClick={() => handlePrintInstant('thermal')} className="flex items-center justify-center gap-2 p-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-2xl transition-all group">
+                  <Smartphone size={18} className="text-indigo-600 group-hover:scale-110 transition-transform" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Thermal</span>
+               </button>
+            </div>
+
             <button 
-              onClick={() => setSuccessModal(false)}
-              className="w-full py-6 bg-slate-950 dark:bg-indigo-600 text-white rounded-[32px] font-black text-lg hover:bg-black transition-all active:scale-95 shadow-2xl"
+              onClick={() => { setSuccessModal(false); setLastInvoice(null); }}
+              className="w-full py-5 bg-slate-950 dark:bg-indigo-600 text-white rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-black transition-all active:scale-95 shadow-2xl"
             >
               {t.newTransaction}
             </button>
