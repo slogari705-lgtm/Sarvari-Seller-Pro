@@ -45,7 +45,8 @@ import {
   Printer,
   FileText,
   PlusSquare,
-  ShoppingBasket
+  ShoppingBasket,
+  Smartphone
 } from 'lucide-react';
 import { AppState, Customer, Invoice, LoanTransaction, View } from '../types';
 import { translations } from '../translations';
@@ -62,11 +63,16 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
-  const [repaymentAmount, setRepaymentAmount] = useState<number | ''>('');
+  const [invoiceToPrint, setInvoiceToPrint] = useState<Invoice | null>(null);
   
+  // Action Modals State
+  const [showRepaymentModal, setShowRepaymentModal] = useState(false);
+  const [showDebtModal, setShowDebtModal] = useState(false);
+  const [amountInput, setAmountInput] = useState<number | ''>('');
+  const [noteInput, setNoteInput] = useState('');
+
   // Tag & Skill input state for modal
   const [tagInput, setTagInput] = useState('');
-  const [skillInput, setSkillInput] = useState('');
   
   const [newCustomer, setNewCustomer] = useState<Partial<Customer>>({
     tags: [],
@@ -151,20 +157,6 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     setNewCustomer({ ...newCustomer, tags: (newCustomer.tags || []).filter(t => t !== tag) });
   };
 
-  const handleAddSkill = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && skillInput.trim()) {
-      const currentSkills = newCustomer.skills || [];
-      if (!currentSkills.includes(skillInput.trim())) {
-        setNewCustomer({ ...newCustomer, skills: [...currentSkills, skillInput.trim()] });
-      }
-      setSkillInput('');
-    }
-  };
-
-  const handleRemoveSkill = (skill: string) => {
-    setNewCustomer({ ...newCustomer, skills: (newCustomer.skills || []).filter(s => s !== skill) });
-  };
-
   const deleteCustomer = (id: string) => {
     if (confirm(t.delete + '?')) {
       updateState('customers', state.customers.filter(c => c.id !== id));
@@ -172,14 +164,14 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     }
   };
 
-  const handleRepayDebt = (customerId: string) => {
-    if (!repaymentAmount || repaymentAmount <= 0) return;
+  const handleRepayDebt = () => {
+    if (!viewingCustomer || !amountInput || Number(amountInput) <= 0) return;
     
-    let remainingPayment = Number(repaymentAmount);
-    const updatedInvoices = [...state.invoices];
+    let remainingPayment = Number(amountInput);
+    const updatedInvoices = state.invoices.map(inv => ({...inv})); // Deep copy needed for mutation
     
     const customerInvoices = updatedInvoices
-      .filter(inv => inv.customerId === customerId && (inv.status === 'partial' || inv.status === 'unpaid'))
+      .filter(inv => inv.customerId === viewingCustomer.id && (inv.status === 'partial' || inv.status === 'unpaid'))
       .sort((a, b) => new Date(a.date).getTime() - new Date(a.date).getTime());
 
     for (const inv of customerInvoices) {
@@ -192,9 +184,9 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
       else if (inv.paidAmount > 0) inv.status = 'partial';
     }
 
-    const actualReduction = Number(repaymentAmount) - remainingPayment;
+    const actualReduction = Number(amountInput) - remainingPayment;
     const updatedCustomers = state.customers.map(c => {
-      if (c.id === customerId) {
+      if (c.id === viewingCustomer.id) {
         return { 
           ...c, 
           totalDebt: Math.max(0, (c.totalDebt || 0) - actualReduction),
@@ -206,18 +198,56 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
 
     const newTrans: LoanTransaction = {
       id: Math.random().toString(36).substr(2, 9),
-      customerId: customerId,
+      customerId: viewingCustomer.id,
       date: new Date().toISOString(),
       amount: actualReduction,
       type: 'repayment',
-      note: 'Manual repayment via profile'
+      note: noteInput || 'Manual repayment via profile'
     };
 
     updateState('invoices', updatedInvoices);
     updateState('customers', updatedCustomers);
     updateState('loanTransactions', [...state.loanTransactions, newTrans]);
-    setRepaymentAmount('');
-    if (viewingCustomer?.id === customerId) setViewingCustomer(updatedCustomers.find(c => c.id === customerId) || null);
+    
+    // UI Updates
+    setAmountInput('');
+    setNoteInput('');
+    setShowRepaymentModal(false);
+    setViewingCustomer(updatedCustomers.find(c => c.id === viewingCustomer.id) || null);
+  };
+
+  const handleAddDebt = () => {
+    if (!viewingCustomer || !amountInput || Number(amountInput) <= 0) return;
+    
+    const amount = Number(amountInput);
+    const updatedCustomers = state.customers.map(c => {
+      if (c.id === viewingCustomer.id) {
+        return { 
+          ...c, 
+          totalDebt: (c.totalDebt || 0) + amount,
+          lastVisit: new Date().toISOString().split('T')[0]
+        };
+      }
+      return c;
+    });
+
+    const newTrans: LoanTransaction = {
+      id: Math.random().toString(36).substr(2, 9),
+      customerId: viewingCustomer.id,
+      date: new Date().toISOString(),
+      amount: amount,
+      type: 'debt',
+      note: noteInput || 'Manual debt addition'
+    };
+
+    updateState('customers', updatedCustomers);
+    updateState('loanTransactions', [...state.loanTransactions, newTrans]);
+    
+    // UI Updates
+    setAmountInput('');
+    setNoteInput('');
+    setShowDebtModal(false);
+    setViewingCustomer(updatedCustomers.find(c => c.id === viewingCustomer.id) || null);
   };
 
   const handleCreateNewInvoiceForCustomer = (customerId: string) => {
@@ -225,6 +255,126 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     if (setCurrentView) {
       setCurrentView('terminal');
     }
+  };
+
+  // Print Logic
+  const generatePrintHTML = (inv: Invoice, layout: 'a4' | 'thermal') => {
+    const customer = state.customers.find(c => c.id === inv.customerId);
+    const dateStr = new Date(inv.date).toLocaleDateString();
+    const timeStr = new Date(inv.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const currency = state.settings.currency;
+
+    const itemsHTML = inv.items.map((item, idx) => `
+      <tr style="border-bottom: 1px solid #000;">
+        <td style="padding: 12px 10px; text-align: center; border-right: 1px solid #000; font-size: 13px;">${idx + 1}</td>
+        <td style="padding: 12px 10px; border-right: 1px solid #000;">
+          <div style="font-weight: 900; font-size: 14px;">${item.name}</div>
+          <div style="font-size: 10px; text-transform: uppercase; margin-top: 2px; color: #555;">SKU: ${item.sku}</div>
+        </td>
+        <td style="padding: 12px 10px; text-align: center; font-weight: 800; border-right: 1px solid #000; font-size: 13px;">${item.quantity}</td>
+        <td style="padding: 12px 10px; text-align: right; font-weight: 800; border-right: 1px solid #000; font-size: 13px;">${currency}${item.price.toLocaleString()}</td>
+        <td style="padding: 12px 10px; text-align: right; font-weight: 900; font-size: 15px;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
+      </tr>
+    `).join('');
+
+    if (layout === 'thermal') {
+        return `
+          <div style="width: 80mm; padding: 8mm 2mm; font-family: 'Courier New', Courier, monospace; color: #000; line-height: 1.2; text-align: center;">
+            <h2 style="margin: 0; font-size: 22px; font-weight: 950; text-transform: uppercase;">${state.settings.shopName}</h2>
+            <p style="margin: 6px 0; font-size: 11px;">${state.settings.shopAddress || ''}</p>
+            <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 15px 0; font-size: 11px; text-align: left;">
+              <div>INV: #${inv.id} | ${dateStr}</div>
+              <div>USER: ${customer?.name || 'WALK-IN'}</div>
+            </div>
+            <div style="text-align: left; margin-bottom: 15px;">
+              ${inv.items.map(i => `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>${i.quantity}x ${i.name}</span><span>${currency}${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
+            </div>
+            <div style="border-top: 2px solid #000; padding-top: 10px; font-weight: 950; font-size: 18px; display: flex; justify-content: space-between; text-align: left;">
+              <span>TOTAL</span>
+              <span>${currency}${inv.total.toLocaleString()}</span>
+            </div>
+            <p style="margin-top: 30px; font-size: 11px; border-top: 1px dashed #000; padding-top: 10px;">THANK YOU FOR YOUR VISIT</p>
+          </div>
+        `;
+    }
+
+    // Default A4
+    return `
+        <div style="width: 210mm; min-height: 297mm; padding: 20mm; font-family: 'Inter', Arial, sans-serif; color: #000; background: #fff; box-sizing: border-box; border: 1px solid #eee;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 6px solid #000; padding-bottom: 25px; margin-bottom: 35px;">
+            <div style="display: flex; gap: 20px; align-items: center;">
+              <div style="width: 80px; height: 80px; background: #000; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 950; font-size: 48px;">S</div>
+              <div>
+                <h1 style="margin: 0; font-size: 34px; font-weight: 950; text-transform: uppercase; letter-spacing: -1.5px;">${state.settings.shopName}</h1>
+                <p style="margin: 8px 0; font-size: 14px; font-weight: 800; color: #333;">${state.settings.shopAddress || 'Authorized Dealer'}</p>
+                <p style="margin: 0; font-size: 14px; font-weight: 800; color: #333;">TEL: ${state.settings.shopPhone || 'N/A'}</p>
+              </div>
+            </div>
+            <div style="text-align: right;">
+              <h2 style="margin: 0; font-size: 42px; font-weight: 950; text-transform: uppercase; letter-spacing: 4px; color: #000;">INVOICE</h2>
+              <div style="margin-top: 15px;">
+                <p style="margin: 0; font-size: 20px; font-weight: 900; background: #000; color: #fff; display: inline-block; padding: 6px 16px; border-radius: 10px;">SERIAL: #${inv.id.padStart(6, '0')}</p>
+                <p style="margin: 8px 0 0 0; font-size: 14px; font-weight: 800; color: #555;">DATE: ${dateStr} ${timeStr}</p>
+              </div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 40px;">
+            <div style="padding: 25px; border: 3px solid #000; border-radius: 20px; background: #fdfdfd;">
+              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Billed To</h4>
+              <p style="margin: 15px 0 0 0; font-size: 24px; font-weight: 950; color: #000;">${customer?.name || 'Walk-in Guest'}</p>
+              <p style="margin: 8px 0; font-size: 16px; font-weight: 800; color: #333;">Phone: ${customer?.phone || 'No phone recorded'}</p>
+              <p style="margin: 0; font-size: 13px; font-weight: 700; color: #666;">Address: ${customer?.address || 'N/A'}</p>
+            </div>
+            <div style="padding: 25px; border: 3px solid #000; border-radius: 20px; background: #fdfdfd;">
+              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Payment Details</h4>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span style="font-size: 15px; font-weight: 800;">Method:</span><span style="font-size: 15px; font-weight: 950; text-transform: uppercase;">${inv.paymentMethod}</span></div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span style="font-size: 15px; font-weight: 800;">Status:</span><span style="font-size: 15px; font-weight: 950; text-transform: uppercase; color: ${inv.status === 'paid' ? '#059669' : '#dc2626'};">${inv.status}</span></div>
+            </div>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 45px; border: 3px solid #000;">
+            <thead style="background: #efefef;">
+              <tr style="border-bottom: 3px solid #000;">
+                <th style="padding: 16px 12px; border-right: 1px solid #000; font-size: 11px; font-weight: 950; text-align: center; width: 45px;">#</th>
+                <th style="padding: 16px 12px; text-align: left; border-right: 1px solid #000; font-size: 11px; font-weight: 950;">ITEM DESCRIPTION & SKU</th>
+                <th style="padding: 16px 12px; border-right: 1px solid #000; font-size: 11px; font-weight: 950; text-align: center; width: 75px;">QTY</th>
+                <th style="padding: 16px 12px; text-align: right; border-right: 1px solid #000; font-size: 11px; font-weight: 950; width: 120px;">UNIT PRICE</th>
+                <th style="padding: 16px 12px; text-align: right; font-size: 11px; font-weight: 950; width: 150px;">LINE TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>${itemsHTML}</tbody>
+          </table>
+          <div style="display: flex; justify-content: flex-end;">
+            <div style="width: 350px; border: 4px solid #000; border-radius: 20px; padding: 30px; background: #fff;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 16px; font-weight: 800;">
+                <span style="color: #666;">SUBTOTAL</span>
+                <span>${currency}${inv.subtotal.toLocaleString()}</span>
+              </div>
+              <div style="border-top: 4px solid #000; margin-top: 20px; padding-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 20px; font-weight: 950; color: #000; text-transform: uppercase;">Total</span>
+                <span style="font-size: 42px; font-weight: 950;">${currency}${inv.total.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+    `;
+  };
+
+  const handlePrint = (layout: 'a4' | 'thermal') => {
+    if (!invoiceToPrint) return;
+    const printSection = document.getElementById('print-section');
+    if (!printSection) return;
+    
+    printSection.innerHTML = '';
+    const frame = document.createElement('div');
+    frame.innerHTML = generatePrintHTML(invoiceToPrint, layout);
+    printSection.appendChild(frame);
+    
+    // Slight delay to allow DOM to render
+    setTimeout(() => {
+      window.print();
+      printSection.innerHTML = '';
+      setInvoiceToPrint(null);
+    }, 500);
   };
 
   const recentInvoicesForViewing = useMemo(() => {
@@ -347,6 +497,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                 <div className="flex gap-1">
                    <button onClick={() => setViewingCustomer(c)} className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all" title="View Profile"><Eye size={20}/></button>
                    <button onClick={() => handleOpenEdit(c)} className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all" title="Edit Customer"><Edit size={20}/></button>
+                   <button onClick={() => handleCreateNewInvoiceForCustomer(c.id)} className="p-3 text-slate-400 hover:text-emerald-600 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all" title="New Sale"><ShoppingBag size={20}/></button>
                 </div>
                 <div className="flex gap-2">
                    <button onClick={() => deleteCustomer(c.id)} className="p-3 text-slate-400 hover:text-rose-50 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-all"><Trash2 size={20}/></button>
@@ -474,7 +625,11 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                          {viewingCustomer.name.charAt(0)}
                        </div>
                        <div className="absolute -bottom-2 -right-2 bg-white dark:bg-slate-900 p-3 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800">
-                         {getLoyaltyTier(viewingCustomer.totalSpent).icon({ size: 24, className: getLoyaltyTier(viewingCustomer.totalSpent).color, fill: "currentColor" })}
+                         {(() => {
+                           const tier = getLoyaltyTier(viewingCustomer.totalSpent);
+                           const Icon = tier.icon;
+                           return <Icon size={24} className={tier.color} fill="currentColor" />;
+                         })()}
                        </div>
                     </div>
                     <h3 className="text-3xl font-black dark:text-white tracking-tighter">{viewingCustomer.name}</h3>
@@ -545,7 +700,11 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                         </button>
 
                         <button 
-                           onClick={() => setViewingCustomer(viewingCustomer)} 
+                           onClick={() => {
+                             setAmountInput('');
+                             setNoteInput('');
+                             setShowRepaymentModal(true);
+                           }}
                            className="flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded-[32px] border border-slate-100 dark:border-slate-700 shadow-sm hover:border-emerald-500 transition-all group hover:-translate-y-1 active:translate-y-0"
                         >
                            <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 rounded-2xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
@@ -555,6 +714,11 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                         </button>
 
                         <button 
+                           onClick={() => {
+                             setAmountInput('');
+                             setNoteInput('');
+                             setShowDebtModal(true);
+                           }}
                            className="flex flex-col items-center justify-center p-6 bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded-[32px] border border-slate-100 dark:border-slate-700 shadow-sm hover:border-rose-500 transition-all group hover:-translate-y-1 active:translate-y-0"
                         >
                            <div className="w-12 h-12 bg-rose-50 dark:bg-rose-500/10 text-rose-600 rounded-2xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
@@ -640,9 +804,20 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                                        </div>
                                     </div>
                                     {trans.invoiceId && (
-                                       <button onClick={() => setCurrentView?.('invoices')} className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase hover:underline">
-                                          <Eye size={12}/> View Associated Invoice #{trans.invoiceId}
-                                       </button>
+                                       <div className="flex gap-2">
+                                          <button onClick={() => setCurrentView?.('invoices')} className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase hover:underline">
+                                             <Eye size={12}/> View Associated Invoice #{trans.invoiceId}
+                                          </button>
+                                          <button 
+                                            onClick={() => {
+                                               const inv = state.invoices.find(i => i.id === trans.invoiceId);
+                                               if(inv) setInvoiceToPrint(inv);
+                                            }} 
+                                            className="flex items-center gap-2 text-[10px] font-black text-slate-500 hover:text-indigo-600 uppercase hover:underline ml-2"
+                                          >
+                                             <Printer size={12}/> Print Record
+                                          </button>
+                                       </div>
                                     )}
                                  </div>
                               </div>
@@ -664,6 +839,13 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                                        <p className="text-[10px] font-black dark:text-white">#{inv.id}</p>
                                        <p className="text-[8px] font-bold text-slate-400 uppercase">{new Date(inv.date).toLocaleDateString()}</p>
                                     </div>
+                                    <button 
+                                      onClick={() => setInvoiceToPrint(inv)}
+                                      className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                                      title="Print Receipt"
+                                    >
+                                       <Printer size={14}/>
+                                    </button>
                                  </div>
                               ))}
                            </div>
@@ -671,7 +853,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
 
                         <section className="bg-white dark:bg-slate-800 p-8 rounded-[40px] border border-slate-100 dark:border-slate-700 space-y-6 shadow-sm">
                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><StickyNote size={14}/> Internal Dossier</h4>
-                           <div className="w-full bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-5 text-sm font-medium dark:text-white h-40 overflow-y-auto">
+                           <div className="w-full bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-5 text-sm font-medium dark:text-white h-40 overflow-y-auto custom-scrollbar">
                              {viewingCustomer.notes || "No internal notes recorded."}
                            </div>
                         </section>
@@ -680,6 +862,124 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Repayment Modal */}
+      {showRepaymentModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-200">
+           <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-sm p-8 shadow-2xl relative animate-in zoom-in duration-200">
+              <button onClick={() => setShowRepaymentModal(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><X size={20}/></button>
+              <h3 className="text-xl font-black mb-6 text-center dark:text-white uppercase tracking-tighter">Record Repayment</h3>
+              <div className="space-y-4">
+                 <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Amount</label>
+                    <div className="relative">
+                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600 font-black">{state.settings.currency}</span>
+                       <input 
+                         type="number" 
+                         autoFocus
+                         value={amountInput}
+                         onChange={e => setAmountInput(e.target.value === '' ? '' : Number(e.target.value))}
+                         className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-xl border-2 border-transparent focus:border-emerald-500 outline-none font-bold text-lg dark:text-white"
+                         placeholder="0.00"
+                       />
+                    </div>
+                 </div>
+                 <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Note</label>
+                    <input 
+                      type="text" 
+                      value={noteInput}
+                      onChange={e => setNoteInput(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-xl border-2 border-transparent focus:border-emerald-500 outline-none font-bold text-sm dark:text-white"
+                      placeholder="Optional details..."
+                    />
+                 </div>
+                 <button 
+                   onClick={handleRepayDebt}
+                   disabled={!amountInput || Number(amountInput) <= 0}
+                   className="w-full py-4 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 dark:shadow-none uppercase tracking-widest text-xs disabled:opacity-50 active:scale-95"
+                 >
+                   Confirm Payment
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Add Debt Modal */}
+      {showDebtModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-200">
+           <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-sm p-8 shadow-2xl relative animate-in zoom-in duration-200">
+              <button onClick={() => setShowDebtModal(false)} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><X size={20}/></button>
+              <h3 className="text-xl font-black mb-6 text-center dark:text-white uppercase tracking-tighter">Add Manual Debt</h3>
+              <div className="space-y-4">
+                 <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Amount</label>
+                    <div className="relative">
+                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-600 font-black">{state.settings.currency}</span>
+                       <input 
+                         type="number" 
+                         autoFocus
+                         value={amountInput}
+                         onChange={e => setAmountInput(e.target.value === '' ? '' : Number(e.target.value))}
+                         className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-xl border-2 border-transparent focus:border-rose-500 outline-none font-bold text-lg dark:text-white"
+                         placeholder="0.00"
+                       />
+                    </div>
+                 </div>
+                 <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Reason</label>
+                    <input 
+                      type="text" 
+                      value={noteInput}
+                      onChange={e => setNoteInput(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-xl border-2 border-transparent focus:border-rose-500 outline-none font-bold text-sm dark:text-white"
+                      placeholder="e.g. Store Credit Adjustment"
+                    />
+                 </div>
+                 <button 
+                   onClick={handleAddDebt}
+                   disabled={!amountInput || Number(amountInput) <= 0}
+                   className="w-full py-4 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 transition-all shadow-xl shadow-rose-100 dark:shadow-none uppercase tracking-widest text-xs disabled:opacity-50 active:scale-95"
+                 >
+                   Add to Balance
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Print Selection Modal */}
+      {invoiceToPrint && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-200">
+           <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-sm p-8 shadow-2xl relative animate-in zoom-in duration-200">
+              <button onClick={() => setInvoiceToPrint(null)} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><X size={20}/></button>
+              <h3 className="text-xl font-black mb-6 text-center dark:text-white uppercase tracking-tighter">Select Format</h3>
+              <div className="space-y-3">
+                 <button 
+                   onClick={() => handlePrint('a4')}
+                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center gap-4 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-600 transition-all group"
+                 >
+                    <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 shadow-sm"><FileText size={24}/></div>
+                    <div className="text-left">
+                       <p className="font-black text-sm dark:text-white">Standard A4</p>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase">For Office Printers</p>
+                    </div>
+                 </button>
+                 <button 
+                   onClick={() => handlePrint('thermal')}
+                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center gap-4 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-600 transition-all group"
+                 >
+                    <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 shadow-sm"><Smartphone size={24}/></div>
+                    <div className="text-left">
+                       <p className="font-black text-sm dark:text-white">Thermal Receipt</p>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase">For Mobile/POS</p>
+                    </div>
+                 </button>
+              </div>
+           </div>
         </div>
       )}
     </div>
