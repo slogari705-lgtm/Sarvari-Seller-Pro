@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
@@ -123,7 +122,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const saveInvoice = () => {
     if (builderItems.length === 0) return;
     
-    // Robust Sequential ID generation: find max number and add 1
+    // Improved Sequential ID generation: find max number and add 1
     const maxId = state.invoices.reduce((max, inv) => {
       const idNum = parseInt(inv.id);
       return !isNaN(idNum) ? Math.max(max, idNum) : max;
@@ -234,50 +233,50 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     if (layout === 'advice') {
       return `
         <div style="width: 210mm; min-height: 297mm; padding: 15mm; font-family: 'Inter', Arial, sans-serif; color: #000; background: #fff; box-sizing: border-box; border: 1px solid #eee;">
-          <!-- Header -->
+          <!-- Advice Layout Header -->
           <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 25px; border-bottom: 5px solid #000; padding-bottom: 15px;">
             <div style="display: flex; gap: 20px; align-items: center;">
-              <div style="width: 70px; height: 70px; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 900; font-size: 40px; box-shadow: 4px 4px 0px rgba(0,0,0,0.1);">S</div>
+              <div style="width: 75px; height: 75px; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 900; font-size: 44px; box-shadow: 4px 4px 0px rgba(0,0,0,0.1);">S</div>
               <div>
-                <h1 style="margin: 0; font-size: 26px; font-weight: 950; text-transform: uppercase; letter-spacing: -1px;">${state.settings.shopName}</h1>
-                <p style="margin: 5px 0; font-size: 12px; font-weight: 700; color: #333;">${state.settings.shopAddress || 'Business Location'}</p>
-                <p style="margin: 0; font-size: 12px; font-weight: 700; color: #333;">TEL: ${state.settings.shopPhone || 'N/A'}</p>
+                <h1 style="margin: 0; font-size: 28px; font-weight: 950; text-transform: uppercase; letter-spacing: -1px;">${state.settings.shopName}</h1>
+                <p style="margin: 5px 0; font-size: 13px; font-weight: 700; color: #333;">${state.settings.shopAddress || 'Business Location'}</p>
+                <p style="margin: 0; font-size: 13px; font-weight: 700; color: #333;">TEL: ${state.settings.shopPhone || 'N/A'}</p>
               </div>
             </div>
             <div style="text-align: right;">
-              <h2 style="margin: 0; font-size: 32px; font-weight: 950; text-transform: uppercase; letter-spacing: 2px;">ADVICE PRINT</h2>
-              <div style="margin-top: 10px;">
-                <p style="margin: 0; font-size: 16px; font-weight: 900;">SERIAL NO: #${inv.id.padStart(5, '0')}</p>
-                <p style="margin: 4px 0 0 0; font-size: 13px; font-weight: 800; color: #444;">ISSUED: ${dateStr} at ${timeStr}</p>
+              <h2 style="margin: 0; font-size: 34px; font-weight: 950; text-transform: uppercase; letter-spacing: 3px; color: #000;">Advice Form</h2>
+              <div style="margin-top: 12px;">
+                <p style="margin: 0; font-size: 18px; font-weight: 900; letter-spacing: 0.5px;">SERIAL: #${inv.id.padStart(5, '0')}</p>
+                <p style="margin: 4px 0 0 0; font-size: 14px; font-weight: 800; color: #444;">ISSUED: ${dateStr} at ${timeStr}</p>
               </div>
             </div>
           </div>
 
-          <!-- Client & Settlement Summary -->
+          <!-- Parties & Settlement Grid -->
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 30px;">
-            <div style="padding: 20px; border: 3px solid #000; border-radius: 16px; background: #fdfdfd;">
-              <h4 style="margin: 0 0 10px 0; font-size: 10px; font-weight: 950; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 6px; letter-spacing: 1px;">Customer Information</h4>
-              <p style="margin: 8px 0 0 0; font-size: 18px; font-weight: 900;">${customer?.name || 'Walk-in Guest'}</p>
-              <p style="margin: 5px 0; font-size: 13px; font-weight: 700; color: #333;">Contact: ${customer?.phone || 'N/A'}</p>
-              <p style="margin: 0; font-size: 12px; font-weight: 600; color: #555;">Address: ${customer?.address || 'No specific address provided'}</p>
+            <div style="padding: 20px; border: 3px solid #000; border-radius: 16px; background: #fafafa;">
+              <h4 style="margin: 0 0 10px 0; font-size: 10px; font-weight: 950; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 6px; letter-spacing: 1.5px; color: #666;">Billed To / Customer</h4>
+              <p style="margin: 8px 0 0 0; font-size: 20px; font-weight: 900;">${customer?.name || 'Walk-in Guest'}</p>
+              <p style="margin: 5px 0; font-size: 14px; font-weight: 700; color: #333;">Contact: ${customer?.phone || 'Not provided'}</p>
+              <p style="margin: 0; font-size: 12px; font-weight: 600; color: #555;">${customer?.address || 'No specific address recorded'}</p>
             </div>
-            <div style="padding: 20px; border: 3px solid #000; border-radius: 16px; background: #fdfdfd;">
-              <h4 style="margin: 0 0 10px 0; font-size: 10px; font-weight: 950; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 6px; letter-spacing: 1px;">Settlement Details</h4>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span style="font-size: 13px; font-weight: 800;">Method:</span><span style="font-size: 13px; font-weight: 900; text-transform: uppercase;">${inv.paymentMethod}</span></div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 6px;"><span style="font-size: 13px; font-weight: 800;">Payment Status:</span><span style="font-size: 13px; font-weight: 900; text-transform: uppercase; color: ${inv.status === 'paid' ? '#10b981' : '#ef4444'};">${inv.status}</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="font-size: 13px; font-weight: 800;">Transaction Ref:</span><span style="font-size: 13px; font-weight: 900;">TRX-${inv.id}-${Math.floor(Date.now()/1000).toString().slice(-4)}</span></div>
+            <div style="padding: 20px; border: 3px solid #000; border-radius: 16px; background: #fafafa;">
+              <h4 style="margin: 0 0 10px 0; font-size: 10px; font-weight: 950; text-transform: uppercase; border-bottom: 2px solid #000; padding-bottom: 6px; letter-spacing: 1.5px; color: #666;">Settlement Details</h4>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 14px; font-weight: 800;">Method:</span><span style="font-size: 14px; font-weight: 900; text-transform: uppercase;">${inv.paymentMethod}</span></div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 14px; font-weight: 800;">Current Status:</span><span style="font-size: 14px; font-weight: 900; text-transform: uppercase; color: ${inv.status === 'paid' ? '#059669' : '#dc2626'};">${inv.status}</span></div>
+              <div style="display: flex; justify-content: space-between;"><span style="font-size: 14px; font-weight: 800;">System Ref:</span><span style="font-size: 14px; font-weight: 900;">TRX-${inv.id}-${Math.floor(Date.now()/1000).toString().slice(-4)}</span></div>
             </div>
           </div>
 
-          <!-- Items Table -->
+          <!-- Transaction Table -->
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; border: 3px solid #000;">
-            <thead style="background: #f0f0f0;">
+            <thead style="background: #efefef;">
               <tr style="border-bottom: 3px solid #000;">
-                <th style="padding: 12px 10px; text-align: center; font-size: 11px; font-weight: 950; border-right: 1px solid #000; width: 40px;">S/N</th>
-                <th style="padding: 12px 10px; text-align: left; font-size: 11px; font-weight: 950; border-right: 1px solid #000;">DESCRIPTION</th>
-                <th style="padding: 12px 10px; text-align: center; font-size: 11px; font-weight: 950; border-right: 1px solid #000; width: 60px;">QTY</th>
-                <th style="padding: 12px 10px; text-align: right; font-size: 11px; font-weight: 950; border-right: 1px solid #000; width: 110px;">UNIT PRICE</th>
-                <th style="padding: 12px 10px; text-align: right; font-size: 11px; font-weight: 950; width: 140px;">TOTAL</th>
+                <th style="padding: 14px 10px; text-align: center; font-size: 11px; font-weight: 950; border-right: 1px solid #000; width: 40px;">#</th>
+                <th style="padding: 14px 10px; text-align: left; font-size: 11px; font-weight: 950; border-right: 1px solid #000;">DETAILED DESCRIPTION</th>
+                <th style="padding: 14px 10px; text-align: center; font-size: 11px; font-weight: 950; border-right: 1px solid #000; width: 60px;">QTY</th>
+                <th style="padding: 14px 10px; text-align: right; font-size: 11px; font-weight: 950; border-right: 1px solid #000; width: 110px;">UNIT PRICE</th>
+                <th style="padding: 14px 10px; text-align: right; font-size: 11px; font-weight: 950; width: 140px;">LINE TOTAL</th>
               </tr>
             </thead>
             <tbody>
@@ -285,44 +284,43 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
             </tbody>
           </table>
 
-          <!-- Totals and Remarks -->
+          <!-- Totals and Remarks Section -->
           <div style="display: flex; justify-content: space-between; align-items: end; gap: 40px;">
             <div style="flex: 1;">
-              <div style="padding: 20px; border: 3px dashed #000; border-radius: 16px; min-height: 100px; background: #fafafa;">
-                <h4 style="margin: 0 0 8px 0; font-size: 10px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.5px;">Terms & Conditions</h4>
-                <p style="margin: 0; font-size: 11px; font-weight: 600; line-height: 1.6; color: #333;">${inv.notes || 'Please verify the goods before leaving the store. All items listed are non-refundable except for manufacturing defects. All claims must be presented within 24 hours of delivery. Thank you for choosing our business.'}</p>
+              <div style="padding: 20px; border: 3px dashed #000; border-radius: 16px; min-height: 120px; background: #fff;">
+                <h4 style="margin: 0 0 10px 0; font-size: 10px; font-weight: 950; text-transform: uppercase; letter-spacing: 1px; color: #444;">Official Remarks</h4>
+                <p style="margin: 0; font-size: 12px; font-weight: 600; line-height: 1.6; color: #333;">${inv.notes || 'Please verify the goods before leaving the store. All items listed are non-refundable except for manufacturing defects verified within 24 hours. Thank you for your continued business.'}</p>
               </div>
             </div>
-            <div style="width: 300px; border: 3px solid #000; border-radius: 16px; padding: 20px; background: #fff;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; font-weight: 800;">
-                <span style="color: #444;">GROSS TOTAL</span>
+            <div style="width: 320px; border: 3px solid #000; border-radius: 16px; padding: 25px; background: #fff;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 15px; font-weight: 800;">
+                <span style="color: #666;">GROSS SUBTOTAL</span>
                 <span>${currency}${inv.subtotal.toLocaleString()}</span>
               </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; font-weight: 800;">
-                <span style="color: #444;">LESS DISCOUNT</span>
-                <span style="color: #ef4444;">-${currency}${inv.discount.toLocaleString()}</span>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 15px; font-weight: 800;">
+                <span style="color: #666;">TOTAL DISCOUNT</span>
+                <span style="color: #dc2626;">-${currency}${inv.discount.toLocaleString()}</span>
               </div>
-              <div style="border-top: 3px solid #000; margin-top: 12px; padding-top: 12px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 15px; font-weight: 950; color: #000;">NET PAYABLE</span>
-                <span style="font-size: 28px; font-weight: 950;">${currency}${inv.total.toLocaleString()}</span>
+              <div style="border-top: 3px solid #000; margin-top: 15px; padding-top: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 16px; font-weight: 950; color: #000; text-transform: uppercase;">Net Payable</span>
+                <span style="font-size: 32px; font-weight: 950;">${currency}${inv.total.toLocaleString()}</span>
               </div>
             </div>
           </div>
 
-          <!-- Signatures -->
-          <div style="margin-top: 90px; display: flex; justify-content: space-between; padding: 0 20px;">
-             <div style="text-align: center; border-top: 2px solid #000; width: 200px; padding-top: 10px;">
-                <p style="margin: 0; font-size: 12px; font-weight: 900; text-transform: uppercase;">Customer Signature</p>
+          <!-- Formal Authentication Footer -->
+          <div style="margin-top: 100px; display: flex; justify-content: space-between; padding: 0 30px;">
+             <div style="text-align: center; border-top: 2px solid #000; width: 220px; padding-top: 12px;">
+                <p style="margin: 0; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;">Customer Acceptance</p>
              </div>
-             <div style="text-align: center; border-top: 2px solid #000; width: 200px; padding-top: 10px;">
-                <p style="margin: 0; font-size: 12px; font-weight: 900; text-transform: uppercase;">Authorized Seal / Sign</p>
+             <div style="text-align: center; border-top: 2px solid #000; width: 220px; padding-top: 12px;">
+                <p style="margin: 0; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;">Authorized Official</p>
              </div>
           </div>
 
-          <!-- Footer Text -->
-          <div style="margin-top: 60px; text-align: center;">
-             <p style="margin: 0; font-size: 11px; font-weight: 900; color: #333; text-transform: uppercase; letter-spacing: 3px;">Valuing our professional relationship.</p>
-             <p style="margin: 6px 0 0 0; font-size: 9px; font-weight: 700; color: #888;">System Generated by Sarvari Seller Pro - High Precision POS Engine</p>
+          <div style="margin-top: 70px; text-align: center;">
+             <p style="margin: 0; font-size: 12px; font-weight: 900; color: #222; text-transform: uppercase; letter-spacing: 4px;">Valuing Excellence in Every Interaction.</p>
+             <p style="margin: 8px 0 0 0; font-size: 10px; font-weight: 700; color: #999;">System Generated by Sarvari Seller Pro Engine • v1.4.2 Professional Edition</p>
           </div>
         </div>
       `;
@@ -333,7 +331,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
         <div style="width: 80mm; padding: 10mm 4mm; font-family: 'Courier New', Courier, monospace; color: #000; background: #fff; margin: 0 auto; line-height: 1.4;">
           <div style="text-align: center; margin-bottom: 20px;">
             <h2 style="margin: 0; font-size: 18px; font-weight: 900; text-transform: uppercase;">${state.settings.shopName}</h2>
-            <p style="margin: 4px 0; font-size: 10px;">${state.settings.shopAddress || 'Main Street Store'}</p>
+            <p style="margin: 4px 0; font-size: 10px;">${state.settings.shopAddress || 'Store Location'}</p>
             <p style="margin: 2px 0; font-size: 10px;">TEL: ${state.settings.shopPhone || 'N/A'}</p>
           </div>
           
@@ -360,18 +358,18 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
           </div>
 
           <div style="text-align: center; margin-top: 25px; font-size: 10px; border-top: 1px dashed #000; padding-top: 12px;">
-            <p style="margin: 0; font-weight: bold;">THANK YOU FOR YOUR PURCHASE!</p>
+            <p style="margin: 0; font-weight: bold;">THANK YOU FOR SHOPPING WITH US!</p>
           </div>
         </div>
       `;
     }
 
-    // A4 Default Layout
+    // Corporate A4 Layout
     return `
       <div style="width: 210mm; min-height: 297mm; padding: 25mm; font-family: 'Inter', sans-serif; color: #000; background: #fff; box-sizing: border-box;">
         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 50px;">
           <div>
-            <h1 style="margin: 0; font-size: 32px; font-weight: 950; color: #000; letter-spacing: -1px;">${state.settings.shopName}</h1>
+            <h1 style="margin: 0; font-size: 32px; font-weight: 950; color: #6366f1; letter-spacing: -1px;">${state.settings.shopName}</h1>
             <p style="margin: 10px 0; color: #444; font-weight: 700; font-size: 14px;">${state.settings.shopAddress || 'Business Location'}</p>
           </div>
           <div style="text-align: right;">
@@ -382,11 +380,13 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
             </div>
           </div>
         </div>
-        <div style="margin-bottom: 40px; padding: 25px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px;">
+        
+        <div style="margin-bottom: 40px; padding: 25px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; border-left: 8px solid #6366f1;">
            <h4 style="margin: 0 0 8px 0; font-size: 10px; font-weight: 950; text-transform: uppercase; color: #94a3b8; letter-spacing: 1.5px;">Billed To</h4>
-           <p style="margin: 0; font-size: 20px; font-weight: 900;">${customer?.name || 'Walk-in Customer'}</p>
+           <p style="margin: 0; font-size: 20px; font-weight: 900; color: #000;">${customer?.name || 'Walk-in Customer'}</p>
            <p style="margin: 5px 0 0 0; font-size: 14px; font-weight: 700; color: #475569;">${customer?.phone || ''}</p>
         </div>
+
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;">
           <thead>
             <tr style="background: #0f172a; color: #fff;">
@@ -405,6 +405,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
             `).join('')}
           </tbody>
         </table>
+        
         <div style="display: flex; justify-content: flex-end;">
           <div style="width: 280px; padding: 25px; border: 3px solid #000; border-radius: 16px; background: #fff;">
             <div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: 950; color: #000;">
@@ -421,7 +422,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     const printSection = document.getElementById('print-section');
     if (!printSection) return;
 
-    // Reset isolation DOM
+    // 1. Reset isolation DOM
     printSection.innerHTML = '';
     const frame = document.createElement('div');
     frame.style.backgroundColor = '#ffffff';
@@ -431,13 +432,14 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     frame.innerHTML = generatePrintHTML(inv, layout);
     printSection.appendChild(frame);
 
-    // Apply special print flag to body to trigger CSS visibility
-    document.body.classList.add('printing-special');
+    // 2. Add special print indicator to body
+    document.body.classList.add('is-printing');
     
-    // Explicit timeout to allow layout engine to compute CSS before print dialog
+    // 3. Trigger Print Cycle with "Double-Paint Delay" 
+    // This allows the browser to fully re-render the hidden section before capturing the frame
     setTimeout(() => {
       window.print();
-      document.body.classList.remove('printing-special');
+      document.body.classList.remove('is-printing');
       printSection.innerHTML = '';
     }, 750);
   };
@@ -740,70 +742,74 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-10 bg-slate-900/80 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-white dark:bg-slate-900 rounded-[48px] w-full max-w-6xl h-full lg:max-h-[90vh] shadow-2xl relative animate-in zoom-in duration-300 overflow-hidden flex flex-col lg:flex-row">
             
-            {/* Sidebar View Control */}
-            <div className="w-full lg:w-[320px] bg-slate-50 dark:bg-slate-950/20 border-b lg:border-b-0 lg:border-r border-slate-100 dark:border-slate-800 flex flex-col shrink-0">
+            {/* Sidebar Layout Picker Control */}
+            <div className="w-full lg:w-[340px] bg-slate-50 dark:bg-slate-950/20 border-b lg:border-b-0 lg:border-r border-slate-100 dark:border-slate-800 flex flex-col shrink-0">
                <div className="p-8 space-y-10 flex-1 overflow-y-auto custom-scrollbar">
                   <header className="flex items-center justify-between">
                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg"><FileText size={20}/></div>
-                        <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Receipt View</h3>
+                        <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100"><FileText size={20}/></div>
+                        <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Document Viewer</h3>
                      </div>
-                     <button onClick={() => setSelectedInvoice(null)} className="lg:hidden p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400"><X size={24}/></button>
+                     <button onClick={() => setSelectedInvoice(null)} className="lg:hidden p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={24}/></button>
                   </header>
 
                   <div className="space-y-6">
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Select Print Layout</p>
+                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Format Architecture</p>
                      <div className="grid grid-cols-1 gap-3">
                         {[
-                          { id: 'advice', label: 'Advice Print', icon: FileSpreadsheet, desc: 'Professional Business Form' },
-                          { id: 'a4', label: 'Corporate A4', icon: FileText, desc: 'Standard business layout' },
-                          { id: 'thermal', label: 'Thermal POS', icon: Smartphone, desc: '80mm narrow receipt' }
+                          { id: 'advice', label: 'Advice Print', icon: FileSpreadsheet, desc: 'Professional Formal Advice Form' },
+                          { id: 'a4', label: 'Corporate A4', icon: FileText, desc: 'Standard Corporate Layout' },
+                          { id: 'thermal', label: 'Thermal POS', icon: Smartphone, desc: '80mm Compact Receipt' }
                         ].map(opt => (
                           <button 
                             key={opt.id}
                             onClick={() => setPrintLayout(opt.id as any)}
-                            className={`p-5 rounded-[24px] border-4 transition-all text-left flex items-center gap-4 group ${printLayout === opt.id ? 'border-indigo-600 bg-white dark:bg-slate-800 shadow-xl' : 'border-transparent bg-white dark:bg-slate-900/50 grayscale opacity-60'}`}
+                            className={`p-5 rounded-[28px] border-4 transition-all text-left flex items-center gap-4 group ${printLayout === opt.id ? 'border-indigo-600 bg-white dark:bg-slate-800 shadow-xl' : 'border-transparent bg-white dark:bg-slate-900/50 grayscale opacity-60'}`}
                           >
-                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${printLayout === opt.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                               <opt.icon size={20}/>
+                             <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm ${printLayout === opt.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                               <opt.icon size={22}/>
                              </div>
-                             <div>
+                             <div className="min-w-0">
                                 <p className="font-black text-xs uppercase tracking-widest dark:text-white">{opt.label}</p>
-                                <p className="text-[10px] font-bold text-slate-400">{opt.desc}</p>
+                                <p className="text-[9px] font-bold text-slate-400 truncate">{opt.desc}</p>
                              </div>
                           </button>
                         ))}
                      </div>
                   </div>
 
-                  <div className="p-6 bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 space-y-4">
+                  <div className="p-6 bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 space-y-4 shadow-sm">
                      <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         <span>Invoice #</span>
-                        <span className="text-slate-800 dark:text-white">${selectedInvoice.id}</span>
+                        <span className="text-slate-800 dark:text-white">#{selectedInvoice.id}</span>
                      </div>
                      <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         <span>Status</span>
-                        <span className={`px-2 py-0.5 rounded-md ${selectedInvoice.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{selectedInvoice.status}</span>
+                        <span className={`px-2 py-0.5 rounded-lg border font-black ${selectedInvoice.status === 'paid' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>{selectedInvoice.status}</span>
+                     </div>
+                     <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <span>Net Value</span>
+                        <span className="text-indigo-600 dark:text-indigo-400 font-black">{state.settings.currency}{selectedInvoice.total.toLocaleString()}</span>
                      </div>
                   </div>
                </div>
 
-               <div className="p-8 border-t border-slate-100 dark:border-slate-800 space-y-3">
+               <div className="p-8 border-t border-slate-100 dark:border-slate-800 space-y-3 bg-white dark:bg-slate-900">
                   <button 
                     onClick={() => handlePrint(selectedInvoice, printLayout)}
-                    className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
+                    className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
                   >
-                    <Printer size={18} /> Print Now
+                    <Printer size={18} /> Execute Print
                   </button>
-                  <button onClick={() => setSelectedInvoice(null)} className="w-full py-4 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-rose-500 transition-colors">Close Viewer</button>
+                  <button onClick={() => setSelectedInvoice(null)} className="w-full py-4 text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] hover:text-rose-500 transition-colors">Dismiss Viewer</button>
                </div>
             </div>
 
-            {/* Preview Area */}
-            <div className="flex-1 bg-slate-200 dark:bg-black/50 p-6 lg:p-10 flex items-center justify-center overflow-hidden group">
-               <div className="w-full h-full max-w-[800px] bg-white dark:bg-white rounded-lg shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)] transition-transform duration-500 origin-top overflow-y-auto custom-scrollbar p-10 text-slate-900">
-                  {/* Dynamic HTML Preview */}
-                  <div className="print-preview-container" dangerouslySetInnerHTML={{ __html: generatePrintHTML(selectedInvoice, printLayout) }} />
+            {/* Print Preview Engine Area */}
+            <div className="flex-1 bg-slate-200 dark:bg-slate-950 p-6 lg:p-12 flex items-center justify-center overflow-hidden">
+               <div className="w-full h-full max-w-[850px] bg-white dark:bg-white rounded-xl shadow-[0_40px_80px_-20px_rgba(0,0,0,0.4)] transition-transform duration-500 origin-top overflow-y-auto custom-scrollbar p-10 text-slate-900 ring-1 ring-black/5">
+                  {/* Real-time HTML Generator for Preview */}
+                  <div className="invoice-print-frame" dangerouslySetInnerHTML={{ __html: generatePrintHTML(selectedInvoice, printLayout) }} />
                </div>
             </div>
 

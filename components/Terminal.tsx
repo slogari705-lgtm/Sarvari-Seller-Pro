@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
@@ -178,7 +177,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const handleCheckout = () => {
     if (cart.length === 0) return;
     
-    // Robust Sequential ID generation: find max number and add 1
+    // Robust Sequential ID generation: find max number among current invoices and add 1
     const maxId = state.invoices.reduce((max, inv) => {
       const idNum = parseInt(inv.id);
       return !isNaN(idNum) ? Math.max(max, idNum) : max;

@@ -41,12 +41,22 @@ const DEFAULT_TEMPLATE: InvoiceTemplate = {
   showLogo: true
 };
 
+const CORPORATE_A4_TEMPLATE: InvoiceTemplate = {
+  id: 'corporate-a4',
+  name: 'Corporate A4',
+  layout: 'modern',
+  brandColor: '#6366f1',
+  headerText: 'Thank you for your business!',
+  footerText: 'Please come again soon.',
+  showLogo: true
+};
+
 const INITIAL_STATE: AppState = {
   products: [],
   customers: [],
   invoices: [],
   expenses: [],
-  templates: [DEFAULT_TEMPLATE],
+  templates: [DEFAULT_TEMPLATE, CORPORATE_A4_TEMPLATE],
   loanTransactions: [],
   expenseCategories: ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Marketing', 'Maintenance', 'Other'],
   settings: {
@@ -58,7 +68,7 @@ const INITIAL_STATE: AppState = {
     currency: '$',
     taxRate: 0,
     lowStockThreshold: 5,
-    invoiceTemplate: 'default-modern',
+    invoiceTemplate: 'corporate-a4',
     brandColor: '#6366f1',
     language: 'en',
     theme: 'light',

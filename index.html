@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -67,8 +66,8 @@
                 size: auto;
             }
             
-            /* Hide the entire React application root */
-            #root, aside, header, nav, .no-print, button {
+            /* Hide the entire React application root and UI elements */
+            #root, aside, header, nav, footer, button, .no-print, .fixed {
                 display: none !important;
                 visibility: hidden !important;
             }
@@ -82,7 +81,7 @@
                 padding: 0 !important;
             }
             
-            /* Force the isolation container to be visible and correctly positioned */
+            /* Force the isolation container to be the only thing visible and correctly positioned */
             #print-section {
                 display: block !important;
                 visibility: visible !important;
@@ -95,9 +94,10 @@
                 padding: 0 !important;
                 background-color: white !important;
                 z-index: 100000 !important;
+                opacity: 1 !important;
             }
 
-            /* Ensure all children of the print section are visible and colored */
+            /* Ensure all children of the print section are high-contrast and opaque */
             #print-section * {
                 visibility: visible !important;
                 color: black !important;
@@ -137,6 +137,7 @@
 </head>
 <body class="overflow-hidden bg-slate-50 dark:bg-slate-950">
     <div id="root"></div>
+    <!-- Dedicated container for printed output to prevent "White Page" issues -->
     <div id="print-section"></div>
     <script>
       if ('serviceWorker' in navigator) {
