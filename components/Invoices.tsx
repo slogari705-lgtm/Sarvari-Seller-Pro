@@ -30,7 +30,11 @@ import {
   Smartphone,
   Maximize2,
   FileSpreadsheet,
-  Edit
+  Edit,
+  Filter,
+  RotateCcw,
+  ChevronDown,
+  ArrowRight
 } from 'lucide-react';
 import { AppState, Product, Customer, CartItem, Invoice, InvoiceTemplate, LoanTransaction } from '../types';
 import { translations } from '../translations';
@@ -42,11 +46,19 @@ interface Props {
 
 const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [printLayout, setPrintLayout] = useState<'a4' | 'thermal' | 'advice'>('advice');
   
+  // Filter States
+  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'partial' | 'unpaid'>('all');
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'cash' | 'card' | 'transfer'>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
+
   const t = translations[state.settings.language || 'en'];
 
   // Invoice Builder State
@@ -118,11 +130,30 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const filteredInvoices = useMemo(() => {
     return state.invoices.filter(inv => {
       const customer = state.customers.find(c => c.id === inv.customerId);
-      return inv.id.toString().includes(searchTerm) || 
+      const matchesSearch = inv.id.toString().includes(searchTerm) || 
              customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
              customer?.phone.includes(searchTerm);
+      
+      const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
+      const matchesPayment = paymentFilter === 'all' || inv.paymentMethod === paymentFilter;
+      const matchesCustomer = !customerFilter || inv.customerId === customerFilter;
+      
+      const invDate = new Date(inv.date);
+      const matchesStart = !startDate || invDate >= new Date(startDate);
+      const matchesEnd = !endDate || invDate <= new Date(endDate + 'T23:59:59');
+
+      return matchesSearch && matchesStatus && matchesPayment && matchesCustomer && matchesStart && matchesEnd;
     }).sort((a, b) => Number(b.id) - Number(a.id));
-  }, [state.invoices, searchTerm, state.customers]);
+  }, [state.invoices, searchTerm, state.customers, statusFilter, paymentFilter, customerFilter, startDate, endDate]);
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setPaymentFilter('all');
+    setCustomerFilter('');
+    setStartDate('');
+    setEndDate('');
+  };
 
   const subtotal = builderItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const totalCost = builderItems.reduce((acc, item) => acc + ((item.buyPrice || 0) * item.quantity), 0);
@@ -177,7 +208,6 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
 
     // INVENTORY RECONCILIATION
     let updatedProducts = [...state.products];
-    // If editing, first return old items to stock
     if (oldInvoice) {
       oldInvoice.items.forEach(oldItem => {
         updatedProducts = updatedProducts.map(p => 
@@ -185,7 +215,6 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
         );
       });
     }
-    // Then subtract new items from stock
     builderItems.forEach(newItem => {
       updatedProducts = updatedProducts.map(p => 
         p.id === newItem.id ? { ...p, stock: Math.max(0, p.stock - newItem.quantity) } : p
@@ -250,14 +279,11 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     if (window.confirm(t.delete + '?')) {
       const invToDelete = state.invoices.find(i => i.id === id);
       if (invToDelete) {
-        // Return stock
         const updatedProducts = state.products.map(p => {
           const itemInInv = invToDelete.items.find(it => it.id === p.id);
           return itemInInv ? { ...p, stock: p.stock + itemInInv.quantity } : p;
         });
         updateState('products', updatedProducts);
-        
-        // Adjust customer totals
         if (invToDelete.customerId) {
           const updatedCustomers = state.customers.map(c => {
             if (c.id === invToDelete.customerId) {
@@ -286,67 +312,86 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
 
     const itemsHTML = inv.items.map((item, idx) => `
       <tr style="border-bottom: 1px solid #000;">
-        <td style="padding: 10px; text-align: center; border-right: 1px solid #000;">${idx + 1}</td>
-        <td style="padding: 10px; border-right: 1px solid #000;">
-          <div style="font-weight: 900;">${item.name}</div>
-          <div style="font-size: 10px; color: #555;">SKU: ${item.sku}</div>
+        <td style="padding: 12px 10px; text-align: center; border-right: 1px solid #000; font-size: 13px;">${idx + 1}</td>
+        <td style="padding: 12px 10px; border-right: 1px solid #000;">
+          <div style="font-weight: 900; font-size: 14px;">${item.name}</div>
+          <div style="font-size: 10px; text-transform: uppercase; margin-top: 2px; color: #555;">SKU: ${item.sku}</div>
         </td>
-        <td style="padding: 10px; text-align: center; border-right: 1px solid #000;">${item.quantity}</td>
-        <td style="padding: 10px; text-align: right; border-right: 1px solid #000;">${currency}${item.price.toLocaleString()}</td>
-        <td style="padding: 10px; text-align: right; font-weight: 900;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
+        <td style="padding: 12px 10px; text-align: center; font-weight: 800; border-right: 1px solid #000; font-size: 13px;">${item.quantity}</td>
+        <td style="padding: 12px 10px; text-align: right; font-weight: 800; border-right: 1px solid #000; font-size: 13px;">${currency}${item.price.toLocaleString()}</td>
+        <td style="padding: 12px 10px; text-align: right; font-weight: 900; font-size: 15px;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
       </tr>
     `).join('');
 
     if (layout === 'advice') {
       return `
-        <div style="width: 210mm; min-height: 297mm; padding: 20mm; font-family: 'Inter', sans-serif; color: #000; background: #fff;">
-          <div style="display: flex; justify-content: space-between; border-bottom: 5px solid #000; padding-bottom: 20px; margin-bottom: 30px;">
-            <div>
-              <h1 style="margin: 0; font-size: 30px; font-weight: 950; text-transform: uppercase;">${state.settings.shopName}</h1>
-              <p style="margin: 5px 0; font-size: 13px; font-weight: 700;">${state.settings.shopAddress || ''}</p>
-              <p style="margin: 0; font-size: 13px; font-weight: 700;">TEL: ${state.settings.shopPhone || ''}</p>
+        <div style="width: 210mm; min-height: 297mm; padding: 20mm; font-family: 'Inter', Arial, sans-serif; color: #000; background: #fff; box-sizing: border-box; border: 1px solid #eee;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 6px solid #000; padding-bottom: 25px; margin-bottom: 35px;">
+            <div style="display: flex; gap: 20px; align-items: center;">
+              <div style="width: 80px; height: 80px; background: #000; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 950; font-size: 48px;">S</div>
+              <div>
+                <h1 style="margin: 0; font-size: 34px; font-weight: 950; text-transform: uppercase; letter-spacing: -1.5px;">${state.settings.shopName}</h1>
+                <p style="margin: 8px 0; font-size: 14px; font-weight: 800; color: #333;">${state.settings.shopAddress || 'Authorized Dealer'}</p>
+                <p style="margin: 0; font-size: 14px; font-weight: 800; color: #333;">TEL: ${state.settings.shopPhone || 'N/A'}</p>
+              </div>
             </div>
             <div style="text-align: right;">
-              <h2 style="margin: 0; font-size: 38px; font-weight: 950; letter-spacing: 4px;">ADVICE NOTE</h2>
-              <p style="margin: 15px 0 0 0; font-size: 18px; font-weight: 900;">SERIAL: #${inv.id.padStart(6, '0')}</p>
-              <p style="margin: 4px 0 0 0; font-size: 14px;">DATE: ${dateStr} ${timeStr}</p>
+              <h2 style="margin: 0; font-size: 42px; font-weight: 950; text-transform: uppercase; letter-spacing: 4px; color: #000;">ADVICE NOTE</h2>
+              <div style="margin-top: 15px;">
+                <p style="margin: 0; font-size: 20px; font-weight: 900; background: #000; color: #fff; display: inline-block; padding: 6px 16px; border-radius: 10px;">SERIAL: #${inv.id.padStart(6, '0')}</p>
+                <p style="margin: 8px 0 0 0; font-size: 14px; font-weight: 800; color: #555;">DATE: ${dateStr} ${timeStr}</p>
+              </div>
             </div>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 35px;">
-            <div style="padding: 25px; border: 3px solid #000; border-radius: 16px; background: #fafafa;">
-              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px;">Ship To / Bill To</h4>
-              <p style="margin: 12px 0 0 0; font-size: 22px; font-weight: 950;">${customer?.name || 'Walk-in Guest'}</p>
-              <p style="margin: 6px 0; font-size: 15px; font-weight: 700;">${customer?.phone || ''}</p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 40px;">
+            <div style="padding: 25px; border: 3px solid #000; border-radius: 20px; background: #fdfdfd;">
+              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Billed / Shipped To</h4>
+              <p style="margin: 15px 0 0 0; font-size: 24px; font-weight: 950; color: #000;">${customer?.name || 'Walk-in Guest'}</p>
+              <p style="margin: 8px 0; font-size: 16px; font-weight: 800; color: #333;">Phone: ${customer?.phone || 'No phone recorded'}</p>
+              <p style="margin: 0; font-size: 13px; font-weight: 700; color: #666;">Address: ${customer?.address || 'N/A'}</p>
             </div>
-            <div style="padding: 25px; border: 3px solid #000; border-radius: 16px; background: #fafafa;">
-              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px;">Settlement</h4>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-weight: 800;">Method:</span><span>${inv.paymentMethod.toUpperCase()}</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="font-weight: 800;">Status:</span><span style="color: ${inv.status === 'paid' ? '#059669' : '#dc2626'};">${inv.status.toUpperCase()}</span></div>
+            <div style="padding: 25px; border: 3px solid #000; border-radius: 20px; background: #fdfdfd;">
+              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Document Settlement</h4>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span style="font-size: 15px; font-weight: 800;">Method:</span><span style="font-size: 15px; font-weight: 950; text-transform: uppercase;">${inv.paymentMethod}</span></div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span style="font-size: 15px; font-weight: 800;">Status:</span><span style="font-size: 15px; font-weight: 950; text-transform: uppercase; color: ${inv.status === 'paid' ? '#059669' : '#dc2626'};">${inv.status}</span></div>
+              <div style="display: flex; justify-content: space-between;"><span style="font-size: 15px; font-weight: 800;">Internal ID:</span><span style="font-size: 15px; font-weight: 950;">REF-${Date.now().toString().slice(-8)}</span></div>
             </div>
           </div>
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 35px; border: 3px solid #000;">
-            <thead style="background: #efefef; border-bottom: 3px solid #000;">
-              <tr>
-                <th style="padding: 14px; border-right: 1px solid #000;">#</th>
-                <th style="padding: 14px; text-align: left; border-right: 1px solid #000;">Item Description</th>
-                <th style="padding: 14px; border-right: 1px solid #000;">Qty</th>
-                <th style="padding: 14px; text-align: right; border-right: 1px solid #000;">Unit Price</th>
-                <th style="padding: 14px; text-align: right;">Total</th>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 45px; border: 3px solid #000;">
+            <thead style="background: #efefef;">
+              <tr style="border-bottom: 3px solid #000;">
+                <th style="padding: 16px 12px; border-right: 1px solid #000; font-size: 11px; font-weight: 950; text-align: center; width: 45px;">#</th>
+                <th style="padding: 16px 12px; text-align: left; border-right: 1px solid #000; font-size: 11px; font-weight: 950;">ITEM DESCRIPTION & SKU</th>
+                <th style="padding: 16px 12px; border-right: 1px solid #000; font-size: 11px; font-weight: 950; text-align: center; width: 75px;">QTY</th>
+                <th style="padding: 16px 12px; text-align: right; border-right: 1px solid #000; font-size: 11px; font-weight: 950; width: 120px;">UNIT PRICE</th>
+                <th style="padding: 16px 12px; text-align: right; font-size: 11px; font-weight: 950; width: 150px;">LINE TOTAL</th>
               </tr>
             </thead>
             <tbody>${itemsHTML}</tbody>
           </table>
-          <div style="display: flex; justify-content: flex-end;">
-            <div style="width: 320px; border: 3px solid #000; border-radius: 16px; padding: 25px;">
-              <div style="display: flex; justify-content: space-between; font-size: 24px; font-weight: 950;">
-                <span>Total Due</span>
-                <span>${currency}${inv.total.toLocaleString()}</span>
+          <div style="display: flex; justify-content: space-between; align-items: end; gap: 50px;">
+            <div style="flex: 1; padding: 25px; border: 3px dashed #000; border-radius: 20px; min-height: 140px; background: #fff;">
+               <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; color: #555; letter-spacing: 1px;">Merchant Remarks</h4>
+               <p style="margin: 0; font-size: 14px; font-weight: 700; line-height: 1.6; color: #222;">${inv.notes || 'This advice confirms the release of goods listed above. Please inspect for defects before signature. Signed documents are final records of acceptance. We value your business.'}</p>
+            </div>
+            <div style="width: 350px; border: 4px solid #000; border-radius: 20px; padding: 30px; background: #fff;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 16px; font-weight: 800;">
+                <span style="color: #666;">GROSS SUBTOTAL</span>
+                <span>${currency}${inv.subtotal.toLocaleString()}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 16px; font-weight: 800;">
+                <span style="color: #666;">TAX & FEES</span>
+                <span>${currency}${inv.tax.toLocaleString()}</span>
+              </div>
+              <div style="border-top: 4px solid #000; margin-top: 20px; padding-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 20px; font-weight: 950; color: #000; text-transform: uppercase;">Total Due</span>
+                <span style="font-size: 42px; font-weight: 950;">${currency}${inv.total.toLocaleString()}</span>
               </div>
             </div>
           </div>
-          <div style="margin-top: 100px; display: flex; justify-content: space-between;">
-             <div style="text-align: center; border-top: 2px solid #000; width: 220px; padding-top: 10px; font-weight: 900;">Customer Signature</div>
-             <div style="text-align: center; border-top: 2px solid #000; width: 220px; padding-top: 10px; font-weight: 900;">Authorized Seal</div>
+          <div style="margin-top: 140px; display: flex; justify-content: space-between; padding: 0 50px;">
+             <div style="text-align: center; border-top: 3px solid #000; width: 250px; padding-top: 18px; font-size: 15px; font-weight: 950; text-transform: uppercase; letter-spacing: 2px;">Customer Signature</div>
+             <div style="text-align: center; border-top: 3px solid #000; width: 250px; padding-top: 18px; font-size: 15px; font-weight: 950; text-transform: uppercase; letter-spacing: 2px;">Authorized Stamp</div>
           </div>
         </div>
       `;
@@ -354,21 +399,21 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
 
     if (layout === 'thermal') {
       return `
-        <div style="width: 80mm; padding: 8mm 2mm; font-family: 'Courier New', Courier, monospace; color: #000; line-height: 1.2;">
-          <div style="text-align: center; margin-bottom: 15px;">
-            <h2 style="margin: 0; font-size: 20px; font-weight: 950;">${state.settings.shopName}</h2>
-            <p style="margin: 4px 0; font-size: 10px;">${state.settings.shopAddress || ''}</p>
+        <div style="width: 80mm; padding: 8mm 2mm; font-family: 'Courier New', Courier, monospace; color: #000; line-height: 1.2; text-align: center;">
+          <h2 style="margin: 0; font-size: 22px; font-weight: 950; text-transform: uppercase;">${state.settings.shopName}</h2>
+          <p style="margin: 6px 0; font-size: 11px;">${state.settings.shopAddress || ''}</p>
+          <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 15px 0; font-size: 11px; text-align: left;">
+            <div>INV: #${inv.id} | ${dateStr}</div>
+            <div>USER: ${customer?.name || 'WALK-IN'}</div>
           </div>
-          <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 8px 0; margin-bottom: 15px; font-size: 11px;">
-            <div>#${inv.id} | ${dateStr} ${timeStr}</div>
-            <div>CUST: ${customer?.name || 'WALK-IN'}</div>
+          <div style="text-align: left; margin-bottom: 15px;">
+            ${inv.items.map(i => `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>${i.quantity}x ${i.name}</span><span>${currency}${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
           </div>
-          ${inv.items.map(i => `<div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;"><span>${i.quantity}x ${i.name}</span><span>${currency}${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
-          <div style="border-top: 2px solid #000; margin-top: 12px; padding-top: 8px; font-weight: 950; font-size: 16px; display: flex; justify-content: space-between;">
+          <div style="border-top: 2px solid #000; padding-top: 10px; font-weight: 950; font-size: 18px; display: flex; justify-content: space-between; text-align: left;">
             <span>TOTAL</span>
             <span>${currency}${inv.total.toLocaleString()}</span>
           </div>
-          <div style="text-align: center; margin-top: 20px; font-size: 10px; border-top: 1px dashed #000; padding-top: 10px;">THANK YOU FOR YOUR BUSINESS</div>
+          <p style="margin-top: 30px; font-size: 11px; border-top: 1px dashed #000; padding-top: 10px;">THANK YOU FOR YOUR VISIT</p>
         </div>
       `;
     }
@@ -385,9 +430,9 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 50px;">
           <thead style="background: #0f172a; color: #fff;">
             <tr>
-              <th style="padding: 15px; text-align: left;">Item</th>
+              <th style="padding: 15px; text-align: left;">Description</th>
               <th style="padding: 15px; text-align: center;">Qty</th>
-              <th style="padding: 15px; text-align: right;">Total</th>
+              <th style="padding: 15px; text-align: right;">Line Total</th>
             </tr>
           </thead>
           <tbody>
@@ -395,8 +440,8 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
           </tbody>
         </table>
         <div style="display: flex; justify-content: flex-end;">
-          <div style="width: 250px; padding: 25px; border: 3px solid #000; border-radius: 16px;">
-            <div style="display: flex; justify-content: space-between; font-size: 22px; font-weight: 950;">
+          <div style="width: 280px; padding: 25px; border: 4px solid #000; border-radius: 20px; background: #fff;">
+            <div style="display: flex; justify-content: space-between; font-size: 24px; font-weight: 950; color: #000;">
               <span>TOTAL</span>
               <span>${currency}${inv.total.toLocaleString()}</span>
             </div>
@@ -409,11 +454,14 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const handlePrint = (inv: Invoice, layout: 'a4' | 'thermal' | 'advice') => {
     const printSection = document.getElementById('print-section');
     if (!printSection) return;
-    printSection.innerHTML = generatePrintHTML(inv, layout);
+    printSection.innerHTML = '';
+    const frame = document.createElement('div');
+    frame.innerHTML = generatePrintHTML(inv, layout);
+    printSection.appendChild(frame);
     setTimeout(() => {
       window.print();
       printSection.innerHTML = '';
-    }, 250);
+    }, 600);
   };
 
   return (
@@ -432,68 +480,154 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
         </button>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800">
-          <div className="relative max-w-md">
+      <div className="space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text" 
               placeholder={t.search} 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-xl py-2.5 pl-12 pr-4 outline-none font-bold text-sm dark:text-white transition-all shadow-inner"
+              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl py-3 pl-12 pr-4 outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm dark:text-white transition-all shadow-sm"
             />
           </div>
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border ${
+              showFilters 
+                ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl' 
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50'
+            }`}
+          >
+            <Filter size={18} />
+            {showFilters ? <ChevronDown size={14} className="rotate-180 transition-transform" /> : <ChevronDown size={14} className="transition-transform" />}
+          </button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[800px]">
-            <thead className="bg-slate-50 dark:bg-slate-800/50">
-              <tr>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Serial</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.customers}</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total}</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t.actions}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredInvoices.map((inv) => {
-                const customer = state.customers.find(c => c.id === inv.customerId);
-                return (
-                  <tr key={inv.id} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-500/5 transition-colors group">
-                    <td className="px-8 py-5 font-black text-sm dark:text-white">#{inv.id.padStart(4, '0')}</td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center font-black text-xs text-slate-400 border border-slate-100 dark:border-slate-700">
-                          {customer ? customer.name.charAt(0) : <User size={14}/>}
+
+        {showFilters && (
+          <div className="bg-white dark:bg-slate-900 p-8 rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-xl animate-in slide-in-from-top-4 duration-300">
+            <div className="flex items-center justify-between mb-8">
+               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                 <Filter size={14} className="text-indigo-600" />
+                 Advanced Audit Filters
+               </h4>
+               <button onClick={clearFilters} className="flex items-center gap-2 text-[10px] font-black uppercase text-rose-500 hover:opacity-70 transition-opacity">
+                  <RotateCcw size={12}/> Clear All
+               </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+               <div className="space-y-3">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Payment Status</label>
+                  <select 
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold dark:text-white focus:border-indigo-500 outline-none appearance-none"
+                  >
+                     <option value="all">All Statuses</option>
+                     <option value="paid">Paid Full</option>
+                     <option value="partial">Partial Payment</option>
+                     <option value="unpaid">Unpaid / Credit</option>
+                  </select>
+               </div>
+
+               <div className="space-y-3">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Payment Method</label>
+                  <select 
+                    value={paymentFilter}
+                    onChange={(e) => setPaymentFilter(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold dark:text-white focus:border-indigo-500 outline-none appearance-none"
+                  >
+                     <option value="all">All Methods</option>
+                     <option value="cash">Cash Settlement</option>
+                     <option value="card">Card / POS</option>
+                     <option value="transfer">Bank Transfer</option>
+                  </select>
+               </div>
+
+               <div className="space-y-3">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Customer Filter</label>
+                  <select 
+                    value={customerFilter}
+                    onChange={(e) => setCustomerFilter(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-bold dark:text-white focus:border-indigo-500 outline-none appearance-none"
+                  >
+                     <option value="">All Customers</option>
+                     {state.customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+               </div>
+
+               <div className="space-y-3">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date Range</label>
+                  <div className="flex items-center gap-2">
+                     <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl px-2 py-3 text-[10px] font-black dark:text-white outline-none"/>
+                     <span className="text-slate-300">-</span>
+                     <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl px-2 py-3 text-[10px] font-black dark:text-white outline-none"/>
+                  </div>
+               </div>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[800px]">
+              <thead className="bg-slate-50 dark:bg-slate-800/50">
+                <tr>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Serial</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.customers}</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total}</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredInvoices.map((inv) => {
+                  const customer = state.customers.find(c => c.id === inv.customerId);
+                  return (
+                    <tr key={inv.id} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-500/5 transition-colors group">
+                      <td className="px-8 py-5 font-black text-sm dark:text-white">#{inv.id.padStart(4, '0')}</td>
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center font-black text-xs text-slate-400 border border-slate-100 dark:border-slate-700">
+                            {customer ? customer.name.charAt(0) : <User size={14}/>}
+                          </div>
+                          <span className="font-bold text-slate-700 dark:text-slate-300 text-sm truncate max-w-[150px]">{customer?.name || t.walkInCustomer}</span>
                         </div>
-                        <span className="font-bold text-slate-700 dark:text-slate-300 text-sm truncate max-w-[150px]">{customer?.name || t.walkInCustomer}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase">{new Date(inv.date).toLocaleDateString()}</td>
-                    <td className="px-8 py-5 font-black text-indigo-600 dark:text-indigo-400">{state.settings.currency}{inv.total.toLocaleString()}</td>
-                    <td className="px-8 py-5">
-                      <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
-                        inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                        inv.status === 'partial' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
-                        'bg-rose-50 text-rose-600 border border-rose-100'
-                      }`}>
-                        {t[inv.status]}
-                      </span>
-                    </td>
-                    <td className="px-8 py-5 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Print/View"><Printer size={18}/></button>
-                        <button onClick={() => handleEditInvoice(inv)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors" title="Edit"><Edit size={18}/></button>
-                        <button onClick={() => deleteInvoice(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100" title="Delete"><Trash2 size={18}/></button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase">{new Date(inv.date).toLocaleDateString()}</td>
+                      <td className="px-8 py-5 font-black text-indigo-600 dark:text-indigo-400">{state.settings.currency}{inv.total.toLocaleString()}</td>
+                      <td className="px-8 py-5">
+                        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
+                          inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                          inv.status === 'partial' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                          'bg-rose-50 text-rose-600 border border-rose-100'
+                        }`}>
+                          {t[inv.status]}
+                        </span>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Print/View"><Printer size={18}/></button>
+                          <button onClick={() => handleEditInvoice(inv)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors" title="Edit"><Edit size={18}/></button>
+                          <button onClick={() => deleteInvoice(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100" title="Delete"><Trash2 size={18}/></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {filteredInvoices.length === 0 && (
+            <div className="py-24 text-center">
+               <FileText className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+               <p className="font-black text-sm text-slate-400 uppercase tracking-widest">No invoices match these criteria</p>
+               <button onClick={clearFilters} className="mt-4 text-indigo-600 text-xs font-black uppercase tracking-widest hover:underline">Reset Search</button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -650,7 +784,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                     </div>
 
                     <div className="space-y-4">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Payment Status</label>
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Settlement (Paid Amount)</label>
                        <div className="relative">
                           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400 font-black text-lg">{state.settings.currency}</div>
                           <input 
@@ -691,14 +825,14 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                         <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg"><FileText size={20}/></div>
                         <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Document View</h3>
                      </div>
-                     <button onClick={() => setSelectedInvoice(null)} className="lg:hidden p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400"><X size={24}/></button>
+                     <button onClick={() => setSelectedInvoice(null)} className="lg:hidden p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={24}/></button>
                   </header>
 
                   <div className="space-y-6">
                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Format Selection</p>
                      <div className="grid grid-cols-1 gap-3">
                         {[
-                          { id: 'advice', label: 'Advice Print', icon: FileSpreadsheet, desc: 'Professional Business Advice Form' },
+                          { id: 'advice', label: 'Advice Print', icon: FileSpreadsheet, desc: 'Professional Business Advice Note' },
                           { id: 'a4', label: 'Corporate A4', icon: FileText, desc: 'Standard business layout' },
                           { id: 'thermal', label: 'Thermal POS', icon: Smartphone, desc: '80mm narrow receipt format' }
                         ].map(opt => (
