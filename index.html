@@ -66,7 +66,7 @@
                 size: auto;
             }
             
-            /* Hide the entire React application root and UI elements */
+            /* Hide the entire React application root and fixed UI elements */
             #root, aside, header, nav, footer, button, .no-print, .fixed {
                 display: none !important;
                 visibility: hidden !important;
@@ -81,7 +81,7 @@
                 padding: 0 !important;
             }
             
-            /* Force the isolation container to be the only thing visible and correctly positioned */
+            /* Isolation container for the document being printed */
             #print-section {
                 display: block !important;
                 visibility: visible !important;
@@ -94,10 +94,9 @@
                 padding: 0 !important;
                 background-color: white !important;
                 z-index: 100000 !important;
-                opacity: 1 !important;
             }
 
-            /* Ensure all children of the print section are high-contrast and opaque */
+            /* Ensure background colors and borders show up on paper */
             #print-section * {
                 visibility: visible !important;
                 color: black !important;
@@ -107,18 +106,13 @@
             }
         }
 
-        /* Default state of print section is hidden in normal browser view */
+        /* Standard hidden state for the print section */
         #print-section {
             display: none;
         }
 
         input, select, textarea {
             font-size: 16px !important;
-        }
-
-        /* Prevent zooming on interaction for mobile */
-        input[type="text"], input[type="number"], select, textarea {
-            font-size: 16px;
         }
     </style>
     <script type="importmap">

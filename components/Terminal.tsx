@@ -305,37 +305,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
           </div>
         </div>
 
-        {favoriteProducts.length > 0 && searchTerm === '' && categoryFilter === 'All' && (
-          <div className="space-y-3 shrink-0">
-            <div className="flex items-center gap-2 px-1">
-              <Star size={16} className="text-amber-500 fill-amber-500" />
-              <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">{t.quickAccess}</h3>
-            </div>
-            <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
-              {favoriteProducts.map((p) => (
-                <button
-                  key={`fav-${p.id}`}
-                  onClick={() => addToCart(p)}
-                  className="flex-shrink-0 w-36 bg-white dark:bg-slate-900 p-4 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-indigo-500 transition-all text-left group"
-                >
-                  <div className="relative aspect-square bg-slate-50 dark:bg-slate-800 rounded-2xl mb-3 flex items-center justify-center text-slate-400 dark:text-slate-500 overflow-hidden shadow-inner">
-                    {p.image ? (
-                      <img src={p.image} alt={p.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
-                    ) : (
-                      <Package size={24} />
-                    )}
-                    <div className="absolute top-2 right-2">
-                       <Star size={14} className="text-amber-500 fill-amber-500" />
-                    </div>
-                  </div>
-                  <h4 className="font-bold text-[11px] text-slate-800 dark:text-white leading-tight mb-1 truncate line-clamp-2 h-7">{p.name}</h4>
-                  <p className="font-black text-indigo-600 dark:text-indigo-400 text-sm">{state.settings.currency}{p.price.toFixed(2)}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-6 pb-20 lg:pb-6 custom-scrollbar pr-2">
           {filteredProducts.map((product) => {
              const isOut = product.stock <= 0;
@@ -366,11 +335,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
                       <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                     ) : (
                       <Package size={40} strokeWidth={1.5} />
-                    )}
-                    {isOut && (
-                       <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center">
-                          <span className="bg-rose-600 text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">{t.outOfStock}</span>
-                       </div>
                     )}
                   </div>
                   <h4 className="font-black text-xs lg:text-sm text-slate-800 dark:text-white leading-tight mb-1 line-clamp-2 h-10">{product.name}</h4>
@@ -426,15 +390,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
                 </select>
                 <ChevronDown size={14} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
              </div>
-             {selectedCustomer?.totalDebt! > 0 && (
-                <div className="p-3 bg-rose-50 dark:bg-rose-900/20 rounded-xl border border-rose-100 dark:border-rose-900/30 flex items-center justify-between animate-in slide-in-from-top-2">
-                   <div className="flex items-center gap-2">
-                      <AlertCircle size={14} className="text-rose-600"/>
-                      <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest">Customer has debt</span>
-                   </div>
-                   <span className="font-black text-rose-700 text-xs">{state.settings.currency}{selectedCustomer?.totalDebt.toLocaleString()}</span>
-                </div>
-             )}
           </div>
 
           <div className="h-px bg-slate-100 dark:bg-slate-800 my-2"></div>
@@ -515,23 +470,9 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
         </div>
       </div>
 
-      {cart.length > 0 && !showCartMobile && (
-        <button 
-          onClick={() => setShowCartMobile(true)}
-          className="lg:hidden fixed bottom-6 right-6 z-30 w-16 h-16 bg-indigo-600 text-white rounded-3xl shadow-2xl flex items-center justify-center animate-bounce ring-8 ring-indigo-100 dark:ring-slate-900"
-        >
-          <div className="relative">
-            <ShoppingCart size={32} />
-            <span className="absolute -top-3 -right-3 w-7 h-7 bg-rose-600 text-white text-[10px] font-black rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center">
-              {cart.length}
-            </span>
-          </div>
-        </button>
-      )}
-
       {paymentModal && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-t-[40px] sm:rounded-[48px] w-full max-md p-8 lg:p-12 shadow-2xl relative animate-in slide-in-from-bottom sm:zoom-in duration-300">
+          <div className="bg-white dark:bg-slate-900 rounded-t-[40px] sm:rounded-[48px] w-full max-w-md p-8 lg:p-12 shadow-2xl relative animate-in slide-in-from-bottom sm:zoom-in duration-300">
             <button onClick={() => setPaymentModal(false)} className="absolute top-8 right-8 p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={24} /></button>
             <h3 className="text-3xl font-black mb-8 text-center uppercase tracking-tighter dark:text-white">{t.finalizeSale}</h3>
             
@@ -550,24 +491,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
                    />
                 </div>
               </div>
-
-              {balanceDue > 0 && (
-                <div className={`p-6 rounded-[32px] border-2 flex items-center justify-between animate-in slide-in-from-top-4 ${selectedCustomer ? 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800' : 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-800'}`}>
-                  <div className="flex items-center gap-4">
-                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${selectedCustomer ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'}`}>
-                        {selectedCustomer ? <Scale size={24}/> : <AlertCircle size={24}/>}
-                     </div>
-                     <div>
-                       <p className={`text-[10px] font-black uppercase tracking-widest ${selectedCustomer ? 'text-amber-700 dark:text-amber-400' : 'text-rose-700 dark:text-rose-400'}`}>{t.loan} {t.total}</p>
-                       <p className={`text-2xl font-black ${selectedCustomer ? 'text-amber-900 dark:text-white' : 'text-rose-900 dark:text-white'}`}>{state.settings.currency}{balanceDue.toFixed(2)}</p>
-                     </div>
-                  </div>
-                </div>
-              )}
-
-              {!selectedCustomer && balanceDue > 0 && (
-                 <p className="text-center text-xs font-bold text-rose-600 animate-pulse">Assign customer to enable partial credit payment.</p>
-              )}
 
               <div className="grid grid-cols-3 gap-3">
                 {[
@@ -597,9 +520,8 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
             </div>
 
             <button 
-              disabled={balanceDue > 0 && !selectedCustomer}
               onClick={handleCheckout}
-              className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xl hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 dark:shadow-none disabled:opacity-50 active:scale-95"
+              className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xl hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 dark:shadow-none active:scale-95"
             >
               {t.confirmFinish}
             </button>
@@ -615,12 +537,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
             </div>
             <h3 className="text-3xl font-black mb-4 uppercase tracking-tighter dark:text-white">{t.saleSuccess}</h3>
             <p className="text-slate-500 dark:text-slate-400 mb-12 font-bold uppercase tracking-widest text-xs">{t.invoiceSuccess}</p>
-            {invoiceProfit > 0 && (
-                <div className="mb-10 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-3xl border border-emerald-100 inline-block px-8">
-                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Estimated Gain</p>
-                    <p className="text-2xl font-black text-emerald-600">{state.settings.currency}{invoiceProfit.toFixed(2)}</p>
-                </div>
-            )}
             <button 
               onClick={() => setSuccessModal(false)}
               className="w-full py-6 bg-slate-950 dark:bg-indigo-600 text-white rounded-[32px] font-black text-lg hover:bg-black transition-all active:scale-95 shadow-2xl"
