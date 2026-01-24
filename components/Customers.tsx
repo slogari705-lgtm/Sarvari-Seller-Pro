@@ -167,7 +167,8 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   const handleRepayDebt = () => {
     if (!viewingCustomer || !amountInput || Number(amountInput) <= 0) return;
     
-    let remainingPayment = Number(amountInput);
+    const paymentAmount = Number(amountInput);
+    let remainingPayment = paymentAmount;
     const updatedInvoices = state.invoices.map(inv => ({...inv})); // Deep copy needed for mutation
     
     const customerInvoices = updatedInvoices
@@ -184,13 +185,13 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
       else if (inv.paidAmount > 0) inv.status = 'partial';
     }
 
-    const actualReduction = Number(amountInput) - remainingPayment;
     const updatedCustomers = state.customers.map(c => {
       if (c.id === viewingCustomer.id) {
         return { 
           ...c, 
-          totalDebt: Math.max(0, (c.totalDebt || 0) - actualReduction),
-          loyaltyPoints: (c.loyaltyPoints || 0) + Math.floor(actualReduction / 10)
+          // Directly reduce total debt by the payment amount to ensure accuracy regardless of invoice matching
+          totalDebt: Math.max(0, (c.totalDebt || 0) - paymentAmount),
+          loyaltyPoints: (c.loyaltyPoints || 0) + Math.floor(paymentAmount / 10)
         };
       }
       return c;
@@ -200,7 +201,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
       id: Math.random().toString(36).substr(2, 9),
       customerId: viewingCustomer.id,
       date: new Date().toISOString(),
-      amount: actualReduction,
+      amount: paymentAmount,
       type: 'repayment',
       note: noteInput || 'Manual repayment via profile'
     };
@@ -265,95 +266,98 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     const currency = state.settings.currency;
 
     const itemsHTML = inv.items.map((item, idx) => `
-      <tr style="border-bottom: 1px solid #000;">
-        <td style="padding: 12px 10px; text-align: center; border-right: 1px solid #000; font-size: 13px;">${idx + 1}</td>
-        <td style="padding: 12px 10px; border-right: 1px solid #000;">
-          <div style="font-weight: 900; font-size: 14px;">${item.name}</div>
-          <div style="font-size: 10px; text-transform: uppercase; margin-top: 2px; color: #555;">SKU: ${item.sku}</div>
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 6px 4px; text-align: center; border-right: 1px solid #eee; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 6px 8px; border-right: 1px solid #eee;">
+          <div style="font-weight: 700; font-size: 12px;">${item.name}</div>
+          <div style="font-size: 9px; text-transform: uppercase; color: #555;">${item.sku}</div>
         </td>
-        <td style="padding: 12px 10px; text-align: center; font-weight: 800; border-right: 1px solid #000; font-size: 13px;">${item.quantity}</td>
-        <td style="padding: 12px 10px; text-align: right; font-weight: 800; border-right: 1px solid #000; font-size: 13px;">${currency}${item.price.toLocaleString()}</td>
-        <td style="padding: 12px 10px; text-align: right; font-weight: 900; font-size: 15px;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
+        <td style="padding: 6px 4px; text-align: center; font-weight: 600; border-right: 1px solid #eee; font-size: 11px;">${item.quantity}</td>
+        <td style="padding: 6px 8px; text-align: right; font-weight: 600; border-right: 1px solid #eee; font-size: 11px;">${currency}${item.price.toLocaleString()}</td>
+        <td style="padding: 6px 8px; text-align: right; font-weight: 700; font-size: 11px;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
       </tr>
     `).join('');
 
     if (layout === 'thermal') {
         return `
-          <div style="width: 80mm; padding: 8mm 2mm; font-family: 'Courier New', Courier, monospace; color: #000; line-height: 1.2; text-align: center;">
-            <h2 style="margin: 0; font-size: 22px; font-weight: 950; text-transform: uppercase;">${state.settings.shopName}</h2>
-            <p style="margin: 6px 0; font-size: 11px;">${state.settings.shopAddress || ''}</p>
-            <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 15px 0; font-size: 11px; text-align: left;">
-              <div>INV: #${inv.id} | ${dateStr}</div>
+          <div style="width: 80mm; padding: 5mm 2mm; font-family: 'Courier New', Courier, monospace; color: #000; line-height: 1.2; text-align: center;">
+            <h2 style="margin: 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">${state.settings.shopName}</h2>
+            <p style="margin: 4px 0; font-size: 10px;">${state.settings.shopAddress || ''}</p>
+            <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 8px 0; margin: 10px 0; font-size: 10px; text-align: left;">
+              <div>INV: #${inv.id}</div>
+              <div>DATE: ${dateStr} ${timeStr}</div>
               <div>USER: ${customer?.name || 'WALK-IN'}</div>
             </div>
-            <div style="text-align: left; margin-bottom: 15px;">
-              ${inv.items.map(i => `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>${i.quantity}x ${i.name}</span><span>${currency}${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
+            <div style="text-align: left; margin-bottom: 10px;">
+              ${inv.items.map(i => `<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 10px;"><span>${i.quantity}x ${i.name.substring(0,20)}</span><span>${currency}${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
             </div>
-            <div style="border-top: 2px solid #000; padding-top: 10px; font-weight: 950; font-size: 18px; display: flex; justify-content: space-between; text-align: left;">
+            <div style="border-top: 1px solid #000; padding-top: 8px; font-weight: 800; font-size: 14px; display: flex; justify-content: space-between; text-align: left;">
               <span>TOTAL</span>
               <span>${currency}${inv.total.toLocaleString()}</span>
             </div>
-            <p style="margin-top: 30px; font-size: 11px; border-top: 1px dashed #000; padding-top: 10px;">THANK YOU FOR YOUR VISIT</p>
+            <p style="margin-top: 20px; font-size: 10px; border-top: 1px dashed #000; padding-top: 8px;">THANK YOU FOR YOUR VISIT</p>
           </div>
         `;
     }
 
-    // Default A4
+    // Compact A4
     return `
-        <div style="width: 210mm; min-height: 297mm; padding: 20mm; font-family: 'Inter', Arial, sans-serif; color: #000; background: #fff; box-sizing: border-box; border: 1px solid #eee;">
-          <div style="display: flex; justify-content: space-between; border-bottom: 6px solid #000; padding-bottom: 25px; margin-bottom: 35px;">
-            <div style="display: flex; gap: 20px; align-items: center;">
-              <div style="width: 80px; height: 80px; background: #000; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 950; font-size: 48px;">S</div>
+        <div style="width: 210mm; padding: 12mm; font-family: 'Inter', Arial, sans-serif; color: #000; background: #fff; box-sizing: border-box;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 20px;">
+            <div style="display: flex; gap: 15px; align-items: center;">
+              <div style="width: 50px; height: 50px; background: #000; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 28px;">S</div>
               <div>
-                <h1 style="margin: 0; font-size: 34px; font-weight: 950; text-transform: uppercase; letter-spacing: -1.5px;">${state.settings.shopName}</h1>
-                <p style="margin: 8px 0; font-size: 14px; font-weight: 800; color: #333;">${state.settings.shopAddress || 'Authorized Dealer'}</p>
-                <p style="margin: 0; font-size: 14px; font-weight: 800; color: #333;">TEL: ${state.settings.shopPhone || 'N/A'}</p>
+                <h1 style="margin: 0; font-size: 22px; font-weight: 900; text-transform: uppercase;">${state.settings.shopName}</h1>
+                <p style="margin: 4px 0 0 0; font-size: 11px; color: #444;">${state.settings.shopAddress || 'Authorized Dealer'} | ${state.settings.shopPhone || ''}</p>
               </div>
             </div>
             <div style="text-align: right;">
-              <h2 style="margin: 0; font-size: 42px; font-weight: 950; text-transform: uppercase; letter-spacing: 4px; color: #000;">INVOICE</h2>
-              <div style="margin-top: 15px;">
-                <p style="margin: 0; font-size: 20px; font-weight: 900; background: #000; color: #fff; display: inline-block; padding: 6px 16px; border-radius: 10px;">SERIAL: #${inv.id.padStart(6, '0')}</p>
-                <p style="margin: 8px 0 0 0; font-size: 14px; font-weight: 800; color: #555;">DATE: ${dateStr} ${timeStr}</p>
-              </div>
+              <h2 style="margin: 0; font-size: 28px; font-weight: 900; text-transform: uppercase; color: #000;">INVOICE</h2>
+              <p style="margin: 5px 0 0 0; font-size: 12px; font-weight: 700;">#${inv.id.padStart(6, '0')} | ${dateStr}</p>
             </div>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 40px;">
-            <div style="padding: 25px; border: 3px solid #000; border-radius: 20px; background: #fdfdfd;">
-              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Billed To</h4>
-              <p style="margin: 15px 0 0 0; font-size: 24px; font-weight: 950; color: #000;">${customer?.name || 'Walk-in Guest'}</p>
-              <p style="margin: 8px 0; font-size: 16px; font-weight: 800; color: #333;">Phone: ${customer?.phone || 'No phone recorded'}</p>
-              <p style="margin: 0; font-size: 13px; font-weight: 700; color: #666;">Address: ${customer?.address || 'N/A'}</p>
+          
+          <div style="display: flex; justify-content: space-between; margin-bottom: 25px; gap: 20px;">
+            <div style="flex: 1; padding: 15px; border: 1px solid #ddd; border-radius: 12px; background: #f9f9f9;">
+              <h4 style="margin: 0 0 8px 0; font-size: 9px; text-transform: uppercase; font-weight: 800; color: #666;">Bill To</h4>
+              <p style="margin: 0; font-size: 16px; font-weight: 800; color: #000;">${customer?.name || 'Walk-in Guest'}</p>
+              <p style="margin: 4px 0 0 0; font-size: 11px; color: #444;">${customer?.phone || ''} ${customer?.address ? ' | ' + customer.address : ''}</p>
             </div>
-            <div style="padding: 25px; border: 3px solid #000; border-radius: 20px; background: #fdfdfd;">
-              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Payment Details</h4>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span style="font-size: 15px; font-weight: 800;">Method:</span><span style="font-size: 15px; font-weight: 950; text-transform: uppercase;">${inv.paymentMethod}</span></div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span style="font-size: 15px; font-weight: 800;">Status:</span><span style="font-size: 15px; font-weight: 950; text-transform: uppercase; color: ${inv.status === 'paid' ? '#059669' : '#dc2626'};">${inv.status}</span></div>
+            <div style="flex: 1; padding: 15px; border: 1px solid #ddd; border-radius: 12px; background: #f9f9f9;">
+              <h4 style="margin: 0 0 8px 0; font-size: 9px; text-transform: uppercase; font-weight: 800; color: #666;">Payment Info</h4>
+              <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;"><span style="font-weight: 600;">Method:</span><span style="font-weight: 800; text-transform: uppercase;">${inv.paymentMethod}</span></div>
+              <div style="display: flex; justify-content: space-between; font-size: 11px;"><span style="font-weight: 600;">Status:</span><span style="font-weight: 800; text-transform: uppercase;">${inv.status}</span></div>
             </div>
           </div>
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 45px; border: 3px solid #000;">
-            <thead style="background: #efefef;">
-              <tr style="border-bottom: 3px solid #000;">
-                <th style="padding: 16px 12px; border-right: 1px solid #000; font-size: 11px; font-weight: 950; text-align: center; width: 45px;">#</th>
-                <th style="padding: 16px 12px; text-align: left; border-right: 1px solid #000; font-size: 11px; font-weight: 950;">ITEM DESCRIPTION & SKU</th>
-                <th style="padding: 16px 12px; border-right: 1px solid #000; font-size: 11px; font-weight: 950; text-align: center; width: 75px;">QTY</th>
-                <th style="padding: 16px 12px; text-align: right; border-right: 1px solid #000; font-size: 11px; font-weight: 950; width: 120px;">UNIT PRICE</th>
-                <th style="padding: 16px 12px; text-align: right; font-size: 11px; font-weight: 950; width: 150px;">LINE TOTAL</th>
+
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; border: 1px solid #000;">
+            <thead style="background: #f0f0f0;">
+              <tr style="border-bottom: 2px solid #000;">
+                <th style="padding: 10px 8px; border-right: 1px solid #ccc; font-size: 10px; font-weight: 900; text-align: center; width: 40px;">#</th>
+                <th style="padding: 10px 8px; text-align: left; border-right: 1px solid #ccc; font-size: 10px; font-weight: 900;">DESCRIPTION</th>
+                <th style="padding: 10px 8px; border-right: 1px solid #ccc; font-size: 10px; font-weight: 900; text-align: center; width: 60px;">QTY</th>
+                <th style="padding: 10px 8px; text-align: right; border-right: 1px solid #ccc; font-size: 10px; font-weight: 900; width: 100px;">PRICE</th>
+                <th style="padding: 10px 8px; text-align: right; font-size: 10px; font-weight: 900; width: 110px;">TOTAL</th>
               </tr>
             </thead>
             <tbody>${itemsHTML}</tbody>
           </table>
+
           <div style="display: flex; justify-content: flex-end;">
-            <div style="width: 350px; border: 4px solid #000; border-radius: 20px; padding: 30px; background: #fff;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 16px; font-weight: 800;">
-                <span style="color: #666;">SUBTOTAL</span>
+            <div style="width: 280px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #555;">
+                <span>SUBTOTAL</span>
                 <span>${currency}${inv.subtotal.toLocaleString()}</span>
               </div>
-              <div style="border-top: 4px solid #000; margin-top: 20px; padding-top: 20px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 20px; font-weight: 950; color: #000; text-transform: uppercase;">Total</span>
-                <span style="font-size: 42px; font-weight: 950;">${currency}${inv.total.toLocaleString()}</span>
+              <div style="border-top: 3px solid #000; margin-top: 10px; padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 16px; font-weight: 900; color: #000;">TOTAL DUE</span>
+                <span style="font-size: 24px; font-weight: 900;">${currency}${inv.total.toLocaleString()}</span>
               </div>
             </div>
+          </div>
+          
+          <div style="margin-top: 40px; border-top: 1px solid #eee; padding-top: 15px; font-size: 10px; color: #666; text-align: center;">
+             This document is computer generated and valid without signature.
           </div>
         </div>
     `;

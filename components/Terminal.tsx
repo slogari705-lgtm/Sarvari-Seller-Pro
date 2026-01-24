@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
@@ -171,6 +172,12 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
     const timeStr = new Date(inv.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const currency = state.settings.currency;
 
+    const previousDebt = inv.previousDebt || 0;
+    const currentInvoiceTotal = inv.total;
+    const grandTotal = previousDebt + currentInvoiceTotal;
+    const amountPaid = inv.paidAmount;
+    const remainingBalance = grandTotal - amountPaid;
+
     const itemsHTML = inv.items.map((item, idx) => `
       <tr style="border-bottom: 1px solid #000;">
         <td style="padding: 12px 10px; text-align: center; border-right: 1px solid #000; font-size: 13px;">${idx + 1}</td>
@@ -197,25 +204,25 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
               </div>
             </div>
             <div style="text-align: right;">
-              <h2 style="margin: 0; font-size: 42px; font-weight: 950; text-transform: uppercase; letter-spacing: 4px; color: #000;">${inv.id === 'DRAFT' ? 'PRO-FORMA ADVICE' : 'ADVICE NOTE'}</h2>
+              <h2 style="margin: 0; font-size: 42px; font-weight: 950; text-transform: uppercase; letter-spacing: 4px; color: #000;">${inv.id === 'DRAFT' ? 'PRO-FORMA' : 'INVOICE'}</h2>
               <div style="margin-top: 15px;">
-                <p style="margin: 0; font-size: 20px; font-weight: 900; background: #000; color: #fff; display: inline-block; padding: 6px 16px; border-radius: 10px;">SERIAL: #${inv.id === 'DRAFT' ? 'PRO-FORMA' : inv.id.padStart(6, '0')}</p>
+                <p style="margin: 0; font-size: 20px; font-weight: 900; background: #000; color: #fff; display: inline-block; padding: 6px 16px; border-radius: 10px;">SERIAL: #${inv.id === 'DRAFT' ? 'DRAFT' : inv.id.padStart(6, '0')}</p>
                 <p style="margin: 8px 0 0 0; font-size: 14px; font-weight: 800; color: #555;">DATE: ${dateStr} ${timeStr}</p>
               </div>
             </div>
           </div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 40px;">
             <div style="padding: 25px; border: 3px solid #000; border-radius: 20px; background: #fdfdfd;">
-              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Billed / Shipped To</h4>
+              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Billed To</h4>
               <p style="margin: 15px 0 0 0; font-size: 24px; font-weight: 950; color: #000;">${customer?.name || 'Walk-in Guest'}</p>
               <p style="margin: 8px 0; font-size: 16px; font-weight: 800; color: #333;">Phone: ${customer?.phone || 'No phone recorded'}</p>
               <p style="margin: 0; font-size: 13px; font-weight: 700; color: #666;">Address: ${customer?.address || 'N/A'}</p>
             </div>
             <div style="padding: 25px; border: 3px solid #000; border-radius: 20px; background: #fdfdfd;">
-              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Document Settlement</h4>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span style="font-size: 15px; font-weight: 800;">Method:</span><span style="font-size: 15px; font-weight: 950; text-transform: uppercase;">${inv.paymentMethod}</span></div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span style="font-size: 15px; font-weight: 800;">Status:</span><span style="font-size: 15px; font-weight: 950; text-transform: uppercase; color: ${inv.status === 'paid' ? '#059669' : '#dc2626'};">${inv.status}</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="font-size: 15px; font-weight: 800;">Ref Code:</span><span style="font-size: 15px; font-weight: 950;">TXN-${Date.now().toString().slice(-8)}</span></div>
+              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Account Summary</h4>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 14px; font-weight: 800;">Previous Loan:</span><span style="font-size: 14px; font-weight: 950;">${currency}${previousDebt.toLocaleString()}</span></div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;"><span style="font-size: 14px; font-weight: 800;">Current Bill:</span><span style="font-size: 14px; font-weight: 950;">${currency}${currentInvoiceTotal.toLocaleString()}</span></div>
+              <div style="display: flex; justify-content: space-between; border-top: 2px solid #000; pt: 8px; margin-top: 8px;"><span style="font-size: 16px; font-weight: 900;">Total Payable:</span><span style="font-size: 16px; font-weight: 950;">${currency}${grandTotal.toLocaleString()}</span></div>
             </div>
           </div>
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 45px; border: 3px solid #000;">
@@ -232,25 +239,25 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
           </table>
           <div style="display: flex; justify-content: space-between; align-items: end; gap: 50px;">
             <div style="flex: 1; padding: 25px; border: 3px dashed #000; border-radius: 20px; min-height: 140px; background: #fff;">
-               <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; color: #555; letter-spacing: 1px;">Merchant Remarks</h4>
-               <p style="margin: 0; font-size: 14px; font-weight: 700; line-height: 1.6; color: #222;">${inv.notes || 'This document serves as a formal record of sale. Please verify all items before signing. We appreciate your partnership and look forward to serving you again.'}</p>
+               <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; color: #555; letter-spacing: 1px;">Status: ${inv.status.toUpperCase()}</h4>
+               <p style="margin: 0; font-size: 14px; font-weight: 700; line-height: 1.6; color: #222;">${inv.notes || 'Thank you for your business.'}</p>
             </div>
             <div style="width: 350px; border: 4px solid #000; border-radius: 20px; padding: 30px; background: #fff;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 16px; font-weight: 800;">
-                <span style="color: #666;">GROSS SUBTOTAL</span>
-                <span>${currency}${inv.subtotal.toLocaleString()}</span>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 16px; font-weight: 800;">
+                <span style="color: #666;">Grand Total</span>
+                <span>${currency}${grandTotal.toLocaleString()}</span>
               </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 16px; font-weight: 800;">
-                <span style="color: #666;">TAX & FEES (${state.settings.taxRate}%)</span>
-                <span>${currency}${inv.tax.toLocaleString()}</span>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 16px; font-weight: 800;">
+                <span style="color: #666;">Paid Amount</span>
+                <span>${currency}${amountPaid.toLocaleString()}</span>
               </div>
-              <div style="border-top: 4px solid #000; margin-top: 20px; padding-top: 20px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 20px; font-weight: 950; color: #000; text-transform: uppercase;">Total Due</span>
-                <span style="font-size: 42px; font-weight: 950;">${currency}${inv.total.toLocaleString()}</span>
+              <div style="border-top: 4px solid #000; margin-top: 15px; padding-top: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 20px; font-weight: 950; color: #000; text-transform: uppercase;">Balance Due</span>
+                <span style="font-size: 32px; font-weight: 950;">${currency}${remainingBalance.toLocaleString()}</span>
               </div>
             </div>
           </div>
-          <div style="margin-top: 140px; display: flex; justify-content: space-between; padding: 0 50px;">
+          <div style="margin-top: 100px; display: flex; justify-content: space-between; padding: 0 50px;">
              <div style="text-align: center; border-top: 3px solid #000; width: 250px; padding-top: 18px; font-size: 15px; font-weight: 950; text-transform: uppercase; letter-spacing: 2px;">Recipient Sign</div>
              <div style="text-align: center; border-top: 3px solid #000; width: 250px; padding-top: 18px; font-size: 15px; font-weight: 950; text-transform: uppercase; letter-spacing: 2px;">Authorized Stamp</div>
           </div>
@@ -258,32 +265,48 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
       `;
     }
 
-    // Default Thermal
+    // Thermal Receipt
     return `
       <div style="width: 80mm; padding: 8mm 2mm; font-family: 'Courier New', Courier, monospace; color: #000; line-height: 1.3; text-align: center;">
         <h2 style="margin: 0; font-size: 22px; font-weight: 950; text-transform: uppercase;">${state.settings.shopName}</h2>
-        <p style="margin: 6px 0; font-size: 11px;">${state.settings.shopAddress || ''}</p>
-        <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 15px 0; font-size: 11px; text-align: left;">
+        <p style="margin: 4px 0; font-size: 10px;">${state.settings.shopAddress || ''}</p>
+        <div style="border-top: 2px dashed #000; border-bottom: 2px dashed #000; padding: 10px 0; margin: 15px 0; font-size: 12px; text-align: left; font-weight: bold;">
           <div style="display: flex; justify-content: space-between;"><span>INV:</span> <span>#${inv.id}</span></div>
           <div style="display: flex; justify-content: space-between;"><span>DATE:</span> <span>${dateStr}</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>TIME:</span> <span>${timeStr}</span></div>
           <div style="display: flex; justify-content: space-between;"><span>USER:</span> <span>${customer?.name || 'WALK-IN'}</span></div>
         </div>
         <div style="text-align: left; margin-bottom: 15px;">
-          <div style="display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px solid #000; margin-bottom: 8px; font-size: 11px;">
-             <span>DESCRIPTION</span><span>TOTAL</span>
-          </div>
           ${inv.items.map(i => `
-            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 11px;">
-               <span>${i.quantity}x ${i.name.substring(0, 18)}</span>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; font-weight: bold;">
+               <span>${i.quantity}x ${i.name.substring(0, 16)}</span>
                <span>${currency}${(i.price * i.quantity).toLocaleString()}</span>
             </div>
           `).join('')}
         </div>
-        <div style="border-top: 2px solid #000; padding-top: 12px; font-weight: 950; font-size: 20px; display: flex; justify-content: space-between; text-align: left;">
-          <span>TOTAL</span>
-          <span>${currency}${inv.total.toLocaleString()}</span>
+        <div style="border-top: 2px solid #000; padding-top: 10px; font-size: 12px; text-align: left; font-weight: bold;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+             <span>Prev Balance:</span>
+             <span>${currency}${previousDebt.toLocaleString()}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+             <span>Current Bill:</span>
+             <span>${currency}${currentInvoiceTotal.toLocaleString()}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-top: 1px dashed #000; padding-top: 4px; margin-top: 4px;">
+             <span>Total Due:</span>
+             <span>${currency}${grandTotal.toLocaleString()}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+             <span>Paid Now:</span>
+             <span>${currency}${amountPaid.toLocaleString()}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-top: 2px solid #000; padding-top: 6px; margin-top: 6px; font-size: 16px;">
+             <span>BALANCE:</span>
+             <span>${currency}${remainingBalance.toLocaleString()}</span>
+          </div>
         </div>
-        <div style="margin-top: 30px; font-size: 11px; border-top: 1px dashed #000; padding-top: 15px; font-weight: bold; letter-spacing: 1px;">
+        <div style="margin-top: 30px; font-size: 11px; border-top: 1px dashed #000; padding-top: 15px; font-weight: bold;">
            THANK YOU FOR YOUR PATRONAGE
         </div>
       </div>
@@ -300,9 +323,13 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
     const nextId = (maxId + 1).toString();
 
     const status: Invoice['status'] = finalPaid >= total ? 'paid' : (finalPaid > 0 ? 'partial' : 'unpaid');
+    
+    // Capture the customer's previous debt BEFORE this transaction
+    const previousDebt = selectedCustomer?.totalDebt || 0;
+
     const newInvoice: Invoice = {
       id: nextId,
-      date: new Date().toISOString(),
+      date: new Date().toISOString(), // Includes time
       customerId: selectedCustomer?.id,
       items: cart,
       subtotal,
@@ -312,7 +339,8 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
       profit: invoiceProfit,
       paidAmount: finalPaid,
       status,
-      paymentMethod
+      paymentMethod,
+      previousDebt // Store it
     };
 
     updateState('invoices', [...state.invoices, newInvoice]);
@@ -330,7 +358,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
             ...c,
             totalSpent: c.totalSpent + total,
             totalDebt: (c.totalDebt || 0) + balanceDue,
-            lastVisit: new Date().toISOString().split('T')[0],
+            lastVisit: new Date().toISOString().split('T')[0], // Assuming lastVisit is date only string is fine, or update to include time if needed, but ISO split is standard for just date display in lists
             transactionCount: (c.transactionCount || 0) + 1
           };
         }
@@ -361,7 +389,8 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
        profit: 0,
        paidAmount: 0,
        status: 'unpaid' as const,
-       paymentMethod: 'cash' as const
+       paymentMethod: 'cash' as const,
+       previousDebt: selectedCustomer?.totalDebt || 0
     } : null);
 
     if (!invToPrint) return;
@@ -380,6 +409,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
     }, 600);
   };
 
+  // ... rest of component logic (return statement) remains the same structure, just utilizing the new functions ...
   return (
     <div className="h-full flex flex-col lg:flex-row gap-4 lg:gap-6 relative">
       <div className="flex-1 flex flex-col gap-4 lg:gap-6 min-h-0">

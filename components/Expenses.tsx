@@ -67,12 +67,27 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
   const handleAddExpense = () => {
     if (!newExpense.description || !newExpense.amount) return;
     
+    // Precise Date & Time Logic
+    let finalDate = new Date().toISOString();
+    if (newExpense.date) {
+        const selectedDate = new Date(newExpense.date);
+        const now = new Date();
+        // If the selected date is today, retain the current time for accuracy
+        if (selectedDate.toDateString() === now.toDateString()) {
+            finalDate = now.toISOString();
+        } else {
+            // If it's a past/future date, set to noon to avoid timezone issues shifting the day
+            selectedDate.setHours(12, 0, 0, 0);
+            finalDate = selectedDate.toISOString();
+        }
+    }
+
     const expense: Expense = {
       id: Math.random().toString(36).substr(2, 9),
       description: newExpense.description,
       category: newExpense.category || 'General',
       amount: Number(newExpense.amount),
-      date: newExpense.date || new Date().toISOString().split('T')[0]
+      date: finalDate
     };
 
     updateState('expenses', [...state.expenses, expense]);
@@ -220,7 +235,7 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
                    <tr>
                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.notes}</th>
                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.category}</th>
-                     <th className="px-8 py-5 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.dateRange}</th>
+                     <th className="px-8 py-5 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Date & Time</th>
                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">{t.price}</th>
                      <th className="px-8 py-5 w-20"></th>
                    </tr>
@@ -237,7 +252,9 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
                        <td className="px-8 py-5">
                          <span className="text-[10px] font-black px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg uppercase tracking-widest">{e.category}</span>
                        </td>
-                       <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase tracking-widest">{new Date(e.date).toLocaleDateString()}</td>
+                       <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                         {new Date(e.date).toLocaleDateString()} <span className="text-slate-300 dark:text-slate-600 mx-1">|</span> {new Date(e.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                       </td>
                        <td className="px-8 py-5 text-right font-black text-rose-600 dark:text-rose-400 text-base">{state.settings.currency}{e.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                        <td className="px-8 py-5 text-right">
                          <button onClick={() => deleteExpense(e.id)} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-xl transition-all opacity-0 group-hover:opacity-100"><Trash2 size={18} /></button>
@@ -380,7 +397,7 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
                     <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
                     <input 
                       type="date" 
-                      value={newExpense.date || ''} 
+                      value={newExpense.date ? new Date(newExpense.date).toISOString().split('T')[0] : ''} 
                       onChange={(e) => setNewExpense({...newExpense, date: e.target.value})} 
                       className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-rose-500 rounded-2xl py-4 pl-12 pr-6 outline-none font-bold text-sm dark:text-white transition-all shadow-inner"
                     />

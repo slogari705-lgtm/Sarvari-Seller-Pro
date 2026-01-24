@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
@@ -36,12 +37,13 @@ import {
   ChevronDown,
   ArrowRight
 } from 'lucide-react';
-import { AppState, Product, Customer, CartItem, Invoice, InvoiceTemplate, LoanTransaction } from '../types';
+import { AppState, Product, Customer, CartItem, Invoice, InvoiceTemplate, LoanTransaction, View } from '../types';
 import { translations } from '../translations';
 
 interface Props {
   state: AppState;
   updateState: <K extends keyof AppState>(key: K, value: AppState[K]) => void;
+  setCurrentView?: (view: View) => void;
 }
 
 const Invoices: React.FC<Props> = ({ state, updateState }) => {
@@ -50,7 +52,8 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [printLayout, setPrintLayout] = useState<'a4' | 'thermal' | 'advice'>('advice');
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState<'a4' | 'thermal' | 'advice'>('a4');
   
   // Filter States
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'partial' | 'unpaid'>('all');
@@ -190,6 +193,15 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
        invoiceDateObj.setHours(12, 0, 0);
     }
 
+    // Preserve previous debt if editing, or capture current debt if creating new (though creating is usually done in Terminal)
+    // If creating from here, we assume current debt is the previous debt for this new invoice.
+    let previousDebt = 0;
+    if (editingInvoiceId) {
+        previousDebt = oldInvoice?.previousDebt || 0;
+    } else {
+        previousDebt = builderCustomer?.totalDebt || 0;
+    }
+
     const newInvoice: Invoice = {
       id: nextId,
       date: invoiceDateObj.toISOString(),
@@ -203,7 +215,8 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       profit: invoiceProfit,
       status,
       paymentMethod: builderPayment,
-      notes: builderNotes
+      notes: builderNotes,
+      previousDebt
     };
 
     // INVENTORY RECONCILIATION
@@ -310,88 +323,99 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     const timeStr = new Date(inv.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const currency = state.settings.currency;
 
+    const previousDebt = inv.previousDebt || 0;
+    const currentInvoiceTotal = inv.total;
+    const grandTotal = previousDebt + currentInvoiceTotal;
+    const amountPaid = inv.paidAmount;
+    const remainingBalance = grandTotal - amountPaid;
+
     const itemsHTML = inv.items.map((item, idx) => `
-      <tr style="border-bottom: 1px solid #000;">
-        <td style="padding: 12px 10px; text-align: center; border-right: 1px solid #000; font-size: 13px;">${idx + 1}</td>
-        <td style="padding: 12px 10px; border-right: 1px solid #000;">
-          <div style="font-weight: 900; font-size: 14px;">${item.name}</div>
-          <div style="font-size: 10px; text-transform: uppercase; margin-top: 2px; color: #555;">SKU: ${item.sku}</div>
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 6px 4px; text-align: center; border-right: 1px solid #eee; font-size: 11px;">${idx + 1}</td>
+        <td style="padding: 6px 8px; border-right: 1px solid #eee;">
+          <div style="font-weight: 700; font-size: 12px;">${item.name}</div>
+          <div style="font-size: 9px; text-transform: uppercase; color: #555;">${item.sku}</div>
         </td>
-        <td style="padding: 12px 10px; text-align: center; font-weight: 800; border-right: 1px solid #000; font-size: 13px;">${item.quantity}</td>
-        <td style="padding: 12px 10px; text-align: right; font-weight: 800; border-right: 1px solid #000; font-size: 13px;">${currency}${item.price.toLocaleString()}</td>
-        <td style="padding: 12px 10px; text-align: right; font-weight: 900; font-size: 15px;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
+        <td style="padding: 6px 4px; text-align: center; font-weight: 600; border-right: 1px solid #eee; font-size: 11px;">${item.quantity}</td>
+        <td style="padding: 6px 8px; text-align: right; font-weight: 600; border-right: 1px solid #eee; font-size: 11px;">${currency}${item.price.toLocaleString()}</td>
+        <td style="padding: 6px 8px; text-align: right; font-weight: 700; font-size: 11px;">${currency}${(item.price * item.quantity).toLocaleString()}</td>
       </tr>
     `).join('');
 
     if (layout === 'advice') {
       return `
-        <div style="width: 210mm; min-height: 297mm; padding: 20mm; font-family: 'Inter', Arial, sans-serif; color: #000; background: #fff; box-sizing: border-box; border: 1px solid #eee;">
-          <div style="display: flex; justify-content: space-between; border-bottom: 6px solid #000; padding-bottom: 25px; margin-bottom: 35px;">
-            <div style="display: flex; gap: 20px; align-items: center;">
-              <div style="width: 80px; height: 80px; background: #000; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 950; font-size: 48px;">S</div>
+        <div style="width: 210mm; padding: 12mm; font-family: 'Inter', Arial, sans-serif; color: #000; background: #fff; box-sizing: border-box;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 20px;">
+            <div style="display: flex; gap: 15px; align-items: center;">
+              <div style="width: 50px; height: 50px; background: #000; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 28px;">S</div>
               <div>
-                <h1 style="margin: 0; font-size: 34px; font-weight: 950; text-transform: uppercase; letter-spacing: -1.5px;">${state.settings.shopName}</h1>
-                <p style="margin: 8px 0; font-size: 14px; font-weight: 800; color: #333;">${state.settings.shopAddress || 'Authorized Dealer'}</p>
-                <p style="margin: 0; font-size: 14px; font-weight: 800; color: #333;">TEL: ${state.settings.shopPhone || 'N/A'}</p>
+                <h1 style="margin: 0; font-size: 22px; font-weight: 900; text-transform: uppercase;">${state.settings.shopName}</h1>
+                <p style="margin: 4px 0 0 0; font-size: 11px; color: #444;">${state.settings.shopAddress || 'Authorized Dealer'} | ${state.settings.shopPhone || ''}</p>
               </div>
             </div>
             <div style="text-align: right;">
-              <h2 style="margin: 0; font-size: 42px; font-weight: 950; text-transform: uppercase; letter-spacing: 4px; color: #000;">ADVICE NOTE</h2>
-              <div style="margin-top: 15px;">
-                <p style="margin: 0; font-size: 20px; font-weight: 900; background: #000; color: #fff; display: inline-block; padding: 6px 16px; border-radius: 10px;">SERIAL: #${inv.id.padStart(6, '0')}</p>
-                <p style="margin: 8px 0 0 0; font-size: 14px; font-weight: 800; color: #555;">DATE: ${dateStr} ${timeStr}</p>
-              </div>
+              <h2 style="margin: 0; font-size: 28px; font-weight: 900; text-transform: uppercase; color: #000;">ADVICE NOTE</h2>
+              <p style="margin: 5px 0 0 0; font-size: 12px; font-weight: 700;">#${inv.id.padStart(6, '0')} | ${dateStr}</p>
             </div>
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 40px;">
-            <div style="padding: 25px; border: 3px solid #000; border-radius: 20px; background: #fdfdfd;">
-              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Billed / Shipped To</h4>
-              <p style="margin: 15px 0 0 0; font-size: 24px; font-weight: 950; color: #000;">${customer?.name || 'Walk-in Guest'}</p>
-              <p style="margin: 8px 0; font-size: 16px; font-weight: 800; color: #333;">Phone: ${customer?.phone || 'No phone recorded'}</p>
-              <p style="margin: 0; font-size: 13px; font-weight: 700; color: #666;">Address: ${customer?.address || 'N/A'}</p>
+          
+          <div style="display: flex; justify-content: space-between; margin-bottom: 25px; gap: 20px;">
+            <div style="flex: 1; padding: 15px; border: 1px solid #ddd; border-radius: 12px; background: #f9f9f9;">
+              <h4 style="margin: 0 0 8px 0; font-size: 9px; text-transform: uppercase; font-weight: 800; color: #666;">Bill To</h4>
+              <p style="margin: 0; font-size: 16px; font-weight: 800; color: #000;">${customer?.name || 'Walk-in Guest'}</p>
+              <p style="margin: 4px 0 0 0; font-size: 11px; color: #444;">${customer?.phone || ''} ${customer?.address ? ' | ' + customer.address : ''}</p>
             </div>
-            <div style="padding: 25px; border: 3px solid #000; border-radius: 20px; background: #fdfdfd;">
-              <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; border-bottom: 2px solid #000; padding-bottom: 8px; letter-spacing: 2px; color: #444;">Document Settlement</h4>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span style="font-size: 15px; font-weight: 800;">Method:</span><span style="font-size: 15px; font-weight: 950; text-transform: uppercase;">${inv.paymentMethod}</span></div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 12px;"><span style="font-size: 15px; font-weight: 800;">Status:</span><span style="font-size: 15px; font-weight: 950; text-transform: uppercase; color: ${inv.status === 'paid' ? '#059669' : '#dc2626'};">${inv.status}</span></div>
-              <div style="display: flex; justify-content: space-between;"><span style="font-size: 15px; font-weight: 800;">Internal ID:</span><span style="font-size: 15px; font-weight: 950;">REF-${Date.now().toString().slice(-8)}</span></div>
+            <div style="flex: 1; padding: 15px; border: 1px solid #ddd; border-radius: 12px; background: #f9f9f9;">
+              <h4 style="margin: 0 0 8px 0; font-size: 9px; text-transform: uppercase; font-weight: 800; color: #666;">Account Summary</h4>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;"><span style="font-weight: 600;">Previous Balance:</span><span style="font-weight: 800;">${currency}${previousDebt.toLocaleString()}</span></div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;"><span style="font-weight: 600;">Current Invoice:</span><span style="font-weight: 800;">${currency}${currentInvoiceTotal.toLocaleString()}</span></div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;"><span style="font-weight: 600;">Total Payable:</span><span style="font-weight: 800;">${currency}${grandTotal.toLocaleString()}</span></div>
             </div>
           </div>
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 45px; border: 3px solid #000;">
-            <thead style="background: #efefef;">
-              <tr style="border-bottom: 3px solid #000;">
-                <th style="padding: 16px 12px; border-right: 1px solid #000; font-size: 11px; font-weight: 950; text-align: center; width: 45px;">#</th>
-                <th style="padding: 16px 12px; text-align: left; border-right: 1px solid #000; font-size: 11px; font-weight: 950;">ITEM DESCRIPTION & SKU</th>
-                <th style="padding: 16px 12px; border-right: 1px solid #000; font-size: 11px; font-weight: 950; text-align: center; width: 75px;">QTY</th>
-                <th style="padding: 16px 12px; text-align: right; border-right: 1px solid #000; font-size: 11px; font-weight: 950; width: 120px;">UNIT PRICE</th>
-                <th style="padding: 16px 12px; text-align: right; font-size: 11px; font-weight: 950; width: 150px;">LINE TOTAL</th>
+
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; border: 1px solid #000;">
+            <thead style="background: #f0f0f0;">
+              <tr style="border-bottom: 2px solid #000;">
+                <th style="padding: 10px 8px; border-right: 1px solid #ccc; font-size: 10px; font-weight: 900; text-align: center; width: 40px;">#</th>
+                <th style="padding: 10px 8px; text-align: left; border-right: 1px solid #ccc; font-size: 10px; font-weight: 900;">DESCRIPTION</th>
+                <th style="padding: 10px 8px; border-right: 1px solid #ccc; font-size: 10px; font-weight: 900; text-align: center; width: 60px;">QTY</th>
+                <th style="padding: 10px 8px; text-align: right; border-right: 1px solid #ccc; font-size: 10px; font-weight: 900; width: 100px;">PRICE</th>
+                <th style="padding: 10px 8px; text-align: right; font-size: 10px; font-weight: 900; width: 110px;">TOTAL</th>
               </tr>
             </thead>
             <tbody>${itemsHTML}</tbody>
           </table>
-          <div style="display: flex; justify-content: space-between; align-items: end; gap: 50px;">
-            <div style="flex: 1; padding: 25px; border: 3px dashed #000; border-radius: 20px; min-height: 140px; background: #fff;">
-               <h4 style="margin: 0 0 12px 0; font-size: 11px; text-transform: uppercase; font-weight: 950; color: #555; letter-spacing: 1px;">Merchant Remarks</h4>
-               <p style="margin: 0; font-size: 14px; font-weight: 700; line-height: 1.6; color: #222;">${inv.notes || 'This advice confirms the release of goods listed above. Please inspect for defects before signature. Signed documents are final records of acceptance. We value your business.'}</p>
+
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 40px;">
+            <div style="flex: 1;">
+               <h4 style="margin: 0 0 5px 0; font-size: 10px; text-transform: uppercase; font-weight: 700; color: #555;">Notes</h4>
+               <p style="margin: 0; font-size: 11px; font-style: italic; color: #333; line-height: 1.4;">${inv.notes || 'This advice confirms the release of goods listed above. Please inspect for defects before signature.'}</p>
             </div>
-            <div style="width: 350px; border: 4px solid #000; border-radius: 20px; padding: 30px; background: #fff;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 16px; font-weight: 800;">
-                <span style="color: #666;">GROSS SUBTOTAL</span>
-                <span>${currency}${inv.subtotal.toLocaleString()}</span>
+            <div style="width: 250px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #555;">
+                <span>Total Due</span>
+                <span>${currency}${grandTotal.toLocaleString()}</span>
               </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 16px; font-weight: 800;">
-                <span style="color: #666;">TAX & FEES</span>
-                <span>${currency}${inv.tax.toLocaleString()}</span>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #555;">
+                <span>Paid Now</span>
+                <span>${currency}${amountPaid.toLocaleString()}</span>
               </div>
-              <div style="border-top: 4px solid #000; margin-top: 20px; padding-top: 20px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 20px; font-weight: 950; color: #000; text-transform: uppercase;">Total Due</span>
-                <span style="font-size: 42px; font-weight: 950;">${currency}${inv.total.toLocaleString()}</span>
+              <div style="border-top: 3px solid #000; margin-top: 10px; padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 16px; font-weight: 900; color: #000;">BALANCE</span>
+                <span style="font-size: 24px; font-weight: 900;">${currency}${remainingBalance.toLocaleString()}</span>
               </div>
             </div>
           </div>
-          <div style="margin-top: 140px; display: flex; justify-content: space-between; padding: 0 50px;">
-             <div style="text-align: center; border-top: 3px solid #000; width: 250px; padding-top: 18px; font-size: 15px; font-weight: 950; text-transform: uppercase; letter-spacing: 2px;">Customer Signature</div>
-             <div style="text-align: center; border-top: 3px solid #000; width: 250px; padding-top: 18px; font-size: 15px; font-weight: 950; text-transform: uppercase; letter-spacing: 2px;">Authorized Stamp</div>
+          
+          <div style="margin-top: 40px; display: flex; justify-content: space-between; padding-top: 20px; border-top: 1px dashed #ccc;">
+             <div style="text-align: center; width: 150px;">
+                <div style="border-bottom: 1px solid #000; height: 30px;"></div>
+                <div style="font-size: 10px; font-weight: 700; margin-top: 5px;">SIGNATURE</div>
+             </div>
+             <div style="text-align: center; width: 150px;">
+                <div style="border-bottom: 1px solid #000; height: 30px;"></div>
+                <div style="font-size: 10px; font-weight: 700; margin-top: 5px;">STAMP</div>
+             </div>
           </div>
         </div>
       `;
@@ -399,55 +423,62 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
 
     if (layout === 'thermal') {
       return `
-        <div style="width: 80mm; padding: 8mm 2mm; font-family: 'Courier New', Courier, monospace; color: #000; line-height: 1.2; text-align: center;">
-          <h2 style="margin: 0; font-size: 22px; font-weight: 950; text-transform: uppercase;">${state.settings.shopName}</h2>
-          <p style="margin: 6px 0; font-size: 11px;">${state.settings.shopAddress || ''}</p>
-          <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 15px 0; font-size: 11px; text-align: left;">
-            <div>INV: #${inv.id} | ${dateStr}</div>
+        <div style="width: 80mm; padding: 5mm 2mm; font-family: 'Courier New', Courier, monospace; color: #000; line-height: 1.2; text-align: center;">
+          <h2 style="margin: 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">${state.settings.shopName}</h2>
+          <p style="margin: 4px 0; font-size: 10px;">${state.settings.shopAddress || ''}</p>
+          <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 8px 0; margin: 10px 0; font-size: 10px; text-align: left;">
+            <div>INV: #${inv.id}</div>
+            <div>DATE: ${dateStr} ${timeStr}</div>
             <div>USER: ${customer?.name || 'WALK-IN'}</div>
           </div>
-          <div style="text-align: left; margin-bottom: 15px;">
-            ${inv.items.map(i => `<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span>${i.quantity}x ${i.name}</span><span>${currency}${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
+          <div style="text-align: left; margin-bottom: 10px;">
+            ${inv.items.map(i => `<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 10px;"><span>${i.quantity}x ${i.name.substring(0,20)}</span><span>${currency}${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
           </div>
-          <div style="border-top: 2px solid #000; padding-top: 10px; font-weight: 950; font-size: 18px; display: flex; justify-content: space-between; text-align: left;">
-            <span>TOTAL</span>
-            <span>${currency}${inv.total.toLocaleString()}</span>
+          <div style="border-top: 2px solid #000; padding-top: 10px; font-weight: 950; font-size: 12px; display: flex; flex-col; gap: 4px; text-align: left;">
+            <div style="display: flex; justify-content: space-between;"><span>Prev Balance:</span><span>${currency}${previousDebt.toLocaleString()}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span>Current Bill:</span><span>${currency}${currentInvoiceTotal.toLocaleString()}</span></div>
+            <div style="display: flex; justify-content: space-between; border-top: 1px dashed #000; padding-top: 4px;"><span>Total Due:</span><span>${currency}${grandTotal.toLocaleString()}</span></div>
+            <div style="display: flex; justify-content: space-between;"><span>Paid Now:</span><span>${currency}${amountPaid.toLocaleString()}</span></div>
+            <div style="display: flex; justify-content: space-between; border-top: 2px solid #000; padding-top: 6px; margin-top: 6px; font-size: 16px;"><span>BALANCE:</span><span>${currency}${remainingBalance.toLocaleString()}</span></div>
           </div>
-          <p style="margin-top: 30px; font-size: 11px; border-top: 1px dashed #000; padding-top: 10px;">THANK YOU FOR YOUR VISIT</p>
+          <p style="margin-top: 20px; font-size: 10px; border-top: 1px dashed #000; padding-top: 8px;">THANK YOU FOR YOUR VISIT</p>
         </div>
       `;
     }
 
     return `
-      <div style="width: 210mm; min-height: 297mm; padding: 25mm; font-family: 'Inter', sans-serif; background: #fff;">
-        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 50px;">
-          <h1 style="margin: 0; font-size: 34px; font-weight: 950; color: #4f46e5;">${state.settings.shopName}</h1>
-          <div style="text-align: right;">
-            <h2 style="margin: 0; font-size: 52px; font-weight: 950; color: #f1f5f9; line-height: 0.9;">INVOICE</h2>
-            <p style="margin: 15px 0 0 0; font-size: 20px; font-weight: 900;">ID: #${inv.id.padStart(6, '0')}</p>
+        <div style="width: 210mm; padding: 15mm; font-family: 'Inter', sans-serif; background: #fff; box-sizing: border-box;">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 30px;">
+            <h1 style="margin: 0; font-size: 24px; font-weight: 950; color: #4f46e5;">${state.settings.shopName}</h1>
+            <div style="text-align: right;">
+              <h2 style="margin: 0; font-size: 32px; font-weight: 950; color: #ccc; line-height: 1;">INVOICE</h2>
+              <p style="margin: 5px 0 0 0; font-size: 14px; font-weight: 700;">#${inv.id.padStart(6, '0')}</p>
+            </div>
           </div>
-        </div>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 50px;">
-          <thead style="background: #0f172a; color: #fff;">
-            <tr>
-              <th style="padding: 15px; text-align: left;">Description</th>
-              <th style="padding: 15px; text-align: center;">Qty</th>
-              <th style="padding: 15px; text-align: right;">Line Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${inv.items.map(item => `<tr style="border-bottom: 1px solid #f1f5f9;"><td style="padding: 15px; font-weight: 900;">${item.name}</td><td style="padding: 15px; text-align: center;">${item.quantity}</td><td style="padding: 15px; text-align: right; font-weight: 900;">${currency}${(item.price * item.quantity).toLocaleString()}</td></tr>`).join('')}
-          </tbody>
-        </table>
-        <div style="display: flex; justify-content: flex-end;">
-          <div style="width: 280px; padding: 25px; border: 4px solid #000; border-radius: 20px; background: #fff;">
-            <div style="display: flex; justify-content: space-between; font-size: 24px; font-weight: 950; color: #000;">
-              <span>TOTAL</span>
-              <span>${currency}${inv.total.toLocaleString()}</span>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+            <thead style="background: #f8fafc; border-bottom: 2px solid #000;">
+              <tr>
+                <th style="padding: 10px; text-align: left; font-size: 12px; font-weight: 900;">ITEM</th>
+                <th style="padding: 10px; text-align: center; font-size: 12px; font-weight: 900;">QTY</th>
+                <th style="padding: 10px; text-align: right; font-size: 12px; font-weight: 900;">TOTAL</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${inv.items.map(item => `<tr style="border-bottom: 1px solid #eee;"><td style="padding: 10px; font-size: 12px; font-weight: 600;">${item.name}</td><td style="padding: 10px; text-align: center; font-size: 12px;">${item.quantity}</td><td style="padding: 10px; text-align: right; font-size: 12px; font-weight: 700;">${currency}${(item.price * item.quantity).toLocaleString()}</td></tr>`).join('')}
+            </tbody>
+          </table>
+          <div style="display: flex; justify-content: flex-end;">
+            <div style="width: 250px; padding: 15px; border: 2px solid #000; border-radius: 12px;">
+              <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: #666; margin-bottom: 5px;"><span>Prev Bal</span><span>${currency}${previousDebt.toLocaleString()}</span></div>
+              <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: #666; margin-bottom: 5px;"><span>Current</span><span>${currency}${currentInvoiceTotal.toLocaleString()}</span></div>
+              <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: #666; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;"><span>Paid</span><span>${currency}${amountPaid.toLocaleString()}</span></div>
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 950; color: #000;">
+                <span>BALANCE</span>
+                <span>${currency}${remainingBalance.toLocaleString()}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
     `;
   };
 
@@ -462,6 +493,11 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       window.print();
       printSection.innerHTML = '';
     }, 600);
+  };
+
+  const handlePreview = (inv: Invoice, layout: 'a4' | 'thermal' | 'advice') => {
+    setPreviewHtml(generatePrintHTML(inv, layout));
+    setPreviewType(layout);
   };
 
   return (
@@ -577,7 +613,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                 <tr>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Serial</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.customers}</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date & Time</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{t.total}</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">{t.actions}</th>
@@ -597,7 +633,9 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                           <span className="font-bold text-slate-700 dark:text-slate-300 text-sm truncate max-w-[150px]">{customer?.name || t.walkInCustomer}</span>
                         </div>
                       </td>
-                      <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase">{new Date(inv.date).toLocaleDateString()}</td>
+                      <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase">
+                        {new Date(inv.date).toLocaleDateString()} <span className="opacity-50">|</span> {new Date(inv.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </td>
                       <td className="px-8 py-5 font-black text-indigo-600 dark:text-indigo-400">{state.settings.currency}{inv.total.toLocaleString()}</td>
                       <td className="px-8 py-5">
                         <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
@@ -708,105 +746,178 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                              <div className="flex items-center gap-5 flex-1 min-w-0">
                                 <div className="w-12 h-12 bg-slate-50 dark:bg-slate-900 rounded-2xl flex items-center justify-center text-slate-400 shrink-0 border border-slate-100 dark:border-slate-800">{item.image ? <img src={item.image} className="w-full h-full object-cover rounded-2xl"/> : <Package size={24}/>}</div>
                                 <div className="min-w-0 flex-1">
-                                   <p className="text-sm font-black dark:text-white truncate uppercase tracking-tight">{item.name}</p>
-                                   <p className="text-[10px] font-black text-indigo-500">{state.settings.currency}{item.price.toFixed(2)} unit</p>
+                                   <p className="text-sm font-black dark:text-white truncate uppercase tracking-widest">{item.name}</p>
+                                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.sku}</p>
                                 </div>
                              </div>
+                             
                              <div className="flex items-center gap-6">
-                                <div className="flex items-center gap-4 bg-slate-100 dark:bg-slate-900 rounded-2xl p-1 shadow-inner border border-slate-100 dark:border-slate-800">
-                                   <button onClick={() => updateBuilderQty(item.id, -1)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><Minus size={16} strokeWidth={3}/></button>
-                                   <span className="text-xs font-black w-6 text-center dark:text-white">{item.quantity}</span>
-                                   <button onClick={() => updateBuilderQty(item.id, 1)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"><Plus size={16} strokeWidth={3}/></button>
+                                <div className="flex items-center gap-3 bg-slate-100 dark:bg-slate-900 rounded-xl px-2 py-1.5">
+                                   <button onClick={() => updateBuilderQty(item.id, -1)} className="p-1 hover:text-rose-500 transition-colors"><Minus size={14}/></button>
+                                   <span className="text-xs font-black w-4 text-center dark:text-white">{item.quantity}</span>
+                                   <button onClick={() => updateBuilderQty(item.id, 1)} className="p-1 hover:text-emerald-500 transition-colors"><Plus size={14}/></button>
                                 </div>
                                 <div className="text-right w-24">
                                    <p className="font-black text-sm dark:text-white">{state.settings.currency}{(item.price * item.quantity).toFixed(2)}</p>
+                                   <p className="text-[9px] font-bold text-slate-400">{state.settings.currency}{item.price}/unit</p>
                                 </div>
-                                <button onClick={() => removeBuilderItem(item.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-all rounded-xl"><Trash2 size={20}/></button>
+                                <button onClick={() => removeBuilderItem(item.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><X size={18}/></button>
                              </div>
                           </div>
                         ))}
+                        {builderItems.length === 0 && (
+                           <div className="py-10 text-center text-slate-300 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-3xl">
+                              <Package size={32} className="mx-auto mb-3 opacity-50"/>
+                              <p className="text-xs font-black uppercase tracking-widest">No items added</p>
+                           </div>
+                        )}
                      </div>
+                  </div>
+
+                  <div className="space-y-4">
+                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notes / Terms</label>
+                     <textarea 
+                        value={builderNotes} 
+                        onChange={(e) => setBuilderNotes(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl p-6 outline-none font-bold text-sm dark:text-white transition-all shadow-inner h-32 resize-none"
+                        placeholder="Thank you for your business..."
+                     />
                   </div>
                </div>
 
-               <div className="w-full lg:w-[420px] bg-slate-50/50 dark:bg-slate-950/20 p-8 lg:p-10 space-y-10 flex flex-col shrink-0">
-                  <div className="space-y-8 flex-1">
-                    <div className="space-y-4">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Customer Selection</label>
-                       {builderCustomer ? (
-                         <div className="p-5 bg-white dark:bg-slate-900 rounded-[28px] flex items-center justify-between border-4 border-indigo-600 shadow-2xl animate-in zoom-in-95">
-                            <div className="flex items-center gap-4">
-                               <div className="w-12 h-12 bg-indigo-600 text-white rounded-[18px] flex items-center justify-center font-black text-xl shadow-lg">{builderCustomer.name.charAt(0)}</div>
-                               <div>
-                                  <p className="text-sm font-black dark:text-white truncate max-w-[150px]">{builderCustomer.name}</p>
-                                  <p className="text-[10px] font-bold text-slate-400">{builderCustomer.phone}</p>
-                               </div>
-                            </div>
-                            <button onClick={() => setBuilderCustomer(null)} className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-400 hover:text-rose-600 transition-colors"><X size={18}/></button>
-                         </div>
-                       ) : (
-                         <div className="relative">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
-                            <input 
-                              type="text" 
-                              value={customerSearch}
-                              onChange={(e) => setCustomerSearch(e.target.value)}
-                              className="w-full bg-white dark:bg-slate-900 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-bold text-sm dark:text-white shadow-inner"
-                              placeholder="Find customer..."
-                            />
-                            {availableCustomers.length > 0 && (
-                              <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 py-2 z-20 overflow-hidden">
-                                {availableCustomers.map(c => (
-                                  <button key={c.id} onClick={() => { setBuilderCustomer(c); setCustomerSearch(''); }} className="w-full p-4 text-left hover:bg-indigo-50 dark:hover:bg-indigo-500/10 flex items-center gap-4 group">
-                                    <div className="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-xl flex items-center justify-center font-black text-xs text-slate-400 transition-all">{c.name.charAt(0)}</div>
-                                    <div className="flex-1">
-                                       <p className="text-sm font-black dark:text-white">{c.name}</p>
-                                       <p className="text-[10px] font-bold text-slate-400">{c.phone}</p>
-                                    </div>
-                                    <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-600"/>
-                                  </button>
-                                ))}
+               <div className="w-full lg:w-[400px] bg-slate-50 dark:bg-slate-900/50 p-8 border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-800 flex flex-col">
+                  <div className="flex-1 space-y-8">
+                     <div>
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Customer Details</h4>
+                        {builderCustomer ? (
+                           <div className="p-5 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm relative group">
+                              <button onClick={() => setBuilderCustomer(null)} className="absolute top-2 right-2 p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button>
+                              <div className="flex items-center gap-3 mb-3">
+                                 <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-xl flex items-center justify-center font-black">{builderCustomer.name.charAt(0)}</div>
+                                 <div>
+                                    <p className="font-black text-sm dark:text-white">{builderCustomer.name}</p>
+                                    <p className="text-[10px] font-bold text-slate-400">{builderCustomer.phone}</p>
+                                 </div>
                               </div>
-                            )}
-                         </div>
-                       )}
-                    </div>
+                              <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-500">
+                                 <div className="bg-slate-50 dark:bg-slate-900/50 px-3 py-2 rounded-xl">Debt: {state.settings.currency}{builderCustomer.totalDebt.toLocaleString()}</div>
+                                 <div className="bg-slate-50 dark:bg-slate-900/50 px-3 py-2 rounded-xl">Orders: {builderCustomer.transactionCount || 0}</div>
+                              </div>
+                           </div>
+                        ) : (
+                           <div className="relative">
+                              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
+                              <input 
+                                 type="text" 
+                                 value={customerSearch}
+                                 onChange={(e) => setCustomerSearch(e.target.value)}
+                                 className="w-full bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 focus:border-indigo-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-bold text-sm dark:text-white transition-all shadow-sm"
+                                 placeholder="Search customer..."
+                              />
+                              {availableCustomers.length > 0 && (
+                                 <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 py-2 z-20 overflow-hidden">
+                                    {availableCustomers.map(c => (
+                                       <button key={c.id} onClick={() => { setBuilderCustomer(c); setCustomerSearch(''); }} className="w-full p-4 text-left hover:bg-indigo-50 dark:hover:bg-indigo-500/10 flex items-center justify-between group">
+                                          <div>
+                                             <p className="font-bold text-sm dark:text-white">{c.name}</p>
+                                             <p className="text-[10px] text-slate-400 font-bold">{c.phone}</p>
+                                          </div>
+                                          <Plus size={16} className="text-slate-300 group-hover:text-indigo-600"/>
+                                       </button>
+                                    ))}
+                                 </div>
+                              )}
+                           </div>
+                        )}
+                     </div>
 
-                    <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 space-y-6 shadow-sm border border-slate-100 dark:border-slate-800/50">
-                       <div className="flex justify-between items-center text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                          <span>Subtotal</span>
-                          <span className="text-slate-600 dark:text-slate-300">{state.settings.currency}{subtotal.toLocaleString()}</span>
-                       </div>
-                       <div className="flex justify-between items-center pt-6 border-t border-slate-100 dark:border-slate-800">
-                          <span className="text-sm font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Net Value</span>
-                          <span className="text-4xl font-black dark:text-white tracking-tighter">{state.settings.currency}{total.toLocaleString()}</span>
-                       </div>
-                    </div>
+                     <div className="space-y-4">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Payment & Settlement</h4>
+                        
+                        <div className="grid grid-cols-3 gap-2">
+                           {[
+                              { id: 'cash', label: t.cash, icon: Banknote },
+                              { id: 'card', label: t.card, icon: CreditCard },
+                              { id: 'transfer', label: t.transfer, icon: ArrowRight },
+                           ].map((m) => (
+                              <button
+                                 key={m.id}
+                                 onClick={() => setBuilderPayment(m.id as any)}
+                                 className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all ${
+                                    builderPayment === m.id 
+                                    ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400' 
+                                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-400'
+                                 }`}
+                              >
+                                 <m.icon size={20} className="mb-1"/>
+                                 <span className="text-[9px] font-black uppercase tracking-widest">{m.label}</span>
+                              </button>
+                           ))}
+                        </div>
 
-                    <div className="space-y-4">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Settlement (Paid Amount)</label>
-                       <div className="relative">
-                          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400 font-black text-lg">{state.settings.currency}</div>
-                          <input 
-                            type="number" 
-                            value={builderPaidAmount}
-                            onChange={(e) => setBuilderPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-white dark:bg-slate-900 border-2 border-transparent focus:border-indigo-600 rounded-2xl py-4 pl-12 pr-4 outline-none font-black text-xl dark:text-white shadow-inner"
-                            placeholder={total.toFixed(0)}
-                          />
-                       </div>
-                    </div>
-                  </div>
+                        <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">{t.discount}</label>
+                           <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black">- {state.settings.currency}</span>
+                              <input 
+                                type="number" 
+                                value={builderDiscount}
+                                onChange={(e) => setBuilderDiscount(Number(e.target.value))}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-12 pr-6 outline-none font-bold text-sm dark:text-white transition-all shadow-inner"
+                                placeholder="0.00"
+                              />
+                           </div>
+                        </div>
 
-                  <div className="pt-8">
-                    <button 
-                      onClick={saveInvoice}
-                      disabled={builderItems.length === 0}
-                      className={`w-full py-6 ${editingInvoiceId ? 'bg-amber-500' : 'bg-indigo-600'} text-white rounded-[32px] font-black text-xl shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-4`}
-                    >
-                      {editingInvoiceId ? 'Commit Revisions' : 'Process & Archive'}
-                      <CheckCircle2 size={28} strokeWidth={3}/>
-                    </button>
+                        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                           <div className="flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-widest">
+                              <span>Subtotal</span>
+                              <span>{state.settings.currency}{subtotal.toFixed(2)}</span>
+                           </div>
+                           <div className="flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-widest">
+                              <span>Tax ({state.settings.taxRate}%)</span>
+                              <span>{state.settings.currency}{tax.toFixed(2)}</span>
+                           </div>
+                           <div className="flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-widest">
+                              <span>Discount</span>
+                              <span className="text-rose-500">-{state.settings.currency}{builderDiscount.toFixed(2)}</span>
+                           </div>
+                           <div className="flex justify-between items-center text-xl font-black dark:text-white uppercase tracking-tighter pt-2">
+                              <span>Total</span>
+                              <span>{state.settings.currency}{total.toFixed(2)}</span>
+                           </div>
+                        </div>
+
+                        <div className="pt-4">
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Amount Paid</label>
+                           <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500 font-black">{state.settings.currency}</span>
+                              <input 
+                                 type="number"
+                                 value={builderPaidAmount}
+                                 onChange={(e) => setBuilderPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                                 className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-6 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-black text-xl dark:text-white"
+                                 placeholder={total.toFixed(2)}
+                              />
+                           </div>
+                           <div className="flex justify-between items-center mt-3 px-1">
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Balance Due</span>
+                              <span className={`text-sm font-black ${balanceDue > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                 {state.settings.currency}{balanceDue.toFixed(2)}
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="mt-auto pt-8">
+                        <button 
+                           onClick={saveInvoice}
+                           disabled={builderItems.length === 0}
+                           className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 dark:shadow-none disabled:opacity-50 disabled:shadow-none active:scale-[0.98]"
+                        >
+                           {editingInvoiceId ? 'Update Invoice' : 'Generate Invoice'}
+                        </button>
+                     </div>
                   </div>
                </div>
             </div>
@@ -815,62 +926,73 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       )}
 
       {selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-10 bg-slate-900/80 backdrop-blur-xl animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-900 rounded-[48px] w-full max-w-6xl h-full lg:max-h-[90vh] shadow-2xl relative animate-in zoom-in duration-300 overflow-hidden flex flex-col lg:flex-row">
-            
-            <div className="w-full lg:w-[350px] bg-slate-50 dark:bg-slate-950/20 border-b lg:border-b-0 lg:border-r border-slate-100 dark:border-slate-800 flex flex-col shrink-0">
-               <div className="p-8 space-y-10 flex-1 overflow-y-auto custom-scrollbar">
-                  <header className="flex items-center justify-between">
-                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg"><FileText size={20}/></div>
-                        <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Document View</h3>
-                     </div>
-                     <button onClick={() => setSelectedInvoice(null)} className="lg:hidden p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={24}/></button>
-                  </header>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-200">
+           <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-sm p-8 shadow-2xl relative animate-in zoom-in duration-200">
+              <button onClick={() => setSelectedInvoice(null)} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><X size={20}/></button>
+              <h3 className="text-xl font-black mb-6 text-center dark:text-white uppercase tracking-tighter">Select Format</h3>
+              <div className="space-y-3">
+                 <button 
+                   onClick={() => handlePrint(selectedInvoice, 'a4')}
+                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center gap-4 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-600 transition-all group"
+                 >
+                    <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 shadow-sm"><FileText size={24}/></div>
+                    <div className="text-left">
+                       <p className="font-black text-sm dark:text-white">Standard A4</p>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase">For Office Printers</p>
+                    </div>
+                 </button>
+                 <button 
+                   onClick={() => handlePrint(selectedInvoice, 'thermal')}
+                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center gap-4 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-600 transition-all group"
+                 >
+                    <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 shadow-sm"><Smartphone size={24}/></div>
+                    <div className="text-left">
+                       <p className="font-black text-sm dark:text-white">Thermal Receipt</p>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase">For Mobile/POS</p>
+                    </div>
+                 </button>
+                 <button 
+                   onClick={() => handlePrint(selectedInvoice, 'advice')}
+                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center gap-4 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-600 transition-all group"
+                 >
+                    <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 shadow-sm"><FileSpreadsheet size={24}/></div>
+                    <div className="text-left">
+                       <p className="font-black text-sm dark:text-white">Advice Note</p>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase">Delivery Document</p>
+                    </div>
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
 
-                  <div className="space-y-6">
-                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Format Selection</p>
-                     <div className="grid grid-cols-1 gap-3">
-                        {[
-                          { id: 'advice', label: 'Advice Print', icon: FileSpreadsheet, desc: 'Professional Business Advice Note' },
-                          { id: 'a4', label: 'Corporate A4', icon: FileText, desc: 'Standard business layout' },
-                          { id: 'thermal', label: 'Thermal POS', icon: Smartphone, desc: '80mm narrow receipt format' }
-                        ].map(opt => (
-                          <button 
-                            key={opt.id}
-                            onClick={() => setPrintLayout(opt.id as any)}
-                            className={`p-5 rounded-[28px] border-4 transition-all text-left flex items-center gap-4 group ${printLayout === opt.id ? 'border-indigo-600 bg-white dark:bg-slate-800 shadow-xl' : 'border-transparent bg-white dark:bg-slate-900/50 grayscale opacity-60'}`}
-                          >
-                             <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm ${printLayout === opt.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                               <opt.icon size={22}/>
-                             </div>
-                             <div className="min-w-0">
-                                <p className="font-black text-xs uppercase tracking-widest dark:text-white">{opt.label}</p>
-                                <p className="text-[9px] font-bold text-slate-400 truncate">{opt.desc}</p>
-                             </div>
-                          </button>
-                        ))}
-                     </div>
-                  </div>
-               </div>
-
-               <div className="p-8 border-t border-slate-100 dark:border-slate-800 space-y-3 bg-white dark:bg-slate-900">
-                  <button 
-                    onClick={() => handlePrint(selectedInvoice, printLayout)}
-                    className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
-                  >
-                    <Printer size={18} /> Execute Print
-                  </button>
-                  <button onClick={() => setSelectedInvoice(null)} className="w-full py-4 text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] hover:text-rose-500 transition-colors">Close View</button>
-               </div>
-            </div>
-
-            <div className="flex-1 bg-slate-200 dark:bg-slate-950 p-6 lg:p-12 flex items-center justify-center overflow-hidden">
-               <div className="w-full h-full max-w-[850px] bg-white rounded-xl shadow-2xl transition-transform duration-500 origin-top overflow-y-auto custom-scrollbar p-10 text-slate-900">
-                  <div className="invoice-print-frame" dangerouslySetInnerHTML={{ __html: generatePrintHTML(selectedInvoice, printLayout) }} />
-               </div>
-            </div>
-          </div>
+      {previewHtml && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-200">
+           <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-3xl h-[85vh] shadow-2xl relative flex flex-col overflow-hidden animate-in zoom-in duration-200">
+              <header className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 z-10">
+                 <h3 className="text-lg font-black dark:text-white uppercase tracking-tighter">Document Preview</h3>
+                 <div className="flex items-center gap-3">
+                    <button onClick={() => {
+                        const iframe = document.getElementById('preview-frame') as HTMLIFrameElement;
+                        iframe?.contentWindow?.print();
+                    }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all">
+                       <Printer size={16}/> Print
+                    </button>
+                    <button onClick={() => setPreviewHtml(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400"><X size={20}/></button>
+                 </div>
+              </header>
+              <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-8 overflow-y-auto flex justify-center">
+                 <div className="bg-white shadow-xl animate-in slide-in-from-bottom-4 duration-500" style={{ width: previewType === 'thermal' ? '80mm' : '210mm', minHeight: previewType === 'thermal' ? 'auto' : '297mm' }}>
+                    <iframe 
+                       id="preview-frame"
+                       srcDoc={previewHtml} 
+                       className="w-full h-full" 
+                       style={{ minHeight: '600px', border: 'none' }} 
+                       title="Invoice Preview"
+                    />
+                 </div>
+              </div>
+           </div>
         </div>
       )}
     </div>

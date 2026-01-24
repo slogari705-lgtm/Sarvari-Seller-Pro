@@ -28,7 +28,9 @@ import {
   BarChart3,
   Calendar,
   Layers,
-  Award
+  Award,
+  Wallet,
+  Scale
 } from 'lucide-react';
 import { AppState } from '../types';
 import { translations } from '../translations';
@@ -45,6 +47,10 @@ const Reports: React.FC<Props> = ({ state }) => {
   // Net Profit = Gross Profit - Expenses
   const netProfit = totalInvoiceProfit - totalExpenses;
   
+  // Real Info Additions
+  const totalInventoryValue = state.products.reduce((acc, p) => acc + ((p.costPrice || 0) * p.stock), 0);
+  const totalReceivables = state.customers.reduce((acc, c) => acc + (c.totalDebt || 0), 0);
+
   const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#475569'];
 
   const categoryData = useMemo(() => {
@@ -136,14 +142,16 @@ const Reports: React.FC<Props> = ({ state }) => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         {[
-          { label: t.totalRevenue, value: totalSales, color: 'text-indigo-600', icon: DollarSign },
-          { label: 'Gross Profit', value: totalInvoiceProfit, color: 'text-emerald-500', icon: TrendingUp },
-          { label: t.expenses, value: totalExpenses, color: 'text-rose-500', icon: Receipt },
-          { label: 'Net Profit', value: netProfit, color: netProfit >= 0 ? 'text-violet-500' : 'text-rose-600', icon: TrendingUp },
+          { label: t.totalRevenue, value: totalSales, color: 'text-indigo-600', icon: DollarSign, span: "col-span-2" },
+          { label: 'Gross Profit', value: totalInvoiceProfit, color: 'text-emerald-500', icon: TrendingUp, span: "col-span-2" },
+          { label: 'Net Profit', value: netProfit, color: netProfit >= 0 ? 'text-violet-500' : 'text-rose-600', icon: TrendingUp, span: "col-span-2" },
+          { label: t.expenses, value: totalExpenses, color: 'text-rose-500', icon: Receipt, span: "col-span-3" },
+          { label: 'Inventory Value', value: totalInventoryValue, color: 'text-amber-500', icon: Package, span: "col-span-3" },
+          { label: 'Outstanding Loans', value: totalReceivables, color: 'text-rose-600', icon: Scale, span: "col-span-6" },
         ].map((stat, i) => (
-          <div key={i} className="bg-white dark:bg-slate-900 p-8 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm transition-all hover:shadow-md group">
+          <div key={i} className={`bg-white dark:bg-slate-900 p-8 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm transition-all hover:shadow-md group ${stat.span || 'col-span-2'}`}>
             <div className="flex items-center justify-between mb-4">
               <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{stat.label}</p>
               <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-xl group-hover:scale-110 transition-transform">
@@ -151,7 +159,7 @@ const Reports: React.FC<Props> = ({ state }) => {
               </div>
             </div>
             <div className="flex items-baseline gap-2">
-              <h4 className={`text-3xl font-black tracking-tighter dark:text-white ${stat.label === 'Net Profit' ? stat.color : ''}`}>
+              <h4 className={`text-3xl font-black tracking-tighter dark:text-white ${stat.label.includes('Profit') ? stat.color : ''}`}>
                 {state.settings.currency}{stat.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </h4>
             </div>
@@ -234,7 +242,7 @@ const Reports: React.FC<Props> = ({ state }) => {
                     stroke="none"
                   >
                     {expenseBreakdownData.map((entry, index) => (
-                      <Cell key={`cell-expense-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell key={`cell-expense-${index}`} fill={COLORS[idxToColor(index)]} />
                     ))}
                   </Pie>
                   <Tooltip 
