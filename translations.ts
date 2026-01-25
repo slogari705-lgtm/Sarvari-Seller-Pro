@@ -188,7 +188,9 @@ export const translations = {
     lifetimeValue: 'Lifetime Value',
     avgOrderValue: 'Avg. Order',
     transactions: 'Transactions',
-    totalSpent: 'Total Spent'
+    totalSpent: 'Total Spent',
+    exportCsv: 'Export CSV',
+    bulkPaid: 'Mark as Paid'
   },
   ps: { // Pashto
     dashboard: 'ډشبورډ',
@@ -371,7 +373,9 @@ export const translations = {
     lifetimeValue: 'ټول ارزښت',
     avgOrderValue: 'اوسط پلور',
     transactions: 'معاملې',
-    totalSpent: 'ټول لګښت'
+    totalSpent: 'ټول لګښت',
+    exportCsv: 'CSV ته صادرول',
+    bulkPaid: 'د تادیه شوي په توګه نښه کړئ'
   },
   dr: { // Dari
     dashboard: 'داشبورد',
@@ -554,6 +558,8 @@ export const translations = {
     lifetimeValue: 'ارزش کل مشتری',
     avgOrderValue: 'اوسط فروش',
     transactions: 'معاملات',
-    totalSpent: 'مجموع خرید'
+    totalSpent: 'مجموع خرید',
+    exportCsv: 'خروجی CSV',
+    bulkPaid: 'علامت‌گذاری به عنوان پرداخت شده'
   }
 };

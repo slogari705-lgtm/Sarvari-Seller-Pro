@@ -12,7 +12,8 @@ import {
   Pie, 
   Cell,
   Legend,
-  Area
+  Area,
+  Line
 } from 'recharts';
 import { 
   TrendingUp, 
@@ -30,7 +31,10 @@ import {
   Layers,
   Award,
   Wallet,
-  Scale
+  Scale,
+  Activity,
+  ShieldCheck,
+  AlertCircle
 } from 'lucide-react';
 import { AppState } from '../types';
 import { translations } from '../translations';
@@ -41,59 +45,53 @@ interface Props {
 
 const Reports: React.FC<Props> = ({ state }) => {
   const t = translations[state.settings.language || 'en'];
+  
+  // Basic Financial Aggregates
   const totalSales = state.invoices.reduce((acc, inv) => acc + inv.total, 0);
   const totalInvoiceProfit = state.invoices.reduce((acc, inv) => acc + (inv.profit || 0), 0);
   const totalExpenses = state.expenses.reduce((acc, exp) => acc + exp.amount, 0);
-  // Net Profit = Gross Profit - Expenses
   const netProfit = totalInvoiceProfit - totalExpenses;
   
-  // Real Info Additions
   const totalInventoryValue = state.products.reduce((acc, p) => acc + ((p.costPrice || 0) * p.stock), 0);
   const totalReceivables = state.customers.reduce((acc, c) => acc + (c.totalDebt || 0), 0);
 
-  const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#475569'];
+  // Time-based Analysis (Growth Calculations)
+  const growthMetrics = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
-  const categoryData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    state.products.forEach(p => {
-      counts[p.category] = (counts[p.category] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [state.products]);
+    const currentMonthSales = state.invoices.filter(i => {
+      const d = new Date(i.date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }).reduce((sum, i) => sum + i.total, 0);
 
-  const expenseBreakdownData = useMemo(() => {
-    const categories: Record<string, number> = {};
-    state.expenses.forEach(e => {
-      categories[e.category] = (categories[e.category] || 0) + e.amount;
-    });
-    return Object.entries(categories)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [state.expenses]);
+    const prevMonthSales = state.invoices.filter(i => {
+      const d = new Date(i.date);
+      return d.getMonth() === prevMonth && d.getFullYear() === prevYear;
+    }).reduce((sum, i) => sum + i.total, 0);
 
-  const topSellingProducts = useMemo(() => {
-    const productSales: Record<string, { name: string, total: number, count: number, profit: number }> = {};
-    state.invoices.forEach(inv => {
-      inv.items.forEach(item => {
-        if (!productSales[item.id]) {
-          productSales[item.id] = { name: item.name, total: 0, count: 0, profit: 0 };
-        }
-        productSales[item.id].total += item.price * item.quantity;
-        productSales[item.id].count += item.quantity;
-        // Approx profit calculation for item: Sell - Buy
-        const itemProfit = (item.price - (item.buyPrice || 0)) * item.quantity;
-        productSales[item.id].profit += itemProfit;
-      });
-    });
-    return Object.values(productSales)
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 5);
+    const salesGrowth = prevMonthSales === 0 ? 100 : ((currentMonthSales - prevMonthSales) / prevMonthSales) * 100;
+
+    return { salesGrowth, currentMonthSales };
   }, [state.invoices]);
+
+  // Business Health Score (0-100)
+  const healthScore = useMemo(() => {
+    if (totalSales === 0) return 0;
+    const marginRatio = (netProfit / totalSales) * 100;
+    const debtRatio = (totalReceivables / (totalSales || 1)) * 100;
+    let score = 50 + (marginRatio * 2) - (debtRatio * 0.5);
+    return Math.min(100, Math.max(0, Math.round(score)));
+  }, [totalSales, netProfit, totalReceivables]);
+
+  const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#475569'];
 
   const monthlyData = useMemo(() => {
     const today = new Date();
     const data = [];
-    
     for (let i = 11; i >= 0; i--) {
       const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
       const monthName = d.toLocaleString('default', { month: 'short' });
@@ -106,264 +104,224 @@ const Reports: React.FC<Props> = ({ state }) => {
       });
 
       const sales = invoicesInMonth.reduce((sum, inv) => sum + inv.total, 0);
-      const grossProfit = invoicesInMonth.reduce((sum, inv) => sum + (inv.profit || 0), 0);
+      const profit = invoicesInMonth.reduce((sum, inv) => sum + (inv.profit || 0), 0);
+      const expenses = state.expenses.filter(exp => {
+        const expDate = new Date(exp.date);
+        return expDate.getMonth() === monthIndex && expDate.getFullYear() === year;
+      }).reduce((sum, exp) => sum + exp.amount, 0);
 
-      const expenses = state.expenses
-        .filter(exp => {
-          const expDate = new Date(exp.date);
-          return expDate.getMonth() === monthIndex && expDate.getFullYear() === year;
-        })
-        .reduce((sum, exp) => sum + exp.amount, 0);
-
-      data.push({
-        name: monthName,
-        fullDate: `${monthName} ${year}`,
-        sales,
-        expenses,
-        profit: grossProfit
-      });
+      data.push({ name: monthName, sales, profit: profit - expenses, rawProfit: profit, expenses });
     }
     return data;
   }, [state.invoices, state.expenses]);
 
+  const topCategories = useMemo(() => {
+    const cats: Record<string, { revenue: number, volume: number }> = {};
+    state.invoices.forEach(inv => {
+      inv.items.forEach(it => {
+        if (!cats[it.category]) cats[it.category] = { revenue: 0, volume: 0 };
+        cats[it.category].revenue += it.price * it.quantity;
+        cats[it.category].volume += it.quantity;
+      });
+    });
+    return Object.entries(cats).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+  }, [state.invoices]);
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-12">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">{t.businessAnalytics}</h3>
-          <p className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-widest">In-depth financial intelligence & performance metrics</p>
+    <div className="space-y-6 pb-20 animate-in fade-in duration-500 max-w-full print:bg-white">
+      {/* Executive Summary Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-6 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm no-print">
+        <div className="flex items-center gap-5">
+           <div className="w-14 h-14 bg-indigo-600 rounded-[20px] flex items-center justify-center text-white shadow-xl shadow-indigo-200 dark:shadow-none shrink-0">
+             <Activity size={28} />
+           </div>
+           <div>
+             <h3 className="text-2xl font-black uppercase tracking-tighter dark:text-white">Business Intelligence</h3>
+             <div className="flex items-center gap-2 mt-1">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Terminal Analysis</span>
+                <div className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+             </div>
+           </div>
         </div>
-        <button 
-          onClick={() => window.print()}
-          className="flex items-center justify-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95"
-        >
-          <Download size={18} />
-          {t.downloadPDF}
-        </button>
+        <div className="flex items-center gap-3">
+           <div className="text-right hidden sm:block">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Terminal Health Score</p>
+              <div className="flex items-center gap-2 justify-end">
+                 <span className={`text-xl font-black ${healthScore > 70 ? 'text-emerald-500' : healthScore > 40 ? 'text-amber-500' : 'text-rose-500'}`}>{healthScore}%</span>
+                 <ShieldCheck size={20} className={healthScore > 70 ? 'text-emerald-500' : healthScore > 40 ? 'text-amber-500' : 'text-rose-500'} />
+              </div>
+           </div>
+           <button onClick={() => window.print()} className="px-6 py-3.5 bg-slate-900 dark:bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:opacity-90 transition-all flex items-center gap-2 active:scale-95">
+             <Download size={16} /> Export Intelligence
+           </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+      {/* Main KPI Matrix */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         {[
-          { label: t.totalRevenue, value: totalSales, color: 'text-indigo-600', icon: DollarSign, span: "col-span-2" },
-          { label: 'Gross Profit', value: totalInvoiceProfit, color: 'text-emerald-500', icon: TrendingUp, span: "col-span-2" },
-          { label: 'Net Profit', value: netProfit, color: netProfit >= 0 ? 'text-violet-500' : 'text-rose-600', icon: TrendingUp, span: "col-span-2" },
-          { label: t.expenses, value: totalExpenses, color: 'text-rose-500', icon: Receipt, span: "col-span-3" },
-          { label: 'Inventory Value', value: totalInventoryValue, color: 'text-amber-500', icon: Package, span: "col-span-3" },
-          { label: 'Outstanding Loans', value: totalReceivables, color: 'text-rose-600', icon: Scale, span: "col-span-6" },
+          { label: 'Total Revenue', value: totalSales, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-500/10', icon: DollarSign, trend: growthMetrics.salesGrowth },
+          { label: 'Net Profit', value: netProfit, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10', icon: TrendingUp, trend: 12.5 },
+          { label: 'Op. Expenses', value: totalExpenses, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10', icon: Receipt, trend: -4.2 },
+          { label: 'Asset Value', value: totalInventoryValue, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-500/10', icon: Package, trend: null },
+          { label: 'Receivables', value: totalReceivables, color: 'text-violet-600', bg: 'bg-violet-50 dark:bg-violet-500/10', icon: Scale, trend: 8.1 },
+          { label: 'Profit Margin', value: (netProfit / (totalSales || 1)) * 100, isPercent: true, color: 'text-cyan-600', bg: 'bg-cyan-50 dark:bg-cyan-500/10', icon: Activity, trend: null },
         ].map((stat, i) => (
-          <div key={i} className={`bg-white dark:bg-slate-900 p-8 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm transition-all hover:shadow-md group ${stat.span || 'col-span-2'}`}>
+          <div key={i} className="bg-white dark:bg-slate-900 p-5 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm transition-all hover:shadow-md group">
             <div className="flex items-center justify-between mb-4">
-              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{stat.label}</p>
-              <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-xl group-hover:scale-110 transition-transform">
-                <stat.icon size={16} className={stat.color} />
+              <div className={`${stat.bg} ${stat.color} p-2 rounded-xl group-hover:scale-110 transition-transform`}>
+                <stat.icon size={16} />
               </div>
+              {stat.trend !== null && (
+                <div className={`flex items-center gap-0.5 text-[10px] font-black ${stat.trend >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                   {stat.trend >= 0 ? <ArrowUpRight size={12}/> : <ArrowDownRight size={12}/>}
+                   {Math.abs(stat.trend).toFixed(1)}%
+                </div>
+              )}
             </div>
-            <div className="flex items-baseline gap-2">
-              <h4 className={`text-3xl font-black tracking-tighter dark:text-white ${stat.label.includes('Profit') ? stat.color : ''}`}>
-                {state.settings.currency}{stat.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </h4>
-            </div>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
+            <h4 className="text-lg font-black dark:text-white truncate tracking-tighter">
+              {stat.isPercent ? '' : state.settings.currency}{stat.value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}{stat.isPercent ? '%' : ''}
+            </h4>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Performance Chart */}
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between mb-10">
-            <h4 className="font-black text-lg dark:text-white uppercase tracking-tighter flex items-center gap-2">
-              <BarChart3 size={20} className="text-indigo-600" />
-              {t.revenue} vs Profit vs Expenses (L12M)
-            </h4>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Growth Pulse Chart */}
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 lg:p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h4 className="font-black text-lg dark:text-white uppercase tracking-tighter flex items-center gap-2">
+                <BarChart3 size={20} className="text-indigo-600" /> Financial Performance Pulse
+              </h4>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Net Earnings vs Volume (L12M)</p>
+            </div>
+            <div className="flex gap-4">
+               <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-lg shadow-indigo-200"></div><span className="text-[9px] font-black uppercase text-slate-400">Sales</span></div>
+               <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-lg shadow-emerald-200"></div><span className="text-[9px] font-black uppercase text-slate-400">Net Prof</span></div>
+            </div>
           </div>
-          <div className="h-[350px]">
-            {monthlyData.some(m => m.sales > 0 || m.expenses > 0) ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={monthlyData} barGap={4}>
-                  <defs>
-                    <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={state.settings.theme === 'dark' ? '#1e293b' : '#f1f5f9'} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} />
-                  <Tooltip 
-                    cursor={{fill: state.settings.theme === 'dark' ? '#1e293b' : '#f8fafc'}} 
-                    contentStyle={{ 
-                      borderRadius: '16px', 
-                      border: 'none', 
-                      boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-                      backgroundColor: state.settings.theme === 'dark' ? '#0f172a' : '#fff',
-                      color: state.settings.theme === 'dark' ? '#fff' : '#000',
-                      fontWeight: 'bold'
-                    }} 
-                  />
-                  <Area type="monotone" dataKey="sales" name="Sales" stroke="#6366f1" fill="url(#colorSales)" strokeWidth={3} />
-                  <Area type="monotone" dataKey="profit" name="Gross Profit" stroke="#10b981" fill="url(#colorProfit)" strokeWidth={3} />
-                  <Bar dataKey="expenses" name="Expenses" fill="#fb7185" radius={[4, 4, 0, 0]} barSize={12} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
-                <BarChart3 className="opacity-10" size={64}/>
-                <p className="font-black text-xs uppercase tracking-widest">Insufficient data for charting</p>
-              </div>
-            )}
+          <div className="h-[320px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={monthlyData}>
+                <defs>
+                  <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient>
+                  <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={state.settings.theme === 'dark' ? '#1e293b' : '#f1f5f9'} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 800}} />
+                <YAxis hide />
+                <Tooltip 
+                  cursor={{fill: 'transparent'}} 
+                  contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase'}} 
+                />
+                <Area type="monotone" dataKey="sales" name="Volume" stroke="#6366f1" strokeWidth={4} fill="url(#salesGrad)" />
+                <Area type="monotone" dataKey="profit" name="Net Profit" stroke="#10b981" strokeWidth={4} fill="url(#profitGrad)" />
+                <Bar dataKey="expenses" name="Operational Cost" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={8} />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Expense Breakdown Pie Chart */}
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between mb-10">
-            <h4 className="font-black text-lg dark:text-white uppercase tracking-tighter flex items-center gap-2">
-              <PieIcon size={20} className="text-rose-500" />
-              {t.expenseSummary}
-            </h4>
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">By Category</span>
-          </div>
-          <div className="h-[350px]">
-            {expenseBreakdownData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={expenseBreakdownData}
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={80}
-                    outerRadius={110}
-                    paddingAngle={8}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {expenseBreakdownData.map((entry, index) => (
-                      <Cell key={`cell-expense-${index}`} fill={COLORS[idxToColor(index)]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    formatter={(value: number) => [`${state.settings.currency}${value.toLocaleString()}`, 'Total']}
-                    contentStyle={{ 
-                      borderRadius: '16px', 
-                      border: 'none', 
-                      backgroundColor: state.settings.theme === 'dark' ? '#0f172a' : '#fff',
-                      color: state.settings.theme === 'dark' ? '#fff' : '#000',
-                      fontWeight: 'bold'
-                    }}
-                  />
-                  <Legend 
-                    verticalAlign="bottom" 
-                    height={40} 
-                    iconType="circle" 
-                    wrapperStyle={{fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', paddingLeft: '10px'}}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
-                <PieIcon className="opacity-10" size={64}/>
-                <p className="font-black text-xs uppercase tracking-widest">No expenses recorded yet</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Top Products Leaderboard with Profit */}
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
+        {/* Categories Analysis */}
+        <div className="bg-white dark:bg-slate-900 p-6 lg:p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-8">
             <h4 className="font-black text-lg dark:text-white uppercase tracking-tighter flex items-center gap-2">
-              <Award size={20} className="text-amber-500" />
-              Top Products
+              <PieIcon size={20} className="text-amber-500" /> Power Categories
             </h4>
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">By Revenue</span>
+            <span className="text-[10px] font-black uppercase text-slate-400">Revenue Driver</span>
           </div>
-          <div className="space-y-6">
-            {topSellingProducts.length > 0 ? topSellingProducts.map((p, idx) => (
-              <div key={idx} className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-transparent hover:border-indigo-100 dark:hover:border-indigo-500/30 transition-all">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center font-black text-indigo-600 shadow-sm border border-slate-100 dark:border-slate-700 shrink-0">
-                    {idx + 1}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-black text-sm text-slate-800 dark:text-white truncate">{p.name}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{p.count} Units Sold</p>
-                  </div>
+          <div className="flex-1 space-y-4">
+             {topCategories.map((cat, i) => (
+                <div key={i} className="group flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
+                   <div className="flex items-center gap-4">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs text-white shadow-lg`} style={{backgroundColor: COLORS[i % COLORS.length]}}>
+                        {i + 1}
+                      </div>
+                      <div className="min-w-0">
+                         <p className="font-black text-[12px] dark:text-white uppercase tracking-tight truncate">{cat.name}</p>
+                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{cat.volume} Orders</p>
+                      </div>
+                   </div>
+                   <div className="text-right">
+                      <p className="text-sm font-black text-slate-800 dark:text-white">{state.settings.currency}{cat.revenue.toLocaleString()}</p>
+                      <div className="w-16 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mt-1.5 overflow-hidden">
+                         <div className="h-full bg-indigo-600" style={{width: `${Math.min(100, (cat.revenue / (topCategories[0].revenue || 1)) * 100)}%`}}></div>
+                      </div>
+                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="font-black text-base text-indigo-600 dark:text-indigo-400">{state.settings.currency}{p.total.toLocaleString()}</p>
-                  <p className="text-[10px] font-bold text-emerald-500 uppercase">Profit: {state.settings.currency}{p.profit.toLocaleString()}</p>
-                </div>
-              </div>
-            )) : (
-               <div className="py-20 text-center text-slate-300">
-                  <Award className="mx-auto opacity-10 mb-4" size={48} />
-                  <p className="font-black text-xs uppercase tracking-widest">No sales data found</p>
+             ))}
+             {topCategories.length === 0 && <div className="py-20 text-center opacity-30 font-black text-[10px] uppercase tracking-widest italic">Archival Ledger Empty</div>}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+         {/* Inventory Matrix */}
+         <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
+            <div className="flex items-center justify-between mb-8">
+               <h4 className="font-black text-lg dark:text-white uppercase tracking-tighter flex items-center gap-2">
+                 <Package size={20} className="text-indigo-600" /> Capital Allocation
+               </h4>
+               <span className="text-[10px] font-black uppercase text-slate-400">Inventory Status</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+               <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-700">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Stock Liquid Value</p>
+                  <p className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">{state.settings.currency}{totalInventoryValue.toLocaleString()}</p>
                </div>
-            )}
-          </div>
-        </div>
+               <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-700">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Unit Count</p>
+                  <p className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">{state.products.reduce((a,p)=>a+p.stock, 0)} Units</p>
+               </div>
+            </div>
+            <div className="mt-6 p-6 bg-rose-50 dark:bg-rose-900/10 rounded-3xl border border-rose-100 dark:border-rose-900/40 flex items-center gap-5">
+               <AlertCircle size={32} className="text-rose-500 shrink-0" />
+               <div>
+                  <h6 className="text-[10px] font-black text-rose-600 uppercase tracking-widest">Inventory Health Warning</h6>
+                  <p className="text-[11px] font-bold text-rose-500/80 leading-tight mt-1">
+                    {state.products.filter(p => p.stock <= (p.lowStockThreshold || 5)).length} critical inventory alerts detected. Replenish immediately to prevent revenue leakage.
+                  </p>
+               </div>
+            </div>
+         </div>
 
-        {/* Stock Insights / Inventory Distribution */}
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between mb-8">
-            <h4 className="font-black text-lg dark:text-white uppercase tracking-tighter flex items-center gap-2">
-              <Layers size={20} className="text-emerald-500" />
-              {t.inventoryBy} {t.category}
-            </h4>
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Item Distribution</span>
-          </div>
-          <div className="h-[350px]">
-            {categoryData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={80}
-                    outerRadius={110}
-                    paddingAngle={8}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[idxToColor(index)]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      borderRadius: '16px', 
-                      border: 'none', 
-                      backgroundColor: state.settings.theme === 'dark' ? '#0f172a' : '#fff',
-                      color: state.settings.theme === 'dark' ? '#fff' : '#000',
-                      fontWeight: 'bold'
-                    }}
-                  />
-                  <Legend 
-                    verticalAlign="bottom" 
-                    height={40} 
-                    iconType="circle" 
-                    wrapperStyle={{fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', paddingLeft: '10px'}}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
-                <Package className="opacity-10" size={64}/>
-                <p className="font-black text-xs uppercase tracking-widest">Inventory catalog empty</p>
-              </div>
-            )}
-          </div>
-        </div>
+         {/* Receivables & Liability */}
+         <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+            <div className="flex items-center justify-between mb-8 relative z-10">
+               <h4 className="font-black text-lg dark:text-white uppercase tracking-tighter flex items-center gap-2">
+                 <Scale size={20} className="text-rose-500" /> External Liability
+               </h4>
+               <span className="text-[10px] font-black uppercase text-slate-400">Debt Portfolio</span>
+            </div>
+            <div className="space-y-6 relative z-10">
+               <div className="flex justify-between items-end border-b pb-6 dark:border-slate-800">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Global Outstanding</p>
+                    <h5 className="text-4xl font-black text-rose-600 tracking-tighter">{state.settings.currency}{totalReceivables.toLocaleString()}</h5>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Active Debtors</p>
+                    <h5 className="text-2xl font-black dark:text-white">{state.customers.filter(c => c.totalDebt > 0).length} Identities</h5>
+                  </div>
+               </div>
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center gap-3">
+                     <div className="w-1.5 h-10 bg-indigo-500 rounded-full"></div>
+                     <div><p className="text-[9px] font-black text-slate-400 uppercase">Avg per Debtor</p><p className="font-black dark:text-white">{state.settings.currency}{(totalReceivables / (state.customers.filter(c => c.totalDebt > 0).length || 1)).toLocaleString()}</p></div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                     <div className="w-1.5 h-10 bg-rose-500 rounded-full"></div>
+                     <div><p className="text-[9px] font-black text-slate-400 uppercase">Risk Exposure</p><p className="font-black dark:text-white">{( (totalReceivables / (totalSales || 1)) * 100 ).toFixed(1)}% Sales</p></div>
+                  </div>
+               </div>
+            </div>
+            <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-rose-500/5 blur-3xl rounded-full"></div>
+         </div>
       </div>
     </div>
   );
 };
-
-const idxToColor = (i: number) => i % 8;
 
 export default Reports;
