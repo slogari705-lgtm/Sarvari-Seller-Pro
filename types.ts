@@ -91,6 +91,7 @@ export interface AppState {
   templates: InvoiceTemplate[];
   loanTransactions: LoanTransaction[];
   expenseCategories: string[];
+  lastSync?: string;
   settings: {
     shopName: string;
     shopAddress?: string;

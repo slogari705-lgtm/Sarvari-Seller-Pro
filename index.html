@@ -62,49 +62,18 @@
         }
 
         @media print {
-            @page {
-                margin: 0;
-                size: auto;
-            }
-            
-            #root, aside, header, nav, footer, button, .no-print, .fixed {
+            /* Hide everything in the main app during print */
+            body > *:not(#print-holder) {
                 display: none !important;
-                visibility: hidden !important;
             }
-            
-            body {
-                background: white !important;
-                color: black !important;
-                overflow: visible !important;
-                height: auto !important;
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            
-            #print-section {
+            #print-holder {
                 display: block !important;
-                visibility: visible !important;
-                width: 100% !important;
-                height: auto !important;
-                position: absolute !important;
-                top: 0 !important;
-                left: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                background-color: white !important;
-                z-index: 100000 !important;
-            }
-
-            #print-section * {
-                visibility: visible !important;
-                color: black !important;
-                opacity: 1 !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
+                width: 100%;
             }
         }
 
-        #print-section {
+        /* Essential for hidden iframe printing */
+        #print-holder {
             display: none;
         }
 
@@ -125,15 +94,17 @@
 <script type="importmap">
 {
   "imports": {
-    "recharts": "https://esm.sh/recharts@^3.7.0",
-    "vite": "https://esm.sh/vite@^7.3.1",
-    "jsbarcode": "https://esm.sh/jsbarcode@^3.12.3",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
     "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
     "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "recharts": "https://esm.sh/recharts@^3.7.0",
+    "jsbarcode": "https://esm.sh/jsbarcode@^3.12.3",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "jspdf": "https://esm.sh/jspdf@^2.5.1",
+    "html2canvas": "https://esm.sh/html2canvas@^1.4.1"
   }
 }
 </script>
@@ -147,7 +118,11 @@
             </div>
         </div>
     </div>
-    <div id="print-section"></div>
+    <!-- Dedicated container for printing lifecycle -->
+    <div id="print-holder"></div>
+    <!-- Hidden container for PDF rendering -->
+    <div id="pdf-render-container" style="position: absolute; left: -9999px; top: -9999px; width: 210mm;"></div>
+    
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {

@@ -18,7 +18,9 @@ import {
   Users,
   Receipt,
   ChevronRight,
-  Target
+  Target,
+  CloudCheck,
+  WifiOff
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { AppState, View } from '../types';
@@ -28,11 +30,13 @@ import { translations } from '../translations';
 interface Props {
   state: AppState;
   setCurrentView: (view: View) => void;
+  sidebarOpen: boolean;
 }
 
-const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
+const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
   const [insights, setInsights] = useState<string>('');
   const [loadingInsights, setLoadingInsights] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   const [visibleWidgets, setVisibleWidgets] = useState<string[]>(() => {
     const saved = localStorage.getItem('dashboard_costume');
@@ -40,12 +44,26 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
   });
 
   useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      fetchInsights();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     const handleStorageChange = () => {
       const saved = localStorage.getItem('dashboard_costume');
       if (saved) setVisibleWidgets(JSON.parse(saved));
     };
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   const t = translations[state.settings.language || 'en'];
@@ -94,8 +112,12 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
   }, [state.invoices]);
 
   const fetchInsights = async () => {
+    if (!navigator.onLine) {
+      setInsights("You are currently working offline. Connect to the internet to generate new AI insights based on your recent data.");
+      return;
+    }
     if (state.invoices.length === 0) {
-      setInsights("Sarvari Intelligence: Records sales to generate deep performance analysis.");
+      setInsights("Sarvari Intelligence: Record sales to generate deep performance analysis.");
       return;
     }
     setLoadingInsights(true);
@@ -117,11 +139,21 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
     <div className="space-y-4 animate-in fade-in duration-500 max-w-full">
       {/* Header & Quick Actions */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <div>
-           <h3 className="font-black text-2xl lg:text-3xl uppercase tracking-tighter dark:text-white flex items-center gap-2">
-             Sarvari Control Center <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-           </h3>
-           <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Real-time Terminal Status</p>
+        <div className="flex items-center gap-4">
+           <div>
+              <h3 className="font-black text-2xl lg:text-3xl uppercase tracking-tighter dark:text-white flex items-center gap-2">
+                Sarvari Control <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
+              </h3>
+              <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">
+                {isOnline ? 'Cloud Synced System' : 'Local Archive Instance'}
+              </p>
+           </div>
+           {state.lastSync && sidebarOpen && (
+             <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                <CloudCheck size={12} className="text-emerald-500" />
+                <span className="text-[8px] font-black text-slate-500 uppercase">Synced {new Date(state.lastSync).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+             </div>
+           )}
         </div>
         
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
@@ -201,9 +233,15 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView }) => {
                     <Sparkles size={16} className="text-amber-400" />
                     <h4 className="font-black text-[11px] uppercase tracking-tighter">Sarvari AI Analyst</h4>
                  </div>
-                 <button onClick={fetchInsights} disabled={loadingInsights} className="p-1.5 hover:bg-white/10 rounded-lg transition-all">
-                    <RefreshCw size={14} className={`${loadingInsights ? 'animate-spin' : ''}`} />
-                 </button>
+                 {isOnline ? (
+                   <button onClick={fetchInsights} disabled={loadingInsights} className="p-1.5 hover:bg-white/10 rounded-lg transition-all">
+                      <RefreshCw size={14} className={`${loadingInsights ? 'animate-spin' : ''}`} />
+                   </button>
+                 ) : (
+                   <div className="p-1.5 text-rose-500" title="Offline - AI unavailable">
+                      <WifiOff size={14} />
+                   </div>
+                 )}
               </div>
               <div className="text-[10px] text-indigo-100/70 leading-relaxed font-medium bg-white/5 p-4 rounded-2xl border border-white/10 max-h-[160px] overflow-y-auto custom-scrollbar italic">
                  {loadingInsights ? "Crunching terminal data..." : insights || "Awaiting your first 24 hours of data for full operational analysis."}

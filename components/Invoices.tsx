@@ -42,11 +42,15 @@ import {
   Share2,
   ChevronRight,
   MapPin,
-  Phone
+  Phone,
+  Monitor,
+  FileDown
 } from 'lucide-react';
 import { AppState, Product, Customer, CartItem, Invoice, View, LoanTransaction } from '../types';
 import { translations } from '../translations';
 import { generatePrintHTML, PrintLayout } from '../services/printService';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface Props {
   state: AppState;
@@ -65,7 +69,8 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [previewData, setPreviewData] = useState<{inv: Invoice, layout: PrintLayout} | null>(null);
-
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [methodFilter, setMethodFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('');
@@ -223,14 +228,96 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   };
 
   const handlePrint = (inv: Invoice, layout: PrintLayout) => {
-    const ps = document.getElementById('print-section');
-    if (!ps) return;
-    ps.innerHTML = generatePrintHTML(state, inv, layout);
-    setTimeout(() => { 
-      window.print(); 
-      ps.innerHTML = ''; 
-      setPreviewData(null); 
-    }, 500);
+    if (isPrinting) return;
+    setIsPrinting(true);
+
+    const html = generatePrintHTML(state, inv, layout);
+    const holder = document.getElementById('print-holder');
+    if (!holder) {
+      setIsPrinting(false);
+      return;
+    }
+    
+    holder.innerHTML = '';
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '0';
+    holder.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      const printAction = () => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+            setIsPrinting(false);
+            setTimeout(() => {
+              if (holder.contains(iframe)) holder.innerHTML = '';
+            }, 3000);
+          }, 600);
+        });
+      };
+
+      if (iframe.contentWindow?.document.readyState === 'complete') {
+        printAction();
+      } else {
+        iframe.onload = printAction;
+      }
+    } else {
+      setIsPrinting(false);
+    }
+  };
+
+  const handleDownloadPDF = async (inv: Invoice, layout: PrintLayout = 'a4') => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+
+    const html = generatePrintHTML(state, inv, layout);
+    const container = document.getElementById('pdf-render-container');
+    if (!container) {
+      setIsDownloading(false);
+      return;
+    }
+
+    container.innerHTML = html;
+    
+    // Give images and fonts a moment to load
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    try {
+      const canvas = await html2canvas(container, {
+        scale: 2, // Better quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: layout === 'thermal' ? 'portrait' : 'portrait',
+        unit: 'mm',
+        format: layout === 'thermal' ? [80, 200] : 'a4'
+      });
+
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Invoice_#${inv.id.padStart(4, '0')}.pdf`);
+    } catch (error) {
+      console.error("PDF Export Error:", error);
+      alert("Failed to generate PDF. Please try the Print option instead.");
+    } finally {
+      container.innerHTML = '';
+      setIsDownloading(false);
+    }
   };
 
   const repaymentHistory = useMemo(() => {
@@ -421,7 +508,9 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                     <td className="px-6 py-4 text-right">
                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all" onClick={e => e.stopPropagation()}>
                           <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="View Detailed Audit"><Eye size={18}/></button>
-                          <button onClick={() => setPreviewData({inv, layout: 'a4'})} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="Print Options"><Printer size={18}/></button>
+                          <button onClick={() => handleDownloadPDF(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="Download PDF"><FileDown size={18}/></button>
+                          <button onClick={() => setPreviewData({inv, layout: 'a4'})} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="Print Preview"><Monitor size={18}/></button>
+                          <button onClick={() => handlePrint(inv, 'thermal')} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="Direct Thermal Print"><Printer size={18}/></button>
                           <button onClick={() => deleteInvoice(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-transform active:scale-90"><Trash2 size={18}/></button>
                        </div>
                     </td>
@@ -439,9 +528,9 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
            <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-4xl h-[90vh] shadow-2xl relative flex flex-col overflow-hidden animate-in zoom-in duration-200">
               <header className="p-6 border-b flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-slate-900 z-10 gap-4">
                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center text-indigo-600"><Printer size={20}/></div>
+                    <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center text-indigo-600"><Monitor size={20}/></div>
                     <div>
-                       <h3 className="text-sm font-black dark:text-white uppercase tracking-widest">Document Audit Preview</h3>
+                       <h3 className="text-sm font-black dark:text-white uppercase tracking-widest">Print Preview</h3>
                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Reference #INV-{previewData.inv.id.padStart(4, '0')}</p>
                     </div>
                  </div>
@@ -452,12 +541,24 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                           key={l}
                           onClick={() => setPreviewData({...previewData, layout: l})}
                           className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${previewData.layout === l ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                         >{l === 'a4' ? 'Tax Invoice' : l}</button>
+                         >{l === 'a4' ? 'A4 Invoice' : l}</button>
                        ))}
                     </div>
                     <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2 hidden sm:block" />
-                    <button onClick={() => handlePrint(previewData.inv, previewData.layout)} className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase">
-                       <Printer size={16}/> Print
+                    <button 
+                      onClick={() => handleDownloadPDF(previewData.inv, previewData.layout)}
+                      className="p-3 bg-white dark:bg-slate-800 text-indigo-600 border border-indigo-100 dark:border-indigo-900 rounded-xl hover:bg-indigo-50 transition-all flex items-center gap-2 font-black text-[10px] uppercase"
+                    >
+                      <FileDown size={16}/>
+                      Download
+                    </button>
+                    <button 
+                      onClick={() => handlePrint(previewData.inv, previewData.layout)} 
+                      disabled={isPrinting}
+                      className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase disabled:opacity-50"
+                    >
+                       {isPrinting ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Printer size={16}/>}
+                       Print Now
                     </button>
                     <button onClick={() => setPreviewData(null)} className="p-3 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all">
                        <X size={20}/>
@@ -465,11 +566,11 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                  </div>
               </header>
               <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-4 lg:p-10 overflow-y-auto flex justify-center custom-scrollbar">
-                 <div className="bg-white shadow-2xl relative" style={{ width: previewData.layout === 'thermal' ? '80mm' : '210mm', minHeight: previewData.layout === 'thermal' ? 'auto' : '297mm', height: 'fit-content' }}>
+                 <div className="bg-white shadow-2xl relative h-fit" style={{ width: previewData.layout === 'thermal' ? '80mm' : '210mm', minHeight: 'auto' }}>
                     <iframe 
                       srcDoc={generatePrintHTML(state, previewData.inv, previewData.layout)} 
                       className="w-full h-full border-none pointer-events-none" 
-                      style={{ minHeight: previewData.layout === 'thermal' ? '150mm' : '297mm' }}
+                      style={{ minHeight: previewData.layout === 'thermal' ? '150mm' : '297mm', height: 'auto' }}
                       title="Invoice Preview" 
                     />
                  </div>
@@ -478,7 +579,6 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
         </div>
       )}
 
-      {/* Detailed Document Modal */}
       {selectedInvoice && !previewData && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
            <div className="bg-white dark:bg-slate-900 rounded-t-[48px] sm:rounded-[60px] w-full max-w-6xl h-[95vh] sm:h-[90vh] shadow-2xl relative flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:zoom-in duration-300">
@@ -500,7 +600,26 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                     </div>
                  </div>
                  <div className="flex items-center gap-3">
-                    <button onClick={() => setPreviewData({inv: selectedInvoice, layout: 'a4'})} className="hidden lg:flex p-4 bg-indigo-600 text-white rounded-[22px] font-black text-[10px] uppercase tracking-widest items-center gap-2 shadow-lg hover:bg-indigo-700 transition-all"><Printer size={20}/> Print View</button>
+                    <button 
+                      onClick={() => handleDownloadPDF(selectedInvoice)}
+                      disabled={isDownloading}
+                      className="hidden lg:flex p-4 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-[22px] font-black text-[10px] uppercase tracking-widest items-center gap-2 hover:bg-slate-200 transition-all"
+                    >
+                      {isDownloading ? <div className="w-4 h-4 border-2 border-slate-400 border-t-slate-800 rounded-full animate-spin"></div> : <FileDown size={20}/>}
+                      Download PDF
+                    </button>
+                    <button 
+                      onClick={() => setPreviewData({inv: selectedInvoice, layout: 'a4'})} 
+                      className="hidden lg:flex p-4 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 rounded-[22px] font-black text-[10px] uppercase tracking-widest items-center gap-2 shadow-sm hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-all"
+                    >
+                      <Monitor size={20}/> Print Preview
+                    </button>
+                    <button 
+                      onClick={() => handlePrint(selectedInvoice, 'thermal')} 
+                      className="hidden lg:flex p-4 bg-indigo-600 text-white rounded-[22px] font-black text-[10px] uppercase tracking-widest items-center gap-2 shadow-lg hover:bg-indigo-700 transition-all"
+                    >
+                      <Printer size={20}/> Print Direct
+                    </button>
                     <button onClick={() => setSelectedInvoice(null)} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-[22px] text-slate-400 hover:text-rose-600 transition-all"><X size={28}/></button>
                  </div>
               </header>

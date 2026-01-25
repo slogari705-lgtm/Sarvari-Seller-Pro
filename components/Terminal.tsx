@@ -84,6 +84,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const [showQuickAddCust, setShowQuickAddCust] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<PrintLayout>('thermal');
+  const [isPrinting, setIsPrinting] = useState(false);
   
   const t = translations[state.settings.language || 'en'];
 
@@ -138,20 +139,55 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
     return html;
   };
 
-  const printDocument = (layout?: PrintLayout) => {
+  const executePrint = (layout?: PrintLayout) => {
     const type = layout || previewType;
     const inv = lastInvoice;
-    if (!inv) return;
+    if (!inv || isPrinting) return;
     
+    setIsPrinting(true);
     const html = generatePrintHTML(state, inv, type);
-    const frame = document.getElementById('preview-frame') as HTMLIFrameElement;
-    if (frame) {
-      frame.srcdoc = html;
-      // Wait for iframe content to load then print
-      setTimeout(() => {
-        frame.contentWindow?.focus();
-        frame.contentWindow?.print();
-      }, 300);
+    
+    const holder = document.getElementById('print-holder');
+    if (!holder) {
+      console.error("Print holder not found");
+      setIsPrinting(false);
+      return;
+    }
+    
+    holder.innerHTML = '';
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '0';
+    holder.appendChild(iframe);
+    
+    const doc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+
+      const printAction = () => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+            setIsPrinting(false);
+            // Keep content long enough for spooler but eventually clean up
+            setTimeout(() => {
+              if (holder.contains(iframe)) holder.innerHTML = '';
+            }, 3000);
+          }, 600);
+        });
+      };
+
+      if (iframe.contentWindow?.document.readyState === 'complete') {
+        printAction();
+      } else {
+        iframe.onload = printAction;
+      }
+    } else {
+      setIsPrinting(false);
     }
   };
 
@@ -173,7 +209,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
       paymentMethod 
     };
 
-    // Update business state
     updateState('invoices', [...state.invoices, newInvoice]);
     updateState('products', state.products.map(p => { const it = cart.find(c => c.id === p.id); return it ? { ...p, stock: p.stock - it.quantity } : p; }));
     
@@ -193,8 +228,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
     setSuccessModal(true); 
     setShowCartMobile(false);
     setPaidAmountInput('');
-    
-    // Set initial preview type to thermal
     setPreviewType('thermal');
   };
 
@@ -307,12 +340,16 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
                <button onClick={() => setPreviewType('a4')} className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${previewType === 'a4' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400'}`}><Layers size={18}/><span className="text-[8px] font-black uppercase">A4</span></button>
             </div>
             <div className="flex gap-2">
-               <button onClick={() => printDocument()} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all active:scale-95"><Printer size={16}/> Print Now</button>
+               <button 
+                onClick={() => executePrint()} 
+                disabled={isPrinting}
+                className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
+               >
+                 {isPrinting ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Printer size={16}/>}
+                 Print Now
+               </button>
                <button onClick={() => { setSuccessModal(false); setLastInvoice(null); setPreviewHtml(null); }} className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase hover:bg-slate-200 transition-all"><Check size={20}/></button>
             </div>
-            
-            {/* Hidden iframe for background printing */}
-            <iframe id="preview-frame" className="hidden" title="Print Frame" />
           </div>
         </div>
       )}
@@ -323,7 +360,13 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
               <header className="p-4 border-b flex items-center justify-between bg-white dark:bg-slate-900 z-10">
                  <h3 className="text-sm font-black dark:text-white uppercase tracking-widest">Billing Output Preview</h3>
                  <div className="flex gap-2">
-                    <button onClick={() => {const f = document.getElementById('visible-preview-frame') as HTMLIFrameElement; f?.contentWindow?.print();}} className="p-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 font-black text-[10px] uppercase px-4 hover:bg-indigo-700 transition-all"><Printer size={16}/> Print</button>
+                    <button 
+                      onClick={() => executePrint(previewType)} 
+                      disabled={isPrinting}
+                      className="p-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 font-black text-[10px] uppercase px-4 hover:bg-indigo-700 transition-all disabled:opacity-50"
+                    >
+                       <Printer size={16}/> {isPrinting ? 'Preparing...' : 'Print'}
+                    </button>
                     <button onClick={() => setPreviewHtml(null)} className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all"><X size={20}/></button>
                  </div>
               </header>
