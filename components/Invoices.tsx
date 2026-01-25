@@ -40,7 +40,9 @@ import {
   ShieldAlert,
   BarChart2,
   Share2,
-  ChevronRight
+  ChevronRight,
+  MapPin,
+  Phone
 } from 'lucide-react';
 import { AppState, Product, Customer, CartItem, Invoice, View, LoanTransaction } from '../types';
 import { translations } from '../translations';
@@ -62,11 +64,8 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const [sortKey, setSortKey] = useState<SortKey>('id');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  
-  // New Preview State
   const [previewData, setPreviewData] = useState<{inv: Invoice, layout: PrintLayout} | null>(null);
 
-  // Advanced Filter State
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [methodFilter, setMethodFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('');
@@ -226,95 +225,163 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const generatePrintHTML = (inv: Invoice, layout: PrintLayout) => {
     const cust = state.customers.find(c => c.id === inv.customerId);
     const currency = state.settings.currency;
+    const shop = state.settings;
+    
     const itemsHTML = inv.items.map((it, idx) => `
       <tr style="border-bottom: 1px solid #f1f5f9;">
-        <td style="padding: 10px; font-size: 11px; color: #64748b;">${idx+1}</td>
-        <td style="padding: 10px; font-size: 12px; font-weight: 600;">${it.name}</td>
-        <td style="padding: 10px; text-align: center; font-size: 12px;">${it.quantity}</td>
-        <td style="padding: 10px; text-align: right; font-weight: 700;">${currency}${it.price.toLocaleString()}</td>
+        <td style="padding: 12px 8px; font-size: 11px; color: #64748b;">${idx+1}</td>
+        <td style="padding: 12px 8px; font-size: 12px; font-weight: 600;">
+           <div style="color: #1e293b;">${it.name}</div>
+           <div style="font-size: 10px; color: #94a3b8; font-weight: normal; margin-top: 2px;">${it.sku}</div>
+        </td>
+        <td style="padding: 12px 8px; text-align: center; font-size: 12px;">${it.quantity}</td>
+        <td style="padding: 12px 8px; text-align: right; font-size: 12px; color: #64748b;">${currency}${it.price.toLocaleString()}</td>
+        <td style="padding: 12px 8px; text-align: right; font-weight: 700; font-size: 12px; color: #1e293b;">${currency}${(it.price * it.quantity).toLocaleString()}</td>
       </tr>`).join('');
 
     if (layout === 'a4' || layout === 'advice') {
-      const title = layout === 'a4' ? 'TAX INVOICE' : 'PAYMENT ADVICE';
+      const isAdvice = layout === 'advice';
       return `
-      <div style="padding: 20mm; font-family: 'Inter', sans-serif; background: #fff; width: 210mm; min-height: 297mm; margin: 0 auto;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 40px;">
+      <div style="padding: 15mm; font-family: 'Inter', sans-serif; background: #fff; width: 210mm; min-height: 297mm; margin: 0 auto; color: #1e293b; box-sizing: border-box;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 4px solid #4f46e5; padding-bottom: 20px;">
           <div>
-            <h1 style="margin: 0; color: #4f46e5; font-size: 28px; font-weight: 900;">${state.settings.shopName}</h1>
-            <p style="margin: 5px 0; color: #64748b; font-size: 12px;">${state.settings.shopAddress || 'Business Terminal Output'}</p>
+            <div style="width: 48px; height: 48px; background: #4f46e5; color: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 24px; margin-bottom: 15px;">S</div>
+            <h1 style="margin: 0; color: #1e293b; font-size: 24px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.5px;">${shop.shopName}</h1>
+            <div style="margin-top: 8px; font-size: 11px; color: #64748b; line-height: 1.5;">
+              <div>${shop.shopAddress || ''}</div>
+              <div>Phone: ${shop.shopPhone || ''}</div>
+              <div>Email: ${shop.shopEmail || ''}</div>
+            </div>
           </div>
           <div style="text-align: right;">
-            <h2 style="margin: 0; font-size: 18px; color: #1e293b;">${title}</h2>
-            <p style="margin: 5px 0; color: #64748b; font-size: 12px;">Ref: #${inv.id} | Date: ${new Date(inv.date).toLocaleDateString()}</p>
+            <h2 style="margin: 0; font-size: 28px; font-weight: 900; color: #4f46e5; letter-spacing: -1px;">${isAdvice ? 'PAYMENT ADVICE' : 'TAX INVOICE'}</h2>
+            <div style="margin-top: 15px; background: #f8fafc; padding: 12px 20px; border-radius: 12px; display: inline-block;">
+               <div style="font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 4px;">Reference No.</div>
+               <div style="font-size: 16px; font-weight: 900; color: #1e293b;">#INV-${inv.id.padStart(4, '0')}</div>
+               <div style="font-size: 11px; font-weight: 700; color: #64748b; margin-top: 4px;">${new Date(inv.date).toLocaleDateString()}</div>
+            </div>
           </div>
         </div>
-        <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px; display: flex; justify-content: space-between;">
-           <div>
-             <p style="margin: 0; font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 800;">Billed To</p>
-             <p style="margin: 5px 0 0 0; font-size: 14px; font-weight: 700;">${cust?.name || 'Walk-in Customer'}</p>
-             <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">${cust?.phone || ''}</p>
-             ${cust?.address ? `<p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">${cust.address}</p>` : ''}
+
+        <div style="display: grid; grid-template-cols: 1fr 1fr; gap: 40px; margin-bottom: 40px;">
+           <div style="background: #f8fafc; padding: 25px; border-radius: 20px; border: 1px solid #f1f5f9;">
+             <p style="margin: 0; font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">Customer Identity</p>
+             <p style="margin: 8px 0 0 0; font-size: 18px; font-weight: 900; color: #1e293b;">${cust?.name || 'Walk-in Customer'}</p>
+             <p style="margin: 4px 0 0 0; font-size: 12px; font-weight: 700; color: #4f46e5;">${cust?.phone || ''}</p>
+             ${cust?.address ? `<p style="margin: 6px 0 0 0; font-size: 11px; color: #64748b; line-height: 1.4;">${cust.address}</p>` : ''}
            </div>
-           <div style="text-align: right;">
-             <p style="margin: 0; font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 800;">Status</p>
-             <p style="margin: 5px 0 0 0; font-size: 12px; font-weight: 800; color: ${inv.status === 'paid' ? '#10b981' : '#ef4444'}; text-transform: uppercase;">${inv.status}</p>
+           <div style="background: ${inv.status === 'paid' ? '#f0fdf4' : '#fef2f2'}; padding: 25px; border-radius: 20px; border: 1px solid ${inv.status === 'paid' ? '#dcfce7' : '#fee2e2'}; display: flex; flex-direction: column; justify-content: center;">
+             <p style="margin: 0; font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">Account Status</p>
+             <p style="margin: 8px 0 0 0; font-size: 20px; font-weight: 900; color: ${inv.status === 'paid' ? '#16a34a' : '#dc2626'}; text-transform: uppercase;">${inv.status}</p>
+             <p style="margin: 4px 0 0 0; font-size: 11px; font-weight: 700; color: #64748b;">Method: ${inv.paymentMethod.toUpperCase()}</p>
            </div>
         </div>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;">
           <thead>
-            <tr style="background: #f1f5f9;">
-              <th style="padding: 12px; text-align: left; font-size: 10px; color: #64748b; text-transform: uppercase;">#</th>
-              <th style="padding: 12px; text-align: left; font-size: 10px; color: #64748b; text-transform: uppercase;">Description</th>
-              <th style="padding: 12px; text-align: center; font-size: 10px; color: #64748b; text-transform: uppercase;">Qty</th>
-              <th style="padding: 12px; text-align: right; font-size: 10px; color: #64748b; text-transform: uppercase;">Subtotal</th>
+            <tr style="background: #1e293b;">
+              <th style="padding: 12px 10px; text-align: left; font-size: 10px; color: #fff; text-transform: uppercase; border-top-left-radius: 8px; border-bottom-left-radius: 8px;">#</th>
+              <th style="padding: 12px 10px; text-align: left; font-size: 10px; color: #fff; text-transform: uppercase;">Description</th>
+              <th style="padding: 12px 10px; text-align: center; font-size: 10px; color: #fff; text-transform: uppercase;">Qty</th>
+              <th style="padding: 12px 10px; text-align: right; font-size: 10px; color: #fff; text-transform: uppercase;">Price</th>
+              <th style="padding: 12px 10px; text-align: right; font-size: 10px; color: #fff; text-transform: uppercase; border-top-right-radius: 8px; border-bottom-right-radius: 8px;">Total</th>
             </tr>
           </thead>
           <tbody>${itemsHTML}</tbody>
         </table>
-        <div style="width: 250px; margin-left: auto; space-y: 10px;">
-           <div style="display: flex; justify-content: space-between; padding: 5px 0;"><span style="color: #64748b; font-size: 12px;">Total Bill</span><span style="font-weight: 700;">${currency}${inv.total.toLocaleString()}</span></div>
-           <div style="display: flex; justify-content: space-between; padding: 5px 0;"><span style="color: #64748b; font-size: 12px;">Paid Amount</span><span style="font-weight: 700; color: #10b981;">${currency}${inv.paidAmount.toLocaleString()}</span></div>
-           <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 2px solid #f1f5f9;"><span style="font-weight: 800; font-size: 14px;">Balance</span><span style="font-weight: 900; font-size: 16px; color: #ef4444;">${currency}${(inv.total - inv.paidAmount).toLocaleString()}</span></div>
+
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 60px;">
+          <div style="width: 300px; background: #f8fafc; border-radius: 20px; padding: 25px; border: 1px solid #f1f5f9;">
+             <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #e2e8f0;">
+               <span style="color: #64748b; font-size: 12px; font-weight: 600;">Gross Amount</span>
+               <span style="font-weight: 700; color: #1e293b;">${currency}${inv.total.toLocaleString()}</span>
+             </div>
+             <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #e2e8f0;">
+               <span style="color: #64748b; font-size: 12px; font-weight: 600;">Payment Applied</span>
+               <span style="font-weight: 700; color: #16a34a;">${currency}${inv.paidAmount.toLocaleString()}</span>
+             </div>
+             <div style="display: flex; justify-content: space-between; padding: 15px 0 0 0; margin-top: 5px;">
+               <span style="font-weight: 900; font-size: 14px; color: #1e293b; text-transform: uppercase;">Balance Due</span>
+               <span style="font-weight: 900; font-size: 18px; color: #dc2626;">${currency}${(inv.total - inv.paidAmount).toLocaleString()}</span>
+             </div>
+          </div>
         </div>
-        <div style="margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 20px;">
-           <div style="display: flex; justify-content: center; margin-bottom: 20px;">
-              <svg width="100" height="100" viewBox="0 0 100 100" style="background:#fff">
-                <rect x="10" y="10" width="80" height="80" fill="none" stroke="#000" stroke-width="2" />
-                <rect x="20" y="20" width="10" height="10" fill="#000" />
-                <rect x="20" y="70" width="10" height="10" fill="#000" />
-                <rect x="70" y="20" width="10" height="10" fill="#000" />
-                <rect x="40" y="40" width="20" height="20" fill="#000" />
-              </svg>
+
+        <div style="display: flex; justify-content: space-between; border-top: 2px solid #f1f5f9; padding-top: 30px;">
+           <div style="width: 200px;">
+              <p style="font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 800; margin-bottom: 50px;">Prepared By</p>
+              <div style="border-bottom: 1px solid #e2e8f0; width: 100%;"></div>
+              <p style="font-size: 10px; color: #64748b; font-weight: 700; margin-top: 5px;">Digital Terminal Signature</p>
            </div>
-           <div style="text-align: center; color: #94a3b8; font-size: 10px;">
-              Certified digital vault extraction from ${state.settings.shopName}.
+           <div style="width: 200px; text-align: right;">
+              <p style="font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 800; margin-bottom: 50px;">Customer Signature</p>
+              <div style="border-bottom: 1px solid #e2e8f0; width: 100%;"></div>
+              <p style="font-size: 10px; color: #64748b; font-weight: 700; margin-top: 5px;">Acknowledge Receipt</p>
            </div>
+        </div>
+        
+        <div style="margin-top: 60px; text-align: center; color: #94a3b8; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px;">
+           Thank you for choosing ${shop.shopName}
         </div>
       </div>`;
     }
 
     return `
-      <div style="width: 80mm; padding: 5mm; font-family: monospace; text-align: center; color: #000;">
-        <h2 style="margin: 0; font-size: 16px;">${state.settings.shopName}</h2>
-        <p style="font-size: 10px; margin: 4px 0;">${new Date(inv.date).toLocaleString()}</p>
-        <p style="font-size: 11px; margin: 0;"><b>INV #${inv.id}</b></p>
-        <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
-        ${inv.items.map(it => `
-          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
-            <span>${it.quantity}x ${it.name.slice(0, 16)}</span>
-            <span>${currency}${(it.price * it.quantity).toLocaleString()}</span>
-          </div>
-        `).join('')}
-        <div style="border-top: 1px dashed #000; margin: 8px 0;"></div>
-        <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px;">
+      <div style="width: 80mm; padding: 8mm 4mm; font-family: 'Courier New', Courier, monospace; color: #000; background: #fff; font-size: 12px; line-height: 1.4;">
+        <div style="text-align: center; margin-bottom: 15px;">
+           <h2 style="margin: 0; font-size: 20px; font-weight: bold; text-transform: uppercase;">${shop.shopName}</h2>
+           <div style="font-size: 10px; margin-top: 2px;">${shop.shopAddress || ''}</div>
+           <div style="font-size: 10px;">${shop.shopPhone || ''}</div>
+        </div>
+        
+        <div style="border-top: 1px dashed #000; margin: 10px 0;"></div>
+        <div style="display: flex; justify-content: space-between; font-weight: bold;">
+           <span>INV #${inv.id.padStart(4, '0')}</span>
+           <span>${new Date(inv.date).toLocaleDateString()}</span>
+        </div>
+        <div style="font-size: 10px; margin-bottom: 5px;">TIME: ${new Date(inv.date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+        <div style="font-size: 10px; font-weight: bold;">CUST: ${cust?.name || 'WALK-IN'}</div>
+        <div style="border-top: 1px dashed #000; margin: 10px 0;"></div>
+        
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr>
+              <th style="text-align: left; padding: 2px 0;">ITEM</th>
+              <th style="text-align: center; padding: 2px 0;">QTY</th>
+              <th style="text-align: right; padding: 2px 0;">PRICE</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${inv.items.map(it => `
+              <tr>
+                <td style="padding: 2px 0; font-weight: bold;">${it.name.toUpperCase().slice(0, 15)}</td>
+                <td style="text-align: center; padding: 2px 0;">${it.quantity}</td>
+                <td style="text-align: right; padding: 2px 0;">${currency}${(it.price * it.quantity).toLocaleString()}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        
+        <div style="border-top: 1px dashed #000; margin: 10px 0;"></div>
+        
+        <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; margin: 5px 0;">
           <span>TOTAL</span>
           <span>${currency}${inv.total.toLocaleString()}</span>
         </div>
-        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 4px;">
+        <div style="display: flex; justify-content: space-between;">
           <span>PAID (${inv.paymentMethod.toUpperCase()})</span>
           <span>${currency}${inv.paidAmount.toLocaleString()}</span>
         </div>
-        <p style="font-size: 10px; margin-top: 12px;">THANK YOU FOR YOUR PATRONAGE</p>
+        <div style="display: flex; justify-content: space-between; font-weight: bold;">
+          <span>BALANCE</span>
+          <span>${currency}${(inv.total - inv.paidAmount).toLocaleString()}</span>
+        </div>
+        
+        <div style="border-top: 1px dashed #000; margin: 15px 0 10px 0;"></div>
+        <div style="text-align: center; font-size: 10px; font-weight: bold;">
+           *** THANK YOU ***
+           <br/>STAY BLESSED
+        </div>
       </div>`;
   };
 
@@ -517,7 +584,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                     <td className="px-6 py-4 text-right">
                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all" onClick={e => e.stopPropagation()}>
                           <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="View Detailed Audit"><Eye size={18}/></button>
-                          <button onClick={() => setPreviewData({inv, layout: 'a4'})} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="Print/Preview Audit"><Printer size={18}/></button>
+                          <button onClick={() => setPreviewData({inv, layout: 'a4'})} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="Print Options"><Printer size={18}/></button>
                           <button onClick={() => deleteInvoice(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-transform active:scale-90"><Trash2 size={18}/></button>
                        </div>
                     </td>
@@ -527,42 +594,29 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
             </tbody>
           </table>
         </div>
-        {filteredInvoices.length === 0 && (
-          <div className="py-24 text-center flex flex-col items-center justify-center">
-             <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 text-slate-200">
-                <FileText size={40} />
-             </div>
-             <p className="text-[12px] font-black text-slate-300 uppercase tracking-[0.3em]">Temporal Audit Vault Empty</p>
-             <button onClick={() => { setSearchTerm(''); setStatusFilter('all'); }} className="mt-4 text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline transition-all">Clear All Parameters</button>
-          </div>
-        )}
       </div>
 
-      {/* Preview Modal (Handles Layout Choice & Live View) */}
+      {/* Preview Modal */}
       {previewData && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-200">
            <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-4xl h-[90vh] shadow-2xl relative flex flex-col overflow-hidden animate-in zoom-in duration-200">
               <header className="p-6 border-b flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-slate-900 z-10 gap-4">
-                 <div>
-                    <h3 className="text-sm font-black dark:text-white uppercase tracking-widest flex items-center gap-2">
-                       <Eye size={16} className="text-indigo-600"/> Document Audit Preview
-                    </h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Reference #INV-{previewData.inv.id.padStart(4, '0')}</p>
+                 <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center text-indigo-600"><Printer size={20}/></div>
+                    <div>
+                       <h3 className="text-sm font-black dark:text-white uppercase tracking-widest">Document Audit Preview</h3>
+                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Reference #INV-{previewData.inv.id.padStart(4, '0')}</p>
+                    </div>
                  </div>
                  <div className="flex items-center gap-2">
-                    <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex gap-1 overflow-x-auto no-scrollbar max-w-[300px] sm:max-w-none">
-                       <button 
-                        onClick={() => setPreviewData({...previewData, layout: 'a4'})}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${previewData.layout === 'a4' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                       >A4 Invoice</button>
-                       <button 
-                        onClick={() => setPreviewData({...previewData, layout: 'advice'})}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${previewData.layout === 'advice' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                       >Advice</button>
-                       <button 
-                        onClick={() => setPreviewData({...previewData, layout: 'thermal'})}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${previewData.layout === 'thermal' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                       >Thermal</button>
+                    <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex gap-1 overflow-x-auto no-scrollbar max-w-[280px] sm:max-w-none">
+                       {(['a4', 'advice', 'thermal'] as PrintLayout[]).map(l => (
+                         <button 
+                          key={l}
+                          onClick={() => setPreviewData({...previewData, layout: l})}
+                          className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${previewData.layout === l ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                         >{l === 'a4' ? 'Tax Invoice' : l}</button>
+                       ))}
                     </div>
                     <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2 hidden sm:block" />
                     <button onClick={() => handlePrint(previewData.inv, previewData.layout)} className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase">
@@ -574,7 +628,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                  </div>
               </header>
               <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-4 lg:p-10 overflow-y-auto flex justify-center custom-scrollbar">
-                 <div className="bg-white shadow-2xl" style={{ width: previewData.layout === 'thermal' ? '80mm' : '210mm', minHeight: previewData.layout === 'thermal' ? 'auto' : '297mm', height: 'fit-content' }}>
+                 <div className="bg-white shadow-2xl relative" style={{ width: previewData.layout === 'thermal' ? '80mm' : '210mm', minHeight: previewData.layout === 'thermal' ? 'auto' : '297mm', height: 'fit-content' }}>
                     <iframe 
                       srcDoc={generatePrintHTML(previewData.inv, previewData.layout)} 
                       className="w-full h-full border-none pointer-events-none" 
@@ -590,141 +644,100 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       {/* Detailed Document Modal */}
       {selectedInvoice && !previewData && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
-           <div className="bg-white dark:bg-slate-900 rounded-t-[48px] sm:rounded-[60px] w-full max-w-6xl h-[95vh] sm:h-[90vh] shadow-2xl relative flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:zoom-in duration-300 border-x border-t border-white/10">
+           <div className="bg-white dark:bg-slate-900 rounded-t-[48px] sm:rounded-[60px] w-full max-w-6xl h-[95vh] sm:h-[90vh] shadow-2xl relative flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:zoom-in duration-300">
               <header className="p-8 lg:p-10 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 z-10 shrink-0">
                  <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-slate-900 text-white rounded-[24px] flex items-center justify-center font-black text-2xl shadow-2xl shadow-indigo-100 dark:shadow-none shrink-0 border-4 border-white dark:border-slate-800">
+                    <div className="w-16 h-16 bg-indigo-600 text-white rounded-[24px] flex items-center justify-center font-black text-2xl shadow-2xl shrink-0 border-4 border-white dark:border-slate-800">
                       <FileCheck size={28}/>
                     </div>
                     <div>
-                       <h3 className="text-2xl sm:text-3xl font-black dark:text-white leading-tight uppercase tracking-tighter flex items-center gap-3">Vault Entry #INV-{selectedInvoice.id.padStart(4, '0')} <ShieldAlert size={20} className="text-emerald-500" /></h3>
+                       <h3 className="text-2xl sm:text-3xl font-black dark:text-white leading-tight uppercase tracking-tighter flex items-center gap-3">Entry #INV-{selectedInvoice.id.padStart(4, '0')} <ShieldAlert size={20} className="text-emerald-500" /></h3>
                        <div className="flex items-center gap-3 mt-1.5">
                           <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${selectedInvoice.status === 'paid' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
                             Audit: {selectedInvoice.status}
                           </span>
                           <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest opacity-60">
-                            Authenticated {new Date(selectedInvoice.date).toLocaleString()}
+                            Logged {new Date(selectedInvoice.date).toLocaleString()}
                           </span>
                        </div>
                     </div>
                  </div>
                  <div className="flex items-center gap-3">
-                    <button onClick={() => setPreviewData({inv: selectedInvoice, layout: 'a4'})} className="hidden lg:flex p-4 bg-indigo-600 text-white rounded-[22px] font-black text-[10px] uppercase tracking-widest items-center gap-2 shadow-lg hover:bg-indigo-700 transition-all"><Printer size={20}/> Print Options</button>
-                    <button onClick={() => setSelectedInvoice(null)} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-[22px] text-slate-400 hover:text-rose-600 transition-all hover:bg-rose-50"><X size={28}/></button>
+                    <button onClick={() => setPreviewData({inv: selectedInvoice, layout: 'a4'})} className="hidden lg:flex p-4 bg-indigo-600 text-white rounded-[22px] font-black text-[10px] uppercase tracking-widest items-center gap-2 shadow-lg hover:bg-indigo-700 transition-all"><Printer size={20}/> Print View</button>
+                    <button onClick={() => setSelectedInvoice(null)} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-[22px] text-slate-400 hover:text-rose-600 transition-all"><X size={28}/></button>
                  </div>
               </header>
 
               <div className="flex-1 overflow-y-auto p-8 lg:p-12 custom-scrollbar bg-slate-50/50 dark:bg-slate-950/20 grid grid-cols-1 lg:grid-cols-4 gap-10">
-                 {/* Financial Identity Column */}
                  <div className="lg:col-span-1 space-y-8">
-                    <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm space-y-8 relative overflow-hidden group">
-                       <div className="relative z-10">
-                          <h5 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest border-b dark:border-slate-800 pb-4 flex items-center gap-2"><User size={14}/> Identity Index</h5>
-                          <div className="flex items-center gap-5 mt-6 p-5 bg-slate-50 dark:bg-slate-800 rounded-[28px] border border-transparent group-hover:border-indigo-100">
-                             <div className="w-12 h-12 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center font-black text-base border shadow-sm">{state.customers.find(c => c.id === selectedInvoice.customerId)?.name.charAt(0) || 'W'}</div>
+                    <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm space-y-8">
+                       <div>
+                          <h5 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest border-b dark:border-slate-800 pb-4 flex items-center gap-2"><User size={14}/> Identity</h5>
+                          <div className="flex items-center gap-4 mt-6">
+                             <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center font-black text-base border">{state.customers.find(c => c.id === selectedInvoice.customerId)?.name.charAt(0) || 'W'}</div>
                              <div className="min-w-0">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Billing Entity</p>
-                                <p className="text-base font-black dark:text-white leading-tight truncate">{state.customers.find(c => c.id === selectedInvoice.customerId)?.name || 'Walk-in Customer'}</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase">Billing To</p>
+                                <p className="text-base font-black dark:text-white truncate">{state.customers.find(c => c.id === selectedInvoice.customerId)?.name || 'Walk-in Customer'}</p>
                              </div>
                           </div>
-                          <div className="mt-8 space-y-5">
-                             <div className="flex justify-between items-center"><span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Gross Total</span><span className="font-black dark:text-white text-xl">{state.settings.currency}{selectedInvoice.total.toLocaleString()}</span></div>
-                             <div className="flex justify-between items-center"><span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Settled Deposit</span><span className="font-black text-emerald-500 text-xl">{state.settings.currency}{selectedInvoice.paidAmount.toLocaleString()}</span></div>
-                             <div className="flex justify-between items-center pt-5 border-t dark:border-slate-800"><span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Active Balance</span><span className="font-black text-rose-500 text-2xl tracking-tighter">{state.settings.currency}{(selectedInvoice.total - selectedInvoice.paidAmount).toLocaleString()}</span></div>
-                          </div>
+                       </div>
+                       <div className="space-y-4">
+                          <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Bill Total</span><span className="font-black dark:text-white text-lg">{state.settings.currency}{selectedInvoice.total.toLocaleString()}</span></div>
+                          <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Paid Amount</span><span className="font-black text-emerald-500 text-lg">{state.settings.currency}{selectedInvoice.paidAmount.toLocaleString()}</span></div>
+                          <div className="flex justify-between items-center pt-4 border-t dark:border-slate-800"><span className="text-[10px] font-black text-slate-400 uppercase">Balance</span><span className="font-black text-rose-500 text-xl">{state.settings.currency}{(selectedInvoice.total - selectedInvoice.paidAmount).toLocaleString()}</span></div>
                        </div>
                     </div>
 
-                    <div className="bg-slate-950 p-8 rounded-[40px] text-white shadow-2xl space-y-8 relative overflow-hidden">
-                       <h5 className="text-[11px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2 relative z-10"><History size={14}/> Settlement Timeline</h5>
-                       <div className="space-y-4 relative z-10 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="bg-slate-950 p-8 rounded-[40px] text-white shadow-2xl space-y-8">
+                       <h5 className="text-[11px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Reconciliation History</h5>
+                       <div className="space-y-4">
                           {repaymentHistory.map((h, i) => (
-                             <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-all">
-                                <div>
-                                   <p className="text-[10px] font-black uppercase text-indigo-300">{h.type === 'repayment' ? 'External Payment' : 'Manual Adjust'}</p>
-                                   <p className="text-[8px] font-bold text-slate-500 mt-0.5">{new Date(h.date).toLocaleDateString()}</p>
-                                </div>
+                             <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10">
+                                <div><p className="text-[10px] font-black uppercase text-indigo-300">{h.type}</p><p className="text-[8px] font-bold text-slate-500 mt-0.5">{new Date(h.date).toLocaleDateString()}</p></div>
                                 <p className="text-sm font-black text-emerald-400">+{state.settings.currency}{h.amount.toLocaleString()}</p>
                              </div>
                           ))}
-                          {repaymentHistory.length === 0 && (
-                             <div className="text-center py-6 opacity-30 text-[9px] font-black uppercase tracking-widest italic">No reconciliation entries found</div>
-                          )}
+                          {repaymentHistory.length === 0 && <div className="text-center py-6 opacity-30 text-[9px] font-black uppercase tracking-widest">No reconciliation history</div>}
                        </div>
                     </div>
                  </div>
 
-                 {/* Line Item breakdown Column */}
                  <div className="lg:col-span-3 space-y-8">
-                    <div className="flex items-center justify-between mb-2">
-                       <h5 className="text-[14px] font-black dark:text-white uppercase tracking-tighter flex items-center gap-3">
-                          <Package size={22} className="text-indigo-600" /> Operational Breakdown
-                       </h5>
-                       <div className="flex items-center gap-3">
-                          <button onClick={() => setPreviewData({inv: selectedInvoice, layout: 'a4'})} className="px-6 py-3 bg-white dark:bg-slate-900 border rounded-2xl text-slate-600 dark:text-slate-300 hover:text-indigo-600 transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest">
-                             <Printer size={18}/> Print / Preview
-                          </button>
-                          <button className="p-3 bg-white dark:bg-slate-900 border rounded-2xl text-slate-400 hover:text-indigo-600 transition-all" title="Share Document"><Share2 size={20}/></button>
-                       </div>
-                    </div>
                     <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
                        <table className="w-full text-left border-collapse">
                           <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
                              <tr>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset Signature</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Unit Volume</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Settlement Price</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Ext. Valuation</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Operational Breakdown</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Qty</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Unit Price</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total</th>
                              </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                              {selectedInvoice.items.map((it, i) => (
-                                <tr key={i} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-500/5 transition-colors group">
+                                <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                    <td className="px-8 py-5">
-                                      <p className="text-[13px] font-black dark:text-slate-200 group-hover:text-indigo-600 transition-colors leading-tight">{it.name}</p>
-                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{it.sku || 'UNSPECIFIED'}</p>
+                                      <p className="text-sm font-black dark:text-slate-200">{it.name}</p>
+                                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{it.sku}</p>
                                    </td>
-                                   <td className="px-8 py-5 text-center">
-                                      <span className="px-3 py-1 bg-slate-50 dark:bg-slate-800 rounded-xl font-black text-[11px] dark:text-slate-400 shadow-inner">x{it.quantity}</span>
-                                   </td>
-                                   <td className="px-8 py-5 text-right text-[12px] font-bold text-slate-500">{state.settings.currency}{it.price.toLocaleString()}</td>
-                                   <td className="px-8 py-5 text-right text-[14px] font-black dark:text-white tracking-tighter">{state.settings.currency}{(it.price * it.quantity).toLocaleString()}</td>
+                                   <td className="px-8 py-5 text-center"><span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-xl font-black text-[11px] dark:text-slate-400">x{it.quantity}</span></td>
+                                   <td className="px-8 py-5 text-right text-sm font-bold text-slate-500">{state.settings.currency}{it.price.toLocaleString()}</td>
+                                   <td className="px-8 py-5 text-right text-base font-black dark:text-white">{state.settings.currency}{(it.price * it.quantity).toLocaleString()}</td>
                                 </tr>
                              ))}
                           </tbody>
                        </table>
                     </div>
                     
-                    {/* Secondary Intelligence Matrix */}
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
                        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[32px] shadow-sm">
-                          <p className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">Document Profit</p>
+                          <p className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">Entry Profit</p>
                           <p className="text-2xl font-black text-emerald-500 tracking-tighter">{state.settings.currency}{(selectedInvoice.profit || 0).toLocaleString()}</p>
                        </div>
                        <div className="p-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[32px] shadow-sm">
                           <p className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">Margin Efficacy</p>
-                          <p className="text-2xl font-black text-indigo-600 tracking-tighter">
-                             {(( (selectedInvoice.profit || 0) / (selectedInvoice.total || 1) ) * 100).toFixed(1)}%
-                          </p>
+                          <p className="text-2xl font-black text-indigo-600 tracking-tighter">{(( (selectedInvoice.profit || 0) / (selectedInvoice.total || 1) ) * 100).toFixed(1)}%</p>
                        </div>
-                       <div className="p-6 bg-slate-900 rounded-[32px] shadow-lg flex flex-col justify-center text-center">
-                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Terminal Auth</p>
-                          <p className="text-xs font-black text-white">#{(selectedInvoice.id.toString() + selectedInvoice.date).slice(-8).toUpperCase()}</p>
-                       </div>
-                       <div className="p-6 bg-indigo-50 dark:bg-indigo-900/10 rounded-[32px] border border-indigo-100 dark:border-indigo-800 flex items-center justify-center">
-                          <BarChart2 size={32} className="text-indigo-600" />
-                       </div>
-                    </div>
-
-                    <div className="p-8 bg-slate-50 dark:bg-slate-800/40 rounded-[40px] border border-slate-100 dark:border-slate-800 flex items-center gap-6 relative overflow-hidden">
-                       <FileCheck size={32} className="text-indigo-600 shrink-0 relative z-10"/>
-                       <div className="relative z-10">
-                          <h6 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest mb-1">Document Metadata Integrity Check</h6>
-                          <p className="text-[10px] font-bold text-slate-500 leading-relaxed uppercase tracking-wide">
-                            Signed by Central Terminal • Hash Verified: #SHA-{(selectedInvoice.id.toString() + selectedInvoice.date).slice(-12).toUpperCase()} • Record status locked.
-                          </p>
-                       </div>
-                       <ShieldAlert size={120} className="absolute -right-8 -bottom-8 text-indigo-500/5 group-hover:scale-110 transition-transform" />
                     </div>
                  </div>
               </div>

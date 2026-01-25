@@ -29,7 +29,8 @@ import {
   Smartphone,
   FileText,
   FileSpreadsheet,
-  Eye
+  Eye,
+  Check
 } from 'lucide-react';
 import { AppState, Product, CartItem, Invoice, Customer } from '../types';
 import { translations } from '../translations';
@@ -70,7 +71,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; order: SortOrder }>({ key: 'name', order: 'asc' });
-  const [showSortMenu, setShowSortMenu] = useState(false);
   
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(() => state.customers.find(c => c.id === state.settings.defaultCustomerId) || null);
@@ -82,7 +82,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const [showCartMobile, setShowCartMobile] = useState(false);
   const [showQuickAddCust, setShowQuickAddCust] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-  const [previewType, setPreviewType] = useState<'advice' | 'thermal'>('advice');
+  const [previewType, setPreviewType] = useState<'a4' | 'advice' | 'thermal'>('thermal');
   
   const t = translations[state.settings.language || 'en'];
 
@@ -108,7 +108,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   };
 
   const updateQuantity = (id: string, delta: number) => setCart(prev => prev.map(item => item.id === id ? { ...item, quantity: Math.max(1, Math.min(item.quantity + delta, item.stock)) } : item));
-  const updatePrice = (id: string, price: number) => setCart(prev => prev.map(item => item.id === id ? { ...item, price } : item));
   const removeFromCart = (id: string) => setCart(prev => prev.filter(item => item.id !== id));
 
   const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
@@ -117,12 +116,59 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const finalPaid = paidAmountInput === '' ? total : paidAmountInput;
   const balanceDue = Math.max(0, total - finalPaid);
 
-  const generatePrintHTML = (inv: Invoice, layout: 'advice' | 'thermal') => {
+  const generatePrintHTML = (inv: Invoice, layout: 'a4' | 'advice' | 'thermal') => {
     const cust = state.customers.find(c => c.id === inv.customerId);
     const currency = state.settings.currency;
-    const itemsHTML = inv.items.map((it, idx) => `<tr style="border-bottom: 1px solid #eee;"><td style="padding: 6px; font-size: 11px;">${idx+1}</td><td style="padding: 6px; font-size: 11px;"><b>${it.name}</b><br/><small>${it.sku}</small></td><td style="padding: 6px; text-align: center;">${it.quantity}</td><td style="padding: 6px; text-align: right; font-weight: bold;">${currency}${it.price.toLocaleString()}</td></tr>`).join('');
-    if (layout === 'advice') return `<div style="width: 210mm; padding: 10mm; font-family: Inter, sans-serif; border: 1px solid #eee;"><h1 style="margin: 0; font-weight: 900;">${state.settings.shopName}</h1><p>Invoice #${inv.id} | ${new Date(inv.date).toLocaleDateString()}</p><hr/><table style="width: 100%; border-collapse: collapse;"><thead><tr style="background: #f8fafc;"><th style="padding: 6px; text-align: left;">#</th><th style="padding: 6px; text-align: left;">Item</th><th style="padding: 6px;">Qty</th><th style="padding: 6px; text-align: right;">Total</th></tr></thead><tbody>${itemsHTML}</tbody></table><div style="margin-top: 20px; text-align: right;"><h3>TOTAL: ${currency}${inv.total.toLocaleString()}</h3></div></div>`;
-    return `<div style="width: 80mm; padding: 5mm; font-family: monospace; text-align: center;"><h3>${state.settings.shopName}</h3><p>#${inv.id} | ${new Date(inv.date).toLocaleDateString()}</p><hr/>${inv.items.map(it => `<div style="display: flex; justify-content: space-between; font-size: 11px;"><span>${it.quantity}x ${it.name.slice(0,12)}</span><span>${currency}${(it.price*it.quantity).toLocaleString()}</span></div>`).join('')}<hr/><h4>TOTAL: ${currency}${inv.total.toLocaleString()}</h4></div>`;
+    const shop = state.settings;
+    
+    if (layout === 'a4' || layout === 'advice') {
+      const isAdvice = layout === 'advice';
+      const itemsHTML = inv.items.map((it, idx) => `
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 12px 8px; font-size: 11px;">${idx+1}</td>
+          <td style="padding: 12px 8px; font-size: 12px; font-weight: 600;">${it.name}<br/><small style="color: #94a3b8;">${it.sku}</small></td>
+          <td style="padding: 12px 8px; text-align: center; font-size: 12px;">${it.quantity}</td>
+          <td style="padding: 12px 8px; text-align: right; font-size: 12px;">${currency}${it.price.toLocaleString()}</td>
+          <td style="padding: 12px 8px; text-align: right; font-weight: 700; font-size: 12px;">${currency}${(it.price * it.quantity).toLocaleString()}</td>
+        </tr>`).join('');
+
+      return `<div style="padding: 15mm; font-family: sans-serif; background: #fff; width: 210mm; min-height: 297mm; margin: 0 auto; color: #1e293b;">
+        <div style="display: flex; justify-content: space-between; border-bottom: 4px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px;">
+          <div>
+            <h1 style="margin: 0; font-size: 24px; font-weight: 900;">${shop.shopName}</h1>
+            <div style="font-size: 11px; color: #64748b; margin-top: 5px;">${shop.shopAddress || ''} | ${shop.shopPhone || ''}</div>
+          </div>
+          <div style="text-align: right;">
+            <h2 style="margin: 0; font-size: 22px; color: #4f46e5; font-weight: 900;">${isAdvice ? 'PAYMENT ADVICE' : 'TAX INVOICE'}</h2>
+            <div style="font-size: 14px; font-weight: 800;">#INV-${inv.id.padStart(4, '0')}</div>
+          </div>
+        </div>
+        <div style="margin-bottom: 30px; display: flex; justify-content: space-between; background: #f8fafc; padding: 20px; border-radius: 12px;">
+          <div><p style="margin: 0; font-size: 10px; color: #94a3b8; font-weight: 800;">BILL TO</p><p style="margin: 5px 0; font-size: 16px; font-weight: 900;">${cust?.name || 'Walk-in Customer'}</p></div>
+          <div style="text-align: right;"><p style="margin: 0; font-size: 10px; color: #94a3b8; font-weight: 800;">DATE</p><p style="margin: 5px 0; font-size: 14px; font-weight: 700;">${new Date(inv.date).toLocaleDateString()}</p></div>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+          <thead><tr style="background: #1e293b; color: #fff;"><th style="padding: 10px; text-align: left; font-size: 10px;">#</th><th style="padding: 10px; text-align: left; font-size: 10px;">ITEM</th><th style="padding: 10px; text-align: center; font-size: 10px;">QTY</th><th style="padding: 10px; text-align: right; font-size: 10px;">UNIT</th><th style="padding: 10px; text-align: right; font-size: 10px;">TOTAL</th></tr></thead>
+          <tbody>${itemsHTML}</tbody>
+        </table>
+        <div style="display: flex; justify-content: flex-end;"><div style="width: 250px; background: #f8fafc; padding: 20px; border-radius: 12px;">
+          <div style="display: flex; justify-content: space-between; padding: 5px 0;"><span>Subtotal</span><span>${currency}${inv.total.toLocaleString()}</span></div>
+          <div style="display: flex; justify-content: space-between; padding: 5px 0;"><span>Paid</span><span style="color: #16a34a;">${currency}${inv.paidAmount.toLocaleString()}</span></div>
+          <div style="display: flex; justify-content: space-between; padding: 10px 0 0 0; margin-top: 10px; border-top: 2px solid #e2e8f0; font-weight: 900; font-size: 16px;"><span>DUE</span><span style="color: #dc2626;">${currency}${(inv.total - inv.paidAmount).toLocaleString()}</span></div>
+        </div></div>
+      </div>`;
+    }
+
+    return `<div style="width: 80mm; padding: 5mm; font-family: monospace; text-align: center;">
+      <h2 style="margin: 0;">${shop.shopName}</h2>
+      <p style="font-size: 10px; margin: 5px 0;">#INV-${inv.id.padStart(4, '0')} | ${new Date(inv.date).toLocaleString()}</p>
+      <div style="border-top: 1px dashed #000; margin: 10px 0;"></div>
+      ${inv.items.map(it => `<div style="display: flex; justify-content: space-between; font-size: 11px;"><span>${it.quantity}x ${it.name.slice(0, 15)}</span><span>${currency}${(it.price * it.quantity).toLocaleString()}</span></div>`).join('')}
+      <div style="border-top: 1px dashed #000; margin: 10px 0;"></div>
+      <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px;"><span>TOTAL</span><span>${currency}${inv.total.toLocaleString()}</span></div>
+      <div style="display: flex; justify-content: space-between; margin-top: 5px;"><span>PAID</span><span>${currency}${inv.paidAmount.toLocaleString()}</span></div>
+      <p style="margin-top: 20px; font-size: 10px;">THANK YOU FOR YOUR VISIT</p>
+    </div>`;
   };
 
   const handleCheckout = () => {
@@ -135,7 +181,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
     setLastInvoice(newInvoice); setCart([]); setPaymentModal(false); setSuccessModal(true); setShowCartMobile(false);
   };
 
-  const handlePreview = (layout: 'advice' | 'thermal') => {
+  const handlePreview = (layout: 'a4' | 'advice' | 'thermal') => {
     const inv = lastInvoice || { id: 'DRAFT', date: new Date().toISOString(), customerId: selectedCustomer?.id, items: cart, total, subtotal, tax, paymentMethod: 'cash' as const, status: 'unpaid' as const };
     setPreviewHtml(generatePrintHTML(inv as Invoice, layout)); setPreviewType(layout);
   };
@@ -198,7 +244,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
                <div className="flex-1 min-w-0">
                  <div className="flex justify-between items-start"><h5 className="font-black text-[10px] truncate pr-1 dark:text-white">{it.name}</h5><button onClick={() => removeFromCart(it.id)} className="text-slate-300 hover:text-rose-500"><Trash2 size={12}/></button></div>
                  <div className="mt-1 flex items-center justify-between">
-                    <div className="flex items-center gap-1 bg-white dark:bg-slate-900 rounded-lg px-2 py-0.5 border"><span className="text-[8px] text-slate-400">{state.settings.currency}</span><input type="number" value={it.price} onChange={(e) => updatePrice(it.id, Number(e.target.value))} className="bg-transparent border-none outline-none w-10 text-[10px] font-black dark:text-white" /></div>
+                    <div className="flex items-center gap-1 bg-white dark:bg-slate-900 rounded-lg px-2 py-0.5 border"><span className="text-[8px] text-slate-400">{state.settings.currency}</span><span className="font-black text-[10px] dark:text-white">{it.price}</span></div>
                     <div className="flex items-center gap-2 bg-indigo-600 rounded-lg px-1.5 py-0.5 text-white"><button onClick={() => updateQuantity(it.id, -1)}><Minus size={10}/></button><span className="text-[10px] font-black w-4 text-center">{it.quantity}</span><button onClick={() => updateQuantity(it.id, 1)}><Plus size={10}/></button></div>
                  </div>
                </div>
@@ -208,7 +254,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
         <div className="p-4 border-t bg-slate-50 dark:bg-slate-900 space-y-3 shrink-0">
            <div className="flex justify-between items-center"><span className="text-[10px] font-black text-indigo-600 uppercase">Payable Total</span><span className="font-black text-2xl tracking-tighter dark:text-white">{state.settings.currency}{total.toFixed(2)}</span></div>
            <div className="grid grid-cols-2 gap-2">
-              <button disabled={cart.length === 0} onClick={() => handlePreview('advice')} className="py-3 bg-white dark:bg-slate-800 border rounded-xl font-black text-[9px] uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-1.5"><Eye size={14}/> Preview</button>
+              <button disabled={cart.length === 0} onClick={() => handlePreview('thermal')} className="py-3 bg-white dark:bg-slate-800 border rounded-xl font-black text-[9px] uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-1.5"><Eye size={14}/> Preview</button>
               <button disabled={cart.length === 0} onClick={() => setPaymentModal(true)} className="py-3 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase shadow-lg hover:bg-indigo-700 transition-all">Checkout</button>
            </div>
         </div>
@@ -242,12 +288,16 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
           <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-sm p-8 shadow-2xl text-center">
             <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce"><CheckCircle2 size={32} /></div>
             <h3 className="text-xl font-black mb-2 uppercase dark:text-white">Sale Successful!</h3>
-            <p className="text-slate-500 dark:text-slate-400 mb-6 text-[10px] uppercase font-bold">Transaction logged in Sarvari database</p>
-            <div className="grid grid-cols-2 gap-2 mb-6">
-               <button onClick={() => handlePreview('advice')} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 transition-all flex flex-col items-center gap-1 text-indigo-600"><FileText size={18}/><span className="text-[8px] font-black uppercase">View A4</span></button>
-               <button onClick={() => handlePreview('thermal')} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl hover:bg-slate-100 transition-all flex flex-col items-center gap-1 text-indigo-600"><Smartphone size={18}/><span className="text-[8px] font-black uppercase">View POS</span></button>
+            <p className="text-slate-500 dark:text-slate-400 mb-6 text-[10px] uppercase font-bold">Logged in terminal archive</p>
+            <div className="grid grid-cols-3 gap-2 mb-6">
+               <button onClick={() => handlePreview('thermal')} className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${previewType === 'thermal' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400'}`}><Smartphone size={18}/><span className="text-[8px] font-black uppercase">POS</span></button>
+               <button onClick={() => handlePreview('advice')} className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${previewType === 'advice' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400'}`}><FileText size={18}/><span className="text-[8px] font-black uppercase">Advice</span></button>
+               <button onClick={() => handlePreview('a4')} className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${previewType === 'a4' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400'}`}><Layers size={18}/><span className="text-[8px] font-black uppercase">Invoice</span></button>
             </div>
-            <button onClick={() => { setSuccessModal(false); setLastInvoice(null); }} className="w-full py-4 bg-slate-950 dark:bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl">New Transaction</button>
+            <div className="flex gap-2">
+               <button onClick={() => {const f = document.getElementById('preview-frame') as HTMLIFrameElement; if (previewHtml) { f?.contentWindow?.print(); } else { handlePreview(previewType); setTimeout(() => { (document.getElementById('preview-frame') as HTMLIFrameElement)?.contentWindow?.print(); }, 200); } }} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl flex items-center justify-center gap-2"><Printer size={16}/> Print Now</button>
+               <button onClick={() => { setSuccessModal(false); setLastInvoice(null); setPreviewHtml(null); }} className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase"><Check size={20}/></button>
+            </div>
           </div>
         </div>
       )}
@@ -256,10 +306,17 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-200">
            <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-2xl h-[85vh] shadow-2xl relative flex flex-col overflow-hidden animate-in zoom-in duration-200">
               <header className="p-4 border-b flex items-center justify-between bg-white dark:bg-slate-900 z-10">
-                 <h3 className="text-sm font-black dark:text-white uppercase tracking-widest">Document Preview</h3>
-                 <div className="flex gap-2"><button onClick={() => {const f = document.getElementById('preview-frame') as HTMLIFrameElement; f?.contentWindow?.print();}} className="p-2 bg-indigo-600 text-white rounded-lg"><Printer size={16}/></button><button onClick={() => setPreviewHtml(null)} className="p-2 text-slate-400"><X size={20}/></button></div>
+                 <h3 className="text-sm font-black dark:text-white uppercase tracking-widest">Billing Output Preview</h3>
+                 <div className="flex gap-2">
+                    <button onClick={() => {const f = document.getElementById('preview-frame') as HTMLIFrameElement; f?.contentWindow?.print();}} className="p-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 font-black text-[10px] uppercase px-4"><Printer size={16}/> Print</button>
+                    <button onClick={() => setPreviewHtml(null)} className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><X size={20}/></button>
+                 </div>
               </header>
-              <div className="flex-1 bg-slate-100 p-4 overflow-y-auto flex justify-center"><div className="bg-white shadow-xl" style={{ width: previewType === 'thermal' ? '80mm' : '100%', minHeight: '100%' }}><iframe id="preview-frame" srcDoc={previewHtml} className="w-full h-full border-none" title="Invoice Preview" /></div></div>
+              <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-4 overflow-y-auto flex justify-center custom-scrollbar">
+                 <div className="bg-white shadow-xl h-fit" style={{ width: previewType === 'thermal' ? '80mm' : '100%', minHeight: '100%' }}>
+                    <iframe id="preview-frame" srcDoc={previewHtml} className="w-full h-full border-none pointer-events-none" style={{ minHeight: previewType === 'thermal' ? '150mm' : '297mm' }} title="Invoice Preview" />
+                 </div>
+              </div>
            </div>
         </div>
       )}
