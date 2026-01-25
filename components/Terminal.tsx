@@ -117,17 +117,6 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const finalPaid = paidAmountInput === '' ? total : Number(paidAmountInput);
   const balanceDue = Math.max(0, total - finalPaid);
 
-  const handleCheckout = () => {
-    if (cart.length === 0) return;
-    const nextId = (state.invoices.reduce((max, inv) => Math.max(max, parseInt(inv.id) || 0), 0) + 1).toString();
-    const newInvoice: Invoice = { id: nextId, date: new Date().toISOString(), customerId: selectedCustomer?.id, items: cart, subtotal, tax, discount: 0, total, profit: total - tax - cart.reduce((a, b) => a + (b.buyPrice * b.quantity), 0), paidAmount: finalPaid, status: finalPaid >= total ? 'paid' : (finalPaid > 0 ? 'partial' : 'unpaid'), paymentMethod };
-    updateState('invoices', [...state.invoices, newInvoice]);
-    updateState('products', state.products.map(p => { const it = cart.find(c => c.id === p.id); return it ? { ...p, stock: p.stock - it.quantity } : p; }));
-    if (selectedCustomer) updateState('customers', state.customers.map(c => c.id === selectedCustomer.id ? { ...c, totalSpent: c.totalSpent + total, totalDebt: (c.totalDebt || 0) + balanceDue, lastVisit: new Date().toISOString().split('T')[0], transactionCount: (c.transactionCount || 0) + 1 } : c));
-    setLastInvoice(newInvoice); setCart([]); setPaymentModal(false); setSuccessModal(true); setShowCartMobile(false);
-    setPaidAmountInput('');
-  };
-
   const handlePreview = (layout: PrintLayout) => {
     const invToPreview = lastInvoice || { 
       id: 'DRAFT', 
@@ -143,8 +132,70 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
       paymentMethod: paymentMethod, 
       status: finalPaid >= total ? 'paid' : (finalPaid > 0 ? 'partial' : 'unpaid')
     };
-    setPreviewHtml(generatePrintHTML(state, invToPreview as Invoice, layout)); 
+    const html = generatePrintHTML(state, invToPreview as Invoice, layout);
+    setPreviewHtml(html); 
     setPreviewType(layout);
+    return html;
+  };
+
+  const printDocument = (layout?: PrintLayout) => {
+    const type = layout || previewType;
+    const inv = lastInvoice;
+    if (!inv) return;
+    
+    const html = generatePrintHTML(state, inv, type);
+    const frame = document.getElementById('preview-frame') as HTMLIFrameElement;
+    if (frame) {
+      frame.srcdoc = html;
+      // Wait for iframe content to load then print
+      setTimeout(() => {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+      }, 300);
+    }
+  };
+
+  const handleCheckout = () => {
+    if (cart.length === 0) return;
+    const nextId = (state.invoices.reduce((max, inv) => Math.max(max, parseInt(inv.id) || 0), 0) + 1).toString();
+    const newInvoice: Invoice = { 
+      id: nextId, 
+      date: new Date().toISOString(), 
+      customerId: selectedCustomer?.id, 
+      items: cart, 
+      subtotal, 
+      tax, 
+      discount: 0, 
+      total, 
+      profit: total - tax - cart.reduce((a, b) => a + (b.buyPrice * b.quantity), 0), 
+      paidAmount: finalPaid, 
+      status: finalPaid >= total ? 'paid' : (finalPaid > 0 ? 'partial' : 'unpaid'), 
+      paymentMethod 
+    };
+
+    // Update business state
+    updateState('invoices', [...state.invoices, newInvoice]);
+    updateState('products', state.products.map(p => { const it = cart.find(c => c.id === p.id); return it ? { ...p, stock: p.stock - it.quantity } : p; }));
+    
+    if (selectedCustomer) {
+      updateState('customers', state.customers.map(c => c.id === selectedCustomer.id ? { 
+        ...c, 
+        totalSpent: c.totalSpent + total, 
+        totalDebt: (c.totalDebt || 0) + balanceDue, 
+        lastVisit: new Date().toISOString().split('T')[0], 
+        transactionCount: (c.transactionCount || 0) + 1 
+      } : c));
+    }
+
+    setLastInvoice(newInvoice); 
+    setCart([]); 
+    setPaymentModal(false); 
+    setSuccessModal(true); 
+    setShowCartMobile(false);
+    setPaidAmountInput('');
+    
+    // Set initial preview type to thermal
+    setPreviewType('thermal');
   };
 
   return (
@@ -249,16 +300,19 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
           <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-sm p-8 shadow-2xl text-center">
             <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce"><CheckCircle2 size={32} /></div>
             <h3 className="text-xl font-black mb-2 uppercase dark:text-white">Sale Successful!</h3>
-            <p className="text-slate-500 dark:text-slate-400 mb-6 text-[10px] uppercase font-bold">Logged in terminal archive</p>
+            <p className="text-slate-500 dark:text-slate-400 mb-6 text-[10px] uppercase font-bold">Documenting transaction...</p>
             <div className="grid grid-cols-3 gap-2 mb-6">
-               <button onClick={() => handlePreview('thermal')} className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${previewType === 'thermal' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400'}`}><Smartphone size={18}/><span className="text-[8px] font-black uppercase">POS</span></button>
-               <button onClick={() => handlePreview('advice')} className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${previewType === 'advice' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400'}`}><FileText size={18}/><span className="text-[8px] font-black uppercase">Advice</span></button>
-               <button onClick={() => handlePreview('a4')} className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${previewType === 'a4' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400'}`}><Layers size={18}/><span className="text-[8px] font-black uppercase">Invoice</span></button>
+               <button onClick={() => setPreviewType('thermal')} className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${previewType === 'thermal' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400'}`}><Smartphone size={18}/><span className="text-[8px] font-black uppercase">POS</span></button>
+               <button onClick={() => setPreviewType('advice')} className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${previewType === 'advice' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400'}`}><FileText size={18}/><span className="text-[8px] font-black uppercase">Advice</span></button>
+               <button onClick={() => setPreviewType('a4')} className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1 ${previewType === 'a4' ? 'bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-slate-50 border-transparent text-slate-400'}`}><Layers size={18}/><span className="text-[8px] font-black uppercase">A4</span></button>
             </div>
             <div className="flex gap-2">
-               <button onClick={() => {const f = document.getElementById('preview-frame') as HTMLIFrameElement; if (previewHtml) { f?.contentWindow?.print(); } else { handlePreview(previewType); setTimeout(() => { (document.getElementById('preview-frame') as HTMLIFrameElement)?.contentWindow?.print(); }, 200); } }} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl flex items-center justify-center gap-2"><Printer size={16}/> Print Now</button>
-               <button onClick={() => { setSuccessModal(false); setLastInvoice(null); setPreviewHtml(null); }} className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase"><Check size={20}/></button>
+               <button onClick={() => printDocument()} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase shadow-xl flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all active:scale-95"><Printer size={16}/> Print Now</button>
+               <button onClick={() => { setSuccessModal(false); setLastInvoice(null); setPreviewHtml(null); }} className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-xs uppercase hover:bg-slate-200 transition-all"><Check size={20}/></button>
             </div>
+            
+            {/* Hidden iframe for background printing */}
+            <iframe id="preview-frame" className="hidden" title="Print Frame" />
           </div>
         </div>
       )}
@@ -269,13 +323,13 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
               <header className="p-4 border-b flex items-center justify-between bg-white dark:bg-slate-900 z-10">
                  <h3 className="text-sm font-black dark:text-white uppercase tracking-widest">Billing Output Preview</h3>
                  <div className="flex gap-2">
-                    <button onClick={() => {const f = document.getElementById('preview-frame') as HTMLIFrameElement; f?.contentWindow?.print();}} className="p-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 font-black text-[10px] uppercase px-4"><Printer size={16}/> Print</button>
-                    <button onClick={() => setPreviewHtml(null)} className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><X size={20}/></button>
+                    <button onClick={() => {const f = document.getElementById('visible-preview-frame') as HTMLIFrameElement; f?.contentWindow?.print();}} className="p-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2 font-black text-[10px] uppercase px-4 hover:bg-indigo-700 transition-all"><Printer size={16}/> Print</button>
+                    <button onClick={() => setPreviewHtml(null)} className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all"><X size={20}/></button>
                  </div>
               </header>
               <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-4 overflow-y-auto flex justify-center custom-scrollbar">
                  <div className="bg-white shadow-xl h-fit" style={{ width: previewType === 'thermal' ? '80mm' : '100%', minHeight: '100%' }}>
-                    <iframe id="preview-frame" srcDoc={previewHtml} className="w-full h-full border-none pointer-events-none" style={{ minHeight: previewType === 'thermal' ? '150mm' : '297mm' }} title="Invoice Preview" />
+                    <iframe id="visible-preview-frame" srcDoc={previewHtml} className="w-full h-full border-none pointer-events-none" style={{ minHeight: previewType === 'thermal' ? '150mm' : '297mm' }} title="Invoice Preview" />
                  </div>
               </div>
            </div>
