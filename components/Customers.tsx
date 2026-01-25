@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Users as UsersIcon, 
   Search, 
@@ -41,13 +41,25 @@ interface Props {
   setCurrentView?: (view: View) => void;
 }
 
+type CustomerTab = 'overview' | 'history' | 'info';
+
 const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDebt, setFilterDebt] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'info'>('overview');
+  
+  // Tab state with persistence
+  const [activeTab, setActiveTab] = useState<CustomerTab>(() => {
+    const saved = localStorage.getItem('sarvari_customer_active_tab');
+    return (saved as CustomerTab) || 'overview';
+  });
+
+  // Save tab preference whenever it changes
+  useEffect(() => {
+    localStorage.setItem('sarvari_customer_active_tab', activeTab);
+  }, [activeTab]);
   
   const [repayModal, setRepayModal] = useState<{customer: Customer, mode: 'debt' | 'repayment'} | null>(null);
   const [repayAmount, setRepayAmount] = useState<number | ''>('');
@@ -235,6 +247,12 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     printSection.innerHTML = '';
   };
 
+  const detailTabs: { id: CustomerTab; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'history', label: 'Transaction History' },
+    { id: 'info', label: 'Detailed Info' }
+  ];
+
   return (
     <div className="space-y-4 animate-in fade-in duration-500 max-w-full">
       {/* Search and Quick Filters */}
@@ -282,7 +300,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
               {filteredCustomers.map((c) => {
                 const tier = getTier(c.totalSpent);
                 return (
-                  <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all cursor-pointer group" onClick={() => { setViewingCustomer(c); setActiveTab('overview'); }}>
+                  <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all cursor-pointer group" onClick={() => { setViewingCustomer(c); }}>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-sm group-hover:scale-110 transition-transform">
@@ -334,7 +352,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
         )}
       </div>
 
-      {/* Manual Entry Modal (Repay or Add Debt) */}
+      {/* Manual Entry Modal */}
       {repayModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-200">
            <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-sm p-8 shadow-2xl relative animate-in zoom-in duration-200">
@@ -403,14 +421,14 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
 
               {/* Tabs */}
               <div className="px-6 sm:px-10 border-b flex gap-6 shrink-0 bg-white dark:bg-slate-900">
-                 {['overview', 'history', 'info'].map(t => (
+                 {detailTabs.map(t => (
                    <button 
-                     key={t} 
-                     onClick={() => setActiveTab(t as any)} 
-                     className={`py-4 text-[11px] font-black uppercase tracking-widest relative transition-all ${activeTab === t ? 'text-indigo-600' : 'text-slate-400'}`}
+                     key={t.id} 
+                     onClick={() => setActiveTab(t.id)} 
+                     className={`py-4 text-[11px] font-black uppercase tracking-widest relative transition-all ${activeTab === t.id ? 'text-indigo-600' : 'text-slate-400'}`}
                    >
-                     {t}
-                     {activeTab === t && <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-full" />}
+                     {t.label}
+                     {activeTab === t.id && <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-full" />}
                    </button>
                  ))}
               </div>

@@ -53,6 +53,7 @@ interface Props {
 
 type SortKey = 'id' | 'date' | 'total' | 'status';
 type SortOrder = 'asc' | 'desc';
+type PrintLayout = 'a4' | 'advice' | 'thermal';
 
 const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -63,7 +64,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   
   // New Preview State
-  const [previewData, setPreviewData] = useState<{inv: Invoice, layout: 'a4' | 'thermal'} | null>(null);
+  const [previewData, setPreviewData] = useState<{inv: Invoice, layout: PrintLayout} | null>(null);
 
   // Advanced Filter State
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -222,7 +223,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     document.body.removeChild(link);
   };
 
-  const generatePrintHTML = (inv: Invoice, layout: 'a4' | 'thermal') => {
+  const generatePrintHTML = (inv: Invoice, layout: PrintLayout) => {
     const cust = state.customers.find(c => c.id === inv.customerId);
     const currency = state.settings.currency;
     const itemsHTML = inv.items.map((it, idx) => `
@@ -233,7 +234,9 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
         <td style="padding: 10px; text-align: right; font-weight: 700;">${currency}${it.price.toLocaleString()}</td>
       </tr>`).join('');
 
-    if (layout === 'a4') return `
+    if (layout === 'a4' || layout === 'advice') {
+      const title = layout === 'a4' ? 'TAX INVOICE' : 'PAYMENT ADVICE';
+      return `
       <div style="padding: 20mm; font-family: 'Inter', sans-serif; background: #fff; width: 210mm; min-height: 297mm; margin: 0 auto;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 40px;">
           <div>
@@ -241,7 +244,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
             <p style="margin: 5px 0; color: #64748b; font-size: 12px;">${state.settings.shopAddress || 'Business Terminal Output'}</p>
           </div>
           <div style="text-align: right;">
-            <h2 style="margin: 0; font-size: 18px; color: #1e293b;">AUDIT STATEMENT</h2>
+            <h2 style="margin: 0; font-size: 18px; color: #1e293b;">${title}</h2>
             <p style="margin: 5px 0; color: #64748b; font-size: 12px;">Ref: #${inv.id} | Date: ${new Date(inv.date).toLocaleDateString()}</p>
           </div>
         </div>
@@ -250,6 +253,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
              <p style="margin: 0; font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 800;">Billed To</p>
              <p style="margin: 5px 0 0 0; font-size: 14px; font-weight: 700;">${cust?.name || 'Walk-in Customer'}</p>
              <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">${cust?.phone || ''}</p>
+             ${cust?.address ? `<p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">${cust.address}</p>` : ''}
            </div>
            <div style="text-align: right;">
              <p style="margin: 0; font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 800;">Status</p>
@@ -287,6 +291,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
            </div>
         </div>
       </div>`;
+    }
 
     return `
       <div style="width: 80mm; padding: 5mm; font-family: monospace; text-align: center; color: #000;">
@@ -313,14 +318,14 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       </div>`;
   };
 
-  const handlePrint = (inv: Invoice, layout: 'a4' | 'thermal') => {
+  const handlePrint = (inv: Invoice, layout: PrintLayout) => {
     const ps = document.getElementById('print-section');
     if (!ps) return;
     ps.innerHTML = generatePrintHTML(inv, layout);
     setTimeout(() => { 
       window.print(); 
       ps.innerHTML = ''; 
-      setPreviewData(null); // Close preview after printing
+      setPreviewData(null); 
     }, 500);
   };
 
@@ -511,6 +516,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                     </td>
                     <td className="px-6 py-4 text-right">
                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="View Detailed Audit"><Eye size={18}/></button>
                           <button onClick={() => setPreviewData({inv, layout: 'a4'})} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="Print/Preview Audit"><Printer size={18}/></button>
                           <button onClick={() => deleteInvoice(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-transform active:scale-90"><Trash2 size={18}/></button>
                        </div>
@@ -544,17 +550,21 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                     <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Reference #INV-{previewData.inv.id.padStart(4, '0')}</p>
                  </div>
                  <div className="flex items-center gap-2">
-                    <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex gap-1">
+                    <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex gap-1 overflow-x-auto no-scrollbar max-w-[300px] sm:max-w-none">
                        <button 
                         onClick={() => setPreviewData({...previewData, layout: 'a4'})}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${previewData.layout === 'a4' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                       >A4 Statement</button>
+                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${previewData.layout === 'a4' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                       >A4 Invoice</button>
+                       <button 
+                        onClick={() => setPreviewData({...previewData, layout: 'advice'})}
+                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${previewData.layout === 'advice' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                       >Advice</button>
                        <button 
                         onClick={() => setPreviewData({...previewData, layout: 'thermal'})}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${previewData.layout === 'thermal' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                       >POS Thermal</button>
+                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${previewData.layout === 'thermal' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                       >Thermal</button>
                     </div>
-                    <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2" />
+                    <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2 hidden sm:block" />
                     <button onClick={() => handlePrint(previewData.inv, previewData.layout)} className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase">
                        <Printer size={16}/> Print
                     </button>
@@ -577,7 +587,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
         </div>
       )}
 
-      {/* Detailed Document Modal (Existing) */}
+      {/* Detailed Document Modal */}
       {selectedInvoice && !previewData && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
            <div className="bg-white dark:bg-slate-900 rounded-t-[48px] sm:rounded-[60px] w-full max-w-6xl h-[95vh] sm:h-[90vh] shadow-2xl relative flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:zoom-in duration-300 border-x border-t border-white/10">
