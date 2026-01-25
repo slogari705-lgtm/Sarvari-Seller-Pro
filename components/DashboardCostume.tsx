@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Layout, Check, Shield, TrendingUp, ShoppingBag, Scale, Activity, Save, Sparkles } from 'lucide-react';
+import { Layout, Check, Shield, TrendingUp, ShoppingBag, Scale, Activity, Save, Sparkles, PieChart, Wallet } from 'lucide-react';
 import { AppState, View } from '../types';
 
 interface Props {
@@ -22,16 +22,17 @@ const DashboardCostume: React.FC<Props> = ({ state, setCurrentView }) => {
 
   const handleSave = () => {
     localStorage.setItem('dashboard_costume', JSON.stringify(visibleWidgets));
-    // Dispatch storage event manually for same-tab updates
     window.dispatchEvent(new Event('storage'));
     setCurrentView('dashboard');
   };
 
   const widgetOptions = [
-    { id: 'totalSales', label: 'Total Sales Revenue', icon: TrendingUp, desc: 'Display total gross income collected from transactions.' },
-    { id: 'orders', label: 'Transaction Count', icon: ShoppingBag, desc: 'Count of completed sales recorded in database.' },
-    { id: 'totalDebt', label: 'Outstanding Debt', icon: Scale, desc: 'Total credit amount owed by active customers.' },
-    { id: 'netProfit', label: 'Net Business Profit', icon: Activity, desc: 'Real profit after inventory cost and overhead expenses.' },
+    { id: 'totalSales', label: 'Gross Revenue', icon: TrendingUp, desc: 'Global income before costs.' },
+    { id: 'orders', label: 'Order Flow', icon: ShoppingBag, desc: 'Total transaction volume.' },
+    { id: 'totalDebt', label: 'Risk Portfolio', icon: Scale, desc: 'Outstanding receivables from clients.' },
+    { id: 'netProfit', label: 'Net Earnings', icon: Activity, desc: 'Post-overhead business profit.' },
+    { id: 'assetValue', label: 'Inventory Value', icon: Wallet, desc: 'Capital locked in current stock.' },
+    { id: 'grossMargin', label: 'Gross Margin %', icon: PieChart, desc: 'Operational profitability ratio.' },
   ];
 
   return (
@@ -44,7 +45,7 @@ const DashboardCostume: React.FC<Props> = ({ state, setCurrentView }) => {
           </div>
         </div>
         <h2 className="text-5xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">Workspace Designer</h2>
-        <p className="text-slate-400 dark:text-slate-500 font-bold text-sm uppercase tracking-[0.2em]">Curate your dashboard for peak operational efficiency</p>
+        <p className="text-slate-400 dark:text-slate-500 font-bold text-sm uppercase tracking-[0.2em]">Curate your terminal dashboard for peak efficiency</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -73,8 +74,6 @@ const DashboardCostume: React.FC<Props> = ({ state, setCurrentView }) => {
                 <h4 className="font-black text-xl dark:text-white uppercase tracking-tight mb-2">{opt.label}</h4>
                 <p className="text-sm font-bold text-slate-400 leading-relaxed">{opt.desc}</p>
               </div>
-
-              {isActive && <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-indigo-500/5 rounded-full blur-3xl"></div>}
             </button>
           );
         })}
@@ -85,26 +84,15 @@ const DashboardCostume: React.FC<Props> = ({ state, setCurrentView }) => {
           onClick={() => setCurrentView('dashboard')}
           className="flex-1 py-6 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-black rounded-[32px] uppercase tracking-[0.2em] text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all active:scale-95"
         >
-          Discard Changes
+          Discard
         </button>
         <button 
           onClick={handleSave}
           className="flex-[2] py-6 bg-indigo-600 text-white font-black rounded-[32px] shadow-2xl shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-4 uppercase tracking-[0.2em] text-xs"
         >
           <Save size={20} strokeWidth={3} />
-          Confirm Architecture
+          Confirm Layout
         </button>
-      </div>
-
-      <div className="p-10 bg-indigo-50 dark:bg-indigo-950/20 rounded-[48px] border border-indigo-100 dark:border-indigo-900/30 flex items-start gap-6 relative overflow-hidden">
-        <Shield className="text-indigo-600 shrink-0 mt-1" size={32} />
-        <div className="relative z-10">
-          <h5 className="font-black text-indigo-900 dark:text-indigo-200 uppercase text-xs tracking-widest mb-2">Privacy & Sync Note</h5>
-          <p className="text-xs font-bold text-indigo-700 dark:text-indigo-400 leading-relaxed opacity-80 uppercase tracking-wide">
-            Your workspace configuration is saved locally on this terminal. Changes here do not delete any business data; they only modify the visual layout for this device.
-          </p>
-        </div>
-        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-600/5 rounded-full blur-2xl"></div>
       </div>
     </div>
   );

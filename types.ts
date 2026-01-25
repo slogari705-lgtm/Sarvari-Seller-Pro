@@ -98,6 +98,12 @@ export interface AppState {
     shopPhone?: string;
     shopEmail?: string;
     shopWebsite?: string;
+    shopLogo?: string; // Base64 Logo String
+    invoiceHeaderNote?: string;
+    invoiceFooterNote?: string;
+    invoicePrefix?: string;
+    businessRegId?: string;
+    showSignatures: boolean;
     businessId?: string;
     currency: string;
     taxRate: number;

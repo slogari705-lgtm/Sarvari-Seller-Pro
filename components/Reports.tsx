@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   ComposedChart,
   Bar, 
@@ -34,16 +34,22 @@ import {
   Scale,
   Activity,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  FileDown,
+  // Fix: Add missing Printer import from lucide-react
+  Printer
 } from 'lucide-react';
 import { AppState } from '../types';
 import { translations } from '../translations';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface Props {
   state: AppState;
 }
 
 const Reports: React.FC<Props> = ({ state }) => {
+  const [isDownloading, setIsDownloading] = useState(false);
   const t = translations[state.settings.language || 'en'];
   
   // Basic Financial Aggregates
@@ -127,8 +133,46 @@ const Reports: React.FC<Props> = ({ state }) => {
     return Object.entries(cats).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
   }, [state.invoices]);
 
+  const handleDownloadReportPDF = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    
+    // Target the main report container
+    const element = document.getElementById('report-container');
+    if (!element) return setIsDownloading(false);
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: state.settings.theme === 'dark' ? '#020617' : '#f8fafc',
+        windowWidth: 1400 // Force high width for consistent chart rendering
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(pdfHeight, 280)); // Limit height to one page for now or implement slicing
+      pdf.save(`BusinessIntelligence_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error("PDF Export Error:", error);
+      alert("Failed to capture deep analytics dashboard. Using direct print instead.");
+      window.print();
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
-    <div className="space-y-6 pb-20 animate-in fade-in duration-500 max-w-full print:bg-white">
+    <div id="report-container" className="space-y-6 pb-20 animate-in fade-in duration-500 max-w-full print:bg-white p-1">
       {/* Executive Summary Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-6 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm no-print">
         <div className="flex items-center gap-5">
@@ -151,9 +195,19 @@ const Reports: React.FC<Props> = ({ state }) => {
                  <ShieldCheck size={20} className={healthScore > 70 ? 'text-emerald-500' : healthScore > 40 ? 'text-amber-500' : 'text-rose-500'} />
               </div>
            </div>
-           <button onClick={() => window.print()} className="px-6 py-3.5 bg-slate-900 dark:bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:opacity-90 transition-all flex items-center gap-2 active:scale-95">
-             <Download size={16} /> Export Intelligence
-           </button>
+           <div className="flex gap-2">
+            <button 
+              onClick={handleDownloadReportPDF} 
+              disabled={isDownloading}
+              className="px-6 py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:opacity-90 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50"
+            >
+              {isDownloading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <FileDown size={16} />} 
+              Download Intelligence
+            </button>
+            <button onClick={() => window.print()} className="px-4 py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:opacity-90 transition-all flex items-center gap-2 active:scale-95">
+              <Printer size={16} />
+            </button>
+           </div>
         </div>
       </div>
 
@@ -163,7 +217,7 @@ const Reports: React.FC<Props> = ({ state }) => {
           { label: 'Total Revenue', value: totalSales, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-500/10', icon: DollarSign, trend: growthMetrics.salesGrowth },
           { label: 'Net Profit', value: netProfit, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10', icon: TrendingUp, trend: 12.5 },
           { label: 'Op. Expenses', value: totalExpenses, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10', icon: Receipt, trend: -4.2 },
-          { label: 'Asset Value', value: totalInventoryValue, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-500/10', icon: Package, trend: null },
+          { label: 'Asset Value', value: totalInventoryValue, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: Package, trend: null },
           { label: 'Receivables', value: totalReceivables, color: 'text-violet-600', bg: 'bg-violet-50 dark:bg-violet-500/10', icon: Scale, trend: 8.1 },
           { label: 'Profit Margin', value: (netProfit / (totalSales || 1)) * 100, isPercent: true, color: 'text-cyan-600', bg: 'bg-cyan-50 dark:bg-cyan-500/10', icon: Activity, trend: null },
         ].map((stat, i) => (

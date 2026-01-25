@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
@@ -44,7 +43,8 @@ const INITIAL_STATE: AppState = {
   loanTransactions: [],
   expenseCategories: ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Marketing', 'Maintenance', 'Other'],
   lastSync: new Date().toISOString(),
-  settings: { shopName: 'Sarvari Seller Pro', shopAddress: '', shopPhone: '', shopEmail: '', shopWebsite: '', currency: '$', taxRate: 0, lowStockThreshold: 5, invoiceTemplate: 'modern', brandColor: '#6366f1', language: 'en', theme: 'light', defaultCustomerId: '' }
+  // Added showSignatures: false to resolve type mismatch with AppState interface
+  settings: { shopName: 'Sarvari Seller Pro', shopAddress: '', shopPhone: '', shopEmail: '', shopWebsite: '', currency: '$', taxRate: 0, lowStockThreshold: 5, invoiceTemplate: 'modern', brandColor: '#6366f1', language: 'en', theme: 'light', defaultCustomerId: '', showSignatures: false }
 };
 
 const App: React.FC = () => {

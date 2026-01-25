@@ -30,10 +30,13 @@ import {
   Mail,
   MoreHorizontal,
   Cake,
-  IdCard
+  IdCard,
+  FileDown
 } from 'lucide-react';
 import { AppState, Customer, Invoice, LoanTransaction, View } from '../types';
 import { translations } from '../translations';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface Props {
   state: AppState;
@@ -49,6 +52,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   // Tab state with persistence
   const [activeTab, setActiveTab] = useState<CustomerTab>(() => {
@@ -147,13 +151,10 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     return [...invs, ...trans].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
-  const handlePrintCard = (c: Customer) => {
-    const printSection = document.getElementById('print-section');
-    if (!printSection) return;
-
+  const generateCardHTML = (c: Customer) => {
     const tier = getTier(c.totalSpent);
-    const html = `
-      <div style="width: 85mm; height: 55mm; padding: 6mm; font-family: 'Inter', sans-serif; border: 2px solid #4f46e5; border-radius: 12px; background: white; color: black; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; position: relative; margin: 0 auto;">
+    return `
+      <div style="width: 85mm; height: 55mm; padding: 6mm; font-family: 'Inter', sans-serif; border: 2px solid #4f46e5; border-radius: 12px; background: white; color: black; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; position: relative;">
         <div style="display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 10;">
           <div style="font-weight: 900; font-size: 14px; color: #4f46e5; text-transform: uppercase; letter-spacing: 1px;">${state.settings.shopName}</div>
           <div style="font-size: 8px; font-weight: 800; color: ${tier.label.includes('Gold') ? '#b45309' : '#64748b'}; background: ${tier.label.includes('Gold') ? '#fef3c7' : '#f1f5f9'}; padding: 2px 8px; border-radius: 100px; text-transform: uppercase;">${tier.label} Member</div>
@@ -176,73 +177,120 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
              </div>
           </div>
         </div>
-        
         <div style="position: absolute; right: -15mm; bottom: -15mm; width: 50mm; height: 50mm; background: #4f46e5; opacity: 0.03; border-radius: 50%;"></div>
-        <div style="position: absolute; left: -10mm; top: -10mm; width: 30mm; height: 30mm; background: #4f46e5; opacity: 0.02; border-radius: 50%;"></div>
       </div>
     `;
+  };
 
-    printSection.innerHTML = html;
+  const handleDownloadCardPDF = async (c: Customer) => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    const container = document.getElementById('pdf-render-container');
+    if (!container) return setIsDownloading(false);
+    container.style.width = '85mm';
+    container.innerHTML = generateCardHTML(c);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      const canvas = await html2canvas(container, { scale: 3, useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [85, 55] });
+      pdf.addImage(imgData, 'PNG', 0, 0, 85, 55);
+      pdf.save(`MemberCard_${c.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (e) { console.error(e); }
+    container.innerHTML = '';
+    container.style.width = '210mm';
+    setIsDownloading(false);
+  };
+
+  const handlePrintCard = (c: Customer) => {
+    const printSection = document.getElementById('print-section') || document.getElementById('print-holder');
+    if (!printSection) return;
+    printSection.innerHTML = generateCardHTML(c);
     window.print();
     printSection.innerHTML = '';
   };
 
-  const handlePrintStatement = (c: Customer) => {
+  const generateStatementHTML = (c: Customer) => {
     const history = getHistory(c.id);
-    const printSection = document.getElementById('print-section');
-    if (!printSection) return;
-
-    const html = `
-      <div style="padding: 20mm; font-family: 'Inter', sans-serif;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px;">
+    return `
+      <div style="padding: 15mm; font-family: 'Inter', sans-serif; background: white; color: #1e293b;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 2px solid #4f46e5; padding-bottom: 20px;">
           <div>
-            <h1 style="margin: 0; color: #4f46e5; font-size: 24px;">${state.settings.shopName}</h1>
-            <p style="margin: 5px 0; color: #64748b; font-size: 12px;">Customer Financial Statement</p>
+            <h1 style="margin: 0; color: #4f46e5; font-size: 24px; font-weight: 900;">${state.settings.shopName}</h1>
+            <p style="margin: 5px 0; color: #64748b; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">Customer Financial Statement</p>
           </div>
           <div style="text-align: right;">
-            <p style="margin: 0; font-weight: bold;">Date: ${new Date().toLocaleDateString()}</p>
+            <p style="margin: 0; font-weight: 900; font-size: 12px;">DATE: ${new Date().toLocaleDateString()}</p>
+            <p style="margin: 4px 0; color: #64748b; font-size: 10px;">REF: STMT-${c.id.substring(0,6).toUpperCase()}</p>
           </div>
         </div>
-        <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 30px;">
-          <h2 style="margin: 0 0 10px 0; font-size: 18px;">${c.name}</h2>
-          <p style="margin: 0; color: #64748b; font-size: 14px;">${c.phone}</p>
-          <p style="margin: 5px 0 0 0; color: #64748b; font-size: 14px;">${c.address || 'No address provided'}</p>
+        <div style="background: #f8fafc; padding: 20px; border-radius: 16px; margin-bottom: 30px; border: 1px solid #f1f5f9;">
+          <h2 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 900;">${c.name}</h2>
+          <p style="margin: 0; color: #4f46e5; font-size: 14px; font-weight: 700;">${c.phone}</p>
+          <p style="margin: 8px 0 0 0; color: #64748b; font-size: 12px; line-height: 1.5;">${c.address || 'No address indexed'}</p>
         </div>
         <div style="display: flex; gap: 20px; margin-bottom: 30px;">
-          <div style="flex: 1; padding: 15px; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.1em;">Current Debt</p>
-            <p style="margin: 5px 0 0 0; font-size: 20px; font-weight: 900; color: #ef4444;">${state.settings.currency}${c.totalDebt.toLocaleString()}</p>
+          <div style="flex: 1; padding: 15px; border: 1px solid #fee2e2; background: #fef2f2; border-radius: 12px;">
+            <p style="margin: 0; font-size: 9px; text-transform: uppercase; color: #ef4444; font-weight: 900; letter-spacing: 0.1em;">Current Debt</p>
+            <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: 900; color: #b91c1c;">${state.settings.currency}${c.totalDebt.toLocaleString()}</p>
           </div>
-          <div style="flex: 1; padding: 15px; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <p style="margin: 0; font-size: 10px; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.1em;">Lifetime Value</p>
-            <p style="margin: 5px 0 0 0; font-size: 20px; font-weight: 900; color: #4f46e5;">${state.settings.currency}${c.totalSpent.toLocaleString()}</p>
+          <div style="flex: 1; padding: 15px; border: 1px solid #e0e7ff; background: #f5f3ff; border-radius: 12px;">
+            <p style="margin: 0; font-size: 9px; text-transform: uppercase; color: #4f46e5; font-weight: 900; letter-spacing: 0.1em;">Lifetime Volume</p>
+            <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: 900; color: #4338ca;">${state.settings.currency}${c.totalSpent.toLocaleString()}</p>
           </div>
         </div>
-        <h3 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin-bottom: 15px;">Transaction History</h3>
-        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-          <thead style="background: #f1f5f9;">
+        <h3 style="font-size: 11px; text-transform: uppercase; font-weight: 900; letter-spacing: 0.1em; color: #1e293b; margin-bottom: 15px;">Transaction Timeline</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+          <thead style="background: #1e293b; color: white;">
             <tr>
-              <th style="padding: 10px; text-align: left;">Date</th>
-              <th style="padding: 10px; text-align: left;">Type</th>
-              <th style="padding: 10px; text-align: left;">Reference</th>
-              <th style="padding: 10px; text-align: right;">Amount</th>
+              <th style="padding: 12px 10px; text-align: left; text-transform: uppercase; font-size: 9px;">Date</th>
+              <th style="padding: 12px 10px; text-align: left; text-transform: uppercase; font-size: 9px;">Type</th>
+              <th style="padding: 12px 10px; text-align: left; text-transform: uppercase; font-size: 9px;">Reference</th>
+              <th style="padding: 12px 10px; text-align: right; text-transform: uppercase; font-size: 9px;">Amount</th>
             </tr>
           </thead>
           <tbody>
             ${history.map(h => `
               <tr style="border-bottom: 1px solid #f1f5f9;">
-                <td style="padding: 10px;">${new Date(h.date).toLocaleDateString()}</td>
-                <td style="padding: 10px;">${h.type}</td>
-                <td style="padding: 10px;">#${h.ref}</td>
-                <td style="padding: 10px; text-align: right; font-weight: bold;">${state.settings.currency}${h.amount.toLocaleString()}</td>
+                <td style="padding: 12px 10px; font-weight: 700; color: #64748b;">${new Date(h.date).toLocaleDateString()}</td>
+                <td style="padding: 12px 10px; font-weight: 800; color: #1e293b;">${h.type}</td>
+                <td style="padding: 12px 10px; color: #94a3b8; font-family: monospace;">#${h.ref}</td>
+                <td style="padding: 12px 10px; text-align: right; font-weight: 900; color: ${h.type === 'Repayment' ? '#16a34a' : '#1e293b'}">${state.settings.currency}${h.amount.toLocaleString()}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
+        <div style="margin-top: 50px; border-top: 1px dashed #e2e8f0; padding-top: 20px; text-align: center;">
+           <p style="font-size: 9px; color: #94a3b8; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">Sarvari Seller Pro Intelligence - Financial Integrity Report</p>
+        </div>
       </div>
     `;
+  };
 
-    printSection.innerHTML = html;
+  const handleDownloadStatementPDF = async (c: Customer) => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    const container = document.getElementById('pdf-render-container');
+    if (!container) return setIsDownloading(false);
+    container.innerHTML = generateStatementHTML(c);
+    await new Promise(resolve => setTimeout(resolve, 800));
+    try {
+      const canvas = await html2canvas(container, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Statement_${c.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (e) { console.error(e); }
+    container.innerHTML = '';
+    setIsDownloading(false);
+  };
+
+  const handlePrintStatement = (c: Customer) => {
+    const printSection = document.getElementById('print-section') || document.getElementById('print-holder');
+    if (!printSection) return;
+    printSection.innerHTML = generateStatementHTML(c);
     window.print();
     printSection.innerHTML = '';
   };
@@ -332,6 +380,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => handleDownloadCardPDF(c)} className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-xl" title="Download ID Card PDF"><FileDown size={16}/></button>
                         <button onClick={() => handlePrintCard(c)} className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-xl" title="Print Membership Card"><IdCard size={16}/></button>
                         <button onClick={() => setRepayModal({customer: c, mode: 'repayment'})} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl" title="Payment"><DollarSign size={16}/></button>
                         <button onClick={() => {setEditingCustomer(c); setNewCustomer(c); setIsAdding(true);}} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-xl"><Edit size={16}/></button>
@@ -413,7 +462,9 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                     </div>
                  </div>
                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleDownloadCardPDF(viewingCustomer)} className="p-3 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all border border-indigo-100" title="Download Card PDF"><FileDown size={20}/></button>
                     <button onClick={() => handlePrintCard(viewingCustomer)} className="p-3 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all border border-indigo-100" title="Membership Card"><IdCard size={20}/></button>
+                    <button onClick={() => handleDownloadStatementPDF(viewingCustomer)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-500 hover:text-indigo-600 transition-all" title="Download Statement PDF"><FileText size={20}/></button>
                     <button onClick={() => handlePrintStatement(viewingCustomer)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-500 hover:text-indigo-600 transition-all" title="Financial Statement"><Printer size={20}/></button>
                     <button onClick={() => setViewingCustomer(null)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all ml-4"><X size={24}/></button>
                  </div>
@@ -474,7 +525,10 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                     <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
                        <div className="flex items-center justify-between mb-2">
                           <h5 className="font-black text-[12px] uppercase tracking-widest dark:text-white flex items-center gap-2"><History size={18} className="text-indigo-600" /> Chronological Timeline</h5>
-                          <button onClick={() => handlePrintStatement(viewingCustomer)} className="text-[9px] font-black uppercase text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">Export Statement</button>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleDownloadStatementPDF(viewingCustomer)} className="text-[9px] font-black uppercase text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg flex items-center gap-1.5"><FileDown size={12}/> Download PDF</button>
+                            <button onClick={() => handlePrintStatement(viewingCustomer)} className="text-[9px] font-black uppercase text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">Export Statement</button>
+                          </div>
                        </div>
                        <div className="space-y-3">
                           {getHistory(viewingCustomer.id).map((h, i) => (
@@ -520,7 +574,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                                 <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl group">
                                    <Mail size={20} className="text-slate-400" />
                                    <div><p className="text-[10px] font-black text-slate-400 uppercase">Email Index</p><p className="font-bold dark:text-white truncate max-w-[150px]">{viewingCustomer.email || 'None Indexed'}</p></div>
-                                </a>
+                                </div>
                                 {viewingCustomer.dob && (
                                    <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl group">
                                       <Cake size={20} className="text-slate-400" />
