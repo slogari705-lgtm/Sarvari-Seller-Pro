@@ -1,3 +1,4 @@
+
 export const translations = {
   en: {
     dashboard: 'Dashboard',
@@ -186,7 +187,8 @@ export const translations = {
     customerTier: 'Customer Tier',
     lifetimeValue: 'Lifetime Value',
     avgOrderValue: 'Avg. Order',
-    transactions: 'Transactions'
+    transactions: 'Transactions',
+    totalSpent: 'Total Spent'
   },
   ps: { // Pashto
     dashboard: 'ډشبورډ',
@@ -368,7 +370,8 @@ export const translations = {
     customerTier: 'د پیرودونکي کچه',
     lifetimeValue: 'ټول ارزښت',
     avgOrderValue: 'اوسط پلور',
-    transactions: 'معاملې'
+    transactions: 'معاملې',
+    totalSpent: 'ټول لګښت'
   },
   dr: { // Dari
     dashboard: 'داشبورد',
@@ -550,6 +553,7 @@ export const translations = {
     customerTier: 'سطح مشتری',
     lifetimeValue: 'ارزش کل مشتری',
     avgOrderValue: 'اوسط فروش',
-    transactions: 'معاملات'
+    transactions: 'معاملات',
+    totalSpent: 'مجموع خرید'
   }
 };

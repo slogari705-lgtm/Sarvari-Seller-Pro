@@ -59,7 +59,7 @@ export interface Invoice {
   status: 'paid' | 'partial' | 'unpaid'; 
   paymentMethod: 'cash' | 'card' | 'transfer';
   notes?: string;
-  previousDebt?: number; // Snapshot of debt before this invoice
+  previousDebt?: number; // Captures debt at time of sale
 }
 
 export interface LoanTransaction {

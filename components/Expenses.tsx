@@ -257,7 +257,7 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
                        </td>
                        <td className="px-8 py-5 text-right font-black text-rose-600 dark:text-rose-400 text-base">{state.settings.currency}{e.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                        <td className="px-8 py-5 text-right">
-                         <button onClick={() => deleteExpense(e.id)} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-xl transition-all opacity-0 group-hover:opacity-100"><Trash2 size={18} /></button>
+                         <button onClick={() => deleteExpense(e.id)} className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-2xl transition-all"><Trash2 size={18} /></button>
                        </td>
                      </tr>
                    ))}
@@ -265,209 +265,137 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
                </table>
             </div>
             {filteredExpenses.length === 0 && (
-              <div className="py-24 text-center flex flex-col items-center justify-center text-slate-300 gap-6">
-                <div className="w-24 h-24 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center opacity-40"><Receipt size={56} strokeWidth={1} /></div>
-                <p className="font-black text-sm uppercase tracking-widest">{t.noExpensesFound}</p>
-                <button onClick={clearFilters} className="text-indigo-600 dark:text-indigo-400 text-xs font-black uppercase tracking-[0.2em] hover:underline transition-all">Clear All Parameters</button>
-              </div>
-            )}
+                <div className="py-20 text-center text-slate-300">
+                   <Receipt size={48} className="mx-auto mb-4 opacity-20" />
+                   <p className="font-black text-xs uppercase tracking-widest">{t.noExpensesFound}</p>
+                </div>
+             )}
           </div>
         </div>
-
-        <div className="space-y-8">
-          <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-200 dark:border-slate-800 shadow-sm space-y-8">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2"><TrendingDown size={14} className="text-rose-500" /> Outflow Statistics</h3>
-            
-            <div className="space-y-6">
-               <div className="p-6 bg-rose-50 dark:bg-rose-950/20 rounded-[32px] border border-rose-100 dark:border-rose-900/30">
-                 <p className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Filtered Outflow</p>
-                 <p className="text-4xl font-black text-rose-600 dark:text-rose-400 tracking-tighter">{state.settings.currency}{totalExpenseAmount.toLocaleString(undefined, { minimumFractionDigits: 0 })}</p>
-                 <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-rose-400 uppercase">
-                    <FileText size={12}/> {filteredExpenses.length} Records found
-                 </div>
+        
+        {/* Right Sidebar (Quick Stats & Categories) */}
+        <div className="space-y-6">
+            {/* Total Expense Widget */}
+            <div className="bg-rose-600 p-8 rounded-[40px] text-white shadow-xl shadow-rose-200 dark:shadow-none relative overflow-hidden">
+               <div className="relative z-10">
+                  <p className="text-[10px] font-black text-rose-200 uppercase tracking-widest mb-2">{t.totalOutflow}</p>
+                  <h3 className="text-4xl font-black tracking-tighter">{state.settings.currency}{totalExpenseAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</h3>
+                  <p className="text-xs font-bold text-rose-200 mt-4 uppercase tracking-widest flex items-center gap-2">
+                     <Filter size={14} /> {filteredExpenses.length} records found
+                  </p>
                </div>
-
-               <button 
-                  onClick={() => setIsManagingCategories(true)}
-                  className="w-full flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl group hover:bg-white dark:hover:bg-slate-800 transition-all border border-transparent hover:border-slate-100 dark:hover:border-slate-700"
-               >
-                  <div className="flex items-center gap-3">
-                     <Settings size={18} className="text-slate-400 group-hover:text-indigo-600 transition-colors"/>
-                     <span className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">Config Categories</span>
-                  </div>
-                  <ArrowRight size={16} className="text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all"/>
-               </button>
+               <TrendingDown className="absolute -bottom-4 -right-4 text-white/10" size={120} />
             </div>
-          </div>
 
-          <div className="bg-indigo-600 p-8 rounded-[40px] text-white shadow-2xl shadow-indigo-100 dark:shadow-none relative overflow-hidden group">
-             <div className="relative z-10">
-                <h4 className="font-black text-lg uppercase tracking-tighter mb-4">Expense Analysis</h4>
-                <p className="text-indigo-100 text-xs font-medium leading-relaxed opacity-80">Track where your capital is moving. Use categories like Rent, Salaries, and Inventory to optimize your business margins.</p>
-                <button onClick={() => setIsAdding(true)} className="mt-8 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] bg-white text-indigo-600 px-6 py-3 rounded-xl shadow-lg hover:shadow-2xl transition-all active:scale-95">Record Now <Plus size={14}/></button>
-             </div>
-             <DollarSign className="absolute -bottom-6 -right-6 text-white/10 group-hover:scale-110 transition-transform" size={160}/>
-          </div>
+            {/* Categories Widget */}
+            <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-200 dark:border-slate-800 shadow-sm">
+               <div className="flex items-center justify-between mb-6">
+                  <h4 className="font-black text-sm dark:text-white uppercase tracking-widest flex items-center gap-2">
+                     <Tag size={16} className="text-indigo-600" /> Categories
+                  </h4>
+                  <button onClick={() => setShowQuickAddCat(!showQuickAddCat)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full transition-all">
+                     <Plus size={18} />
+                  </button>
+               </div>
+               
+               {showQuickAddCat && (
+                  <div className="mb-4 flex gap-2 animate-in slide-in-from-top-2">
+                     <input 
+                        value={newCatInput}
+                        onChange={(e) => setNewCatInput(e.target.value)}
+                        className="flex-1 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold outline-none"
+                        placeholder="New category..."
+                        autoFocus
+                     />
+                     <button onClick={handleInlineAddCategory} className="p-2 bg-indigo-600 text-white rounded-xl shadow-lg">
+                        <ArrowRight size={14} />
+                     </button>
+                  </div>
+               )}
+
+               <div className="flex flex-wrap gap-2">
+                  {state.expenseCategories.map(cat => (
+                     <span key={cat} className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-100 dark:border-slate-700 hover:border-indigo-200 transition-colors cursor-default">
+                        {cat}
+                     </span>
+                  ))}
+               </div>
+            </div>
         </div>
       </div>
 
-      {/* Log Expense Modal */}
+      {/* Add Expense Modal */}
       {isAdding && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-lg p-0 shadow-2xl relative animate-in zoom-in duration-300 max-h-[90vh] overflow-hidden flex flex-col">
-            <header className="p-8 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
-               <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-rose-200 dark:shadow-none"><PlusSquare size={24}/></div>
-                  <div>
-                     <h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">{t.logExpense}</h3>
-                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Entry manual expense record</p>
-                  </div>
-               </div>
-               <button onClick={() => { setIsAdding(false); resetNewExpense(); }} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={24}/></button>
-            </header>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-lg p-8 shadow-2xl relative animate-in zoom-in duration-300">
+              <div className="flex items-center justify-between mb-8">
+                 <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-rose-100 dark:bg-rose-500/10 rounded-2xl flex items-center justify-center text-rose-600"><PlusSquare size={24}/></div>
+                    <div>
+                       <h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">{t.logExpense}</h3>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Record business outflow</p>
+                    </div>
+                 </div>
+                 <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors"><X size={24}/></button>
+              </div>
 
-            <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
-              <div className="space-y-8 mb-4">
-                <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.notes} (Description) *</label>
-                  <div className="relative">
-                    <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
+              <div className="space-y-6">
+                 <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Description</label>
                     <input 
                       type="text" 
+                      value={newExpense.description || ''}
+                      onChange={(e) => setNewExpense({...newExpense, description: e.target.value})}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 px-6 outline-none font-bold text-sm dark:text-white"
+                      placeholder="e.g. Office Rent"
                       autoFocus
-                      value={newExpense.description || ''} 
-                      onChange={(e) => setNewExpense({...newExpense, description: e.target.value})} 
-                      className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-rose-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-bold text-sm dark:text-white transition-all shadow-inner" 
-                      placeholder="e.g. Monthly Electricity Bill"
                     />
-                  </div>
-                </div>
+                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.price} ({state.settings.currency}) *</label>
-                    <div className="relative">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-500 font-black text-lg">{state.settings.currency}</div>
-                      <input 
-                        type="number" 
-                        value={newExpense.amount || ''} 
-                        onChange={(e) => setNewExpense({...newExpense, amount: Number(e.target.value)})} 
-                        className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-rose-500 rounded-2xl py-4 pl-10 pr-4 outline-none font-black text-xl dark:text-white transition-all shadow-inner"
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
-                       {t.category}
-                       <button onClick={() => setShowQuickAddCat(!showQuickAddCat)} className="text-indigo-600 hover:text-indigo-700 transition-colors"><PlusCircle size={14}/></button>
-                    </label>
-                    {showQuickAddCat ? (
-                      <div className="flex gap-2 animate-in slide-in-from-right-2">
-                        <input 
-                          type="text" 
-                          value={newCatInput} 
-                          onChange={(e) => setNewCatInput(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleInlineAddCategory()}
-                          placeholder="New Cat..."
-                          className="flex-1 bg-white dark:bg-slate-800 border-2 border-indigo-500 rounded-xl py-3 px-4 text-xs font-bold dark:text-white outline-none"
-                        />
-                        <button onClick={handleInlineAddCategory} className="p-3 bg-indigo-600 text-white rounded-xl"><Plus size={16}/></button>
-                      </div>
-                    ) : (
-                      <div className="relative">
-                        <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
-                        <select 
-                          value={newExpense.category} 
+                 <div className="grid grid-cols-2 gap-6">
+                    <div>
+                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Category</label>
+                       <select 
+                          value={newExpense.category}
                           onChange={(e) => setNewExpense({...newExpense, category: e.target.value})}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-rose-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-bold text-sm dark:text-white shadow-inner appearance-none"
-                        >
+                          className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 px-6 outline-none font-bold text-sm dark:text-white appearance-none"
+                       >
                           {state.expenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                        </select>
-                        <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                       </select>
+                    </div>
+                    <div>
+                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Amount</label>
+                       <div className="relative">
+                          <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                          <input 
+                            type="number" 
+                            value={newExpense.amount}
+                            onChange={(e) => setNewExpense({...newExpense, amount: Number(e.target.value)})}
+                            className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-12 pr-4 outline-none font-black text-lg dark:text-white"
+                          />
+                       </div>
+                    </div>
+                 </div>
 
-                <div className="space-y-3">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Expense Date</label>
-                  <div className="relative">
-                    <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
+                 <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Date</label>
                     <input 
                       type="date" 
-                      value={newExpense.date ? new Date(newExpense.date).toISOString().split('T')[0] : ''} 
-                      onChange={(e) => setNewExpense({...newExpense, date: e.target.value})} 
-                      className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-rose-500 rounded-2xl py-4 pl-12 pr-6 outline-none font-bold text-sm dark:text-white transition-all shadow-inner"
+                      value={newExpense.date ? new Date(newExpense.date).toISOString().split('T')[0] : ''}
+                      onChange={(e) => setNewExpense({...newExpense, date: e.target.value})}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 px-6 outline-none font-bold text-sm dark:text-white"
                     />
-                  </div>
-                </div>
+                 </div>
+
+                 <button 
+                    onClick={handleAddExpense}
+                    disabled={!newExpense.description || !newExpense.amount}
+                    className="w-full py-5 bg-rose-600 text-white rounded-2xl font-black text-lg hover:bg-rose-700 transition-all shadow-xl shadow-rose-100 dark:shadow-none uppercase tracking-widest text-xs active:scale-95 disabled:opacity-50"
+                 >
+                    Save Record
+                 </button>
               </div>
-            </div>
-
-            <footer className="p-8 lg:p-10 pt-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky bottom-0 z-10 flex gap-4">
-              <button onClick={() => { setIsAdding(false); resetNewExpense(); }} className="flex-1 py-5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black rounded-3xl uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all">{t.discard}</button>
-              <button onClick={handleAddExpense} className="flex-[2] py-5 bg-rose-600 text-white font-black rounded-3xl hover:bg-rose-700 transition-all shadow-2xl shadow-rose-100 dark:shadow-none uppercase tracking-widest text-[10px] active:scale-[0.98]">{t.save} Record</button>
-            </footer>
-          </div>
-        </div>
-      )}
-
-      {/* Manage Categories Modal */}
-      {isManagingCategories && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-md p-10 shadow-2xl relative animate-in zoom-in duration-300">
-            <button onClick={() => setIsManagingCategories(false)} className="absolute top-8 right-8 p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400 transition-colors"><X size={24}/></button>
-            <h3 className="text-2xl font-black mb-8 text-slate-800 dark:text-white uppercase tracking-tighter flex items-center gap-3">
-              <Tag size={28} className="text-indigo-600" />
-              {t.manageCategories}
-            </h3>
-            
-            <div className="space-y-6 mb-10">
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  value={newCatInput} 
-                  onChange={(e) => setNewCatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addCategory(newCatInput)}
-                  placeholder="New category name..."
-                  className="flex-1 bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl px-6 py-4 outline-none focus:border-indigo-500 font-bold dark:text-white text-sm"
-                />
-                <button 
-                  onClick={() => addCategory(newCatInput)}
-                  className="p-4 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all active:scale-95 shadow-lg"
-                >
-                  <Plus size={24} />
-                </button>
-              </div>
-
-              <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                {state.expenseCategories.map((cat) => (
-                  <div key={cat} className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800 rounded-3xl group border border-transparent hover:border-indigo-100 dark:hover:border-indigo-900/30 transition-all">
-                    <span className="font-black text-slate-700 dark:text-slate-200 text-sm uppercase tracking-widest">{cat}</span>
-                    <button 
-                      onClick={() => {
-                        if (confirm(`Remove category "${cat}"?`)) {
-                           updateState('expenseCategories', state.expenseCategories.filter(c => c !== cat));
-                        }
-                      }}
-                      className="p-2.5 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button 
-              onClick={() => setIsManagingCategories(false)}
-              className="w-full py-5 bg-slate-900 dark:bg-slate-700 text-white font-black rounded-3xl hover:bg-black transition-all uppercase tracking-widest text-xs"
-            >
-              Close Categories
-            </button>
-          </div>
+           </div>
         </div>
       )}
     </div>

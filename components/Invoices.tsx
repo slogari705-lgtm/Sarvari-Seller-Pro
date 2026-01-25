@@ -35,7 +35,8 @@ import {
   Filter,
   RotateCcw,
   ChevronDown,
-  ArrowRight
+  ArrowRight,
+  TrendingUp
 } from 'lucide-react';
 import { AppState, Product, Customer, CartItem, Invoice, InvoiceTemplate, LoanTransaction, View } from '../types';
 import { translations } from '../translations';
@@ -51,7 +52,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   const [showFilters, setShowFilters] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'a4' | 'thermal' | 'advice'>('a4');
   
@@ -101,6 +102,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     setBuilderNotes(inv.notes || '');
     setBuilderDate(new Date(inv.date).toISOString().split('T')[0]);
     setIsCreating(true);
+    setViewingInvoice(null);
   };
 
   const addToInvoice = (product: Product) => {
@@ -193,15 +195,6 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
        invoiceDateObj.setHours(12, 0, 0);
     }
 
-    // Preserve previous debt if editing, or capture current debt if creating new (though creating is usually done in Terminal)
-    // If creating from here, we assume current debt is the previous debt for this new invoice.
-    let previousDebt = 0;
-    if (editingInvoiceId) {
-        previousDebt = oldInvoice?.previousDebt || 0;
-    } else {
-        previousDebt = builderCustomer?.totalDebt || 0;
-    }
-
     const newInvoice: Invoice = {
       id: nextId,
       date: invoiceDateObj.toISOString(),
@@ -216,7 +209,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       status,
       paymentMethod: builderPayment,
       notes: builderNotes,
-      previousDebt
+      previousDebt: builderCustomer?.totalDebt || 0
     };
 
     // INVENTORY RECONCILIATION
@@ -322,12 +315,8 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     const dateStr = new Date(inv.date).toLocaleDateString();
     const timeStr = new Date(inv.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const currency = state.settings.currency;
-
-    const previousDebt = inv.previousDebt || 0;
-    const currentInvoiceTotal = inv.total;
-    const grandTotal = previousDebt + currentInvoiceTotal;
-    const amountPaid = inv.paidAmount;
-    const remainingBalance = grandTotal - amountPaid;
+    const prevDebt = inv.previousDebt || 0;
+    const newTotalDebt = prevDebt + (inv.total - inv.paidAmount);
 
     const itemsHTML = inv.items.map((item, idx) => `
       <tr style="border-bottom: 1px solid #ddd;">
@@ -342,12 +331,20 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
       </tr>
     `).join('');
 
+    const accountSummaryHTML = customer ? `
+      <div style="margin-top: 15px; border: 2px solid #000; padding: 10px; border-radius: 8px;">
+         <h5 style="margin: 0 0 8px 0; font-size: 10px; text-transform: uppercase; font-weight: 900;">Account Balance Context</h5>
+         <div style="display: flex; justify-content: space-between; font-size: 11px;"><span>Old Balance:</span><span>${currency}${prevDebt.toLocaleString()}</span></div>
+         <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 800; border-top: 1px dashed #ccc; margin-top: 4px; padding-top: 4px;"><span>New Total Debt:</span><span>${currency}${newTotalDebt.toLocaleString()}</span></div>
+      </div>
+    ` : '';
+
     if (layout === 'advice') {
       return `
         <div style="width: 210mm; padding: 12mm; font-family: 'Inter', Arial, sans-serif; color: #000; background: #fff; box-sizing: border-box;">
           <div style="display: flex; justify-content: space-between; border-bottom: 3px solid #000; padding-bottom: 15px; margin-bottom: 20px;">
             <div style="display: flex; gap: 15px; align-items: center;">
-              <div style="width: 50px; height: 50px; background: #000; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 28px;">S</div>
+              <div style="width: 50px; height: 50px; background: ${state.settings.brandColor}; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 28px;">${state.settings.shopName.charAt(0)}</div>
               <div>
                 <h1 style="margin: 0; font-size: 22px; font-weight: 900; text-transform: uppercase;">${state.settings.shopName}</h1>
                 <p style="margin: 4px 0 0 0; font-size: 11px; color: #444;">${state.settings.shopAddress || 'Authorized Dealer'} | ${state.settings.shopPhone || ''}</p>
@@ -355,7 +352,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
             </div>
             <div style="text-align: right;">
               <h2 style="margin: 0; font-size: 28px; font-weight: 900; text-transform: uppercase; color: #000;">ADVICE NOTE</h2>
-              <p style="margin: 5px 0 0 0; font-size: 12px; font-weight: 700;">#${inv.id.padStart(6, '0')} | ${dateStr}</p>
+              <p style="margin: 5px 0 0 0; font-size: 12px; font-weight: 700;">#${inv.id.padStart(6, '0')} | ${dateStr} ${timeStr}</p>
             </div>
           </div>
           
@@ -366,10 +363,10 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
               <p style="margin: 4px 0 0 0; font-size: 11px; color: #444;">${customer?.phone || ''} ${customer?.address ? ' | ' + customer.address : ''}</p>
             </div>
             <div style="flex: 1; padding: 15px; border: 1px solid #ddd; border-radius: 12px; background: #f9f9f9;">
-              <h4 style="margin: 0 0 8px 0; font-size: 9px; text-transform: uppercase; font-weight: 800; color: #666;">Account Summary</h4>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;"><span style="font-weight: 600;">Previous Balance:</span><span style="font-weight: 800;">${currency}${previousDebt.toLocaleString()}</span></div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;"><span style="font-weight: 600;">Current Invoice:</span><span style="font-weight: 800;">${currency}${currentInvoiceTotal.toLocaleString()}</span></div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;"><span style="font-weight: 600;">Total Payable:</span><span style="font-weight: 800;">${currency}${grandTotal.toLocaleString()}</span></div>
+              <h4 style="margin: 0 0 8px 0; font-size: 9px; text-transform: uppercase; font-weight: 800; color: #666;">Payment Info</h4>
+              <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;"><span style="font-weight: 600;">Method:</span><span style="font-weight: 800; text-transform: uppercase;">${inv.paymentMethod}</span></div>
+              <div style="display: flex; justify-content: space-between; font-size: 11px;"><span style="font-weight: 600;">Status:</span><span style="font-weight: 800; text-transform: uppercase;">${inv.status}</span></div>
+              <div style="display: flex; justify-content: space-between;"><span style="font-size: 11px; font-weight: 600;">Internal ID:</span><span style="font-size: 11px; font-weight: 950;">REF-${Date.now().toString().slice(-8)}</span></div>
             </div>
           </div>
 
@@ -390,19 +387,20 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
             <div style="flex: 1;">
                <h4 style="margin: 0 0 5px 0; font-size: 10px; text-transform: uppercase; font-weight: 700; color: #555;">Notes</h4>
                <p style="margin: 0; font-size: 11px; font-style: italic; color: #333; line-height: 1.4;">${inv.notes || 'This advice confirms the release of goods listed above. Please inspect for defects before signature.'}</p>
+               ${accountSummaryHTML}
             </div>
             <div style="width: 250px;">
               <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #555;">
-                <span>Total Due</span>
-                <span>${currency}${grandTotal.toLocaleString()}</span>
+                <span>SUBTOTAL</span>
+                <span>${currency}${inv.subtotal.toLocaleString()}</span>
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; font-weight: 600; color: #555;">
-                <span>Paid Now</span>
-                <span>${currency}${amountPaid.toLocaleString()}</span>
+                <span>TAX</span>
+                <span>${currency}${inv.tax.toLocaleString()}</span>
               </div>
               <div style="border-top: 3px solid #000; margin-top: 10px; padding-top: 10px; display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 16px; font-weight: 900; color: #000;">BALANCE</span>
-                <span style="font-size: 24px; font-weight: 900;">${currency}${remainingBalance.toLocaleString()}</span>
+                <span style="font-size: 16px; font-weight: 900; color: #000;">TOTAL DUE</span>
+                <span style="font-size: 24px; font-weight: 900;">${currency}${inv.total.toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -434,13 +432,15 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
           <div style="text-align: left; margin-bottom: 10px;">
             ${inv.items.map(i => `<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 10px;"><span>${i.quantity}x ${i.name.substring(0,20)}</span><span>${currency}${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
           </div>
-          <div style="border-top: 2px solid #000; padding-top: 10px; font-weight: 950; font-size: 12px; display: flex; flex-col; gap: 4px; text-align: left;">
-            <div style="display: flex; justify-content: space-between;"><span>Prev Balance:</span><span>${currency}${previousDebt.toLocaleString()}</span></div>
-            <div style="display: flex; justify-content: space-between;"><span>Current Bill:</span><span>${currency}${currentInvoiceTotal.toLocaleString()}</span></div>
-            <div style="display: flex; justify-content: space-between; border-top: 1px dashed #000; padding-top: 4px;"><span>Total Due:</span><span>${currency}${grandTotal.toLocaleString()}</span></div>
-            <div style="display: flex; justify-content: space-between;"><span>Paid Now:</span><span>${currency}${amountPaid.toLocaleString()}</span></div>
-            <div style="display: flex; justify-content: space-between; border-top: 2px solid #000; padding-top: 6px; margin-top: 6px; font-size: 16px;"><span>BALANCE:</span><span>${currency}${remainingBalance.toLocaleString()}</span></div>
+          <div style="border-top: 2px solid #000; padding-top: 10px; font-weight: 950; font-size: 18px; display: flex; justify-content: space-between; text-align: left; margin-bottom: 8px;">
+            <span>TOTAL</span>
+            <span>${currency}${inv.total.toLocaleString()}</span>
           </div>
+          ${customer ? `
+          <div style="border-top: 1px dashed #000; padding-top: 6px; font-size: 10px; text-align: left;">
+             <div style="display: flex; justify-content: space-between;"><span>Account Bal:</span><span>${currency}${newTotalDebt.toLocaleString()}</span></div>
+          </div>
+          ` : ''}
           <p style="margin-top: 20px; font-size: 10px; border-top: 1px dashed #000; padding-top: 8px;">THANK YOU FOR YOUR VISIT</p>
         </div>
       `;
@@ -449,10 +449,11 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
     return `
         <div style="width: 210mm; padding: 15mm; font-family: 'Inter', sans-serif; background: #fff; box-sizing: border-box;">
           <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 30px;">
-            <h1 style="margin: 0; font-size: 24px; font-weight: 950; color: #4f46e5;">${state.settings.shopName}</h1>
+            <h1 style="margin: 0; font-size: 24px; font-weight: 950; color: ${state.settings.brandColor};">${state.settings.shopName}</h1>
             <div style="text-align: right;">
               <h2 style="margin: 0; font-size: 32px; font-weight: 950; color: #ccc; line-height: 1;">INVOICE</h2>
               <p style="margin: 5px 0 0 0; font-size: 14px; font-weight: 700;">#${inv.id.padStart(6, '0')}</p>
+              <p style="margin: 2px 0 0 0; font-size: 11px; font-weight: 600; color: #666;">${dateStr} ${timeStr}</p>
             </div>
           </div>
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
@@ -467,14 +468,20 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
               ${inv.items.map(item => `<tr style="border-bottom: 1px solid #eee;"><td style="padding: 10px; font-size: 12px; font-weight: 600;">${item.name}</td><td style="padding: 10px; text-align: center; font-size: 12px;">${item.quantity}</td><td style="padding: 10px; text-align: right; font-size: 12px; font-weight: 700;">${currency}${(item.price * item.quantity).toLocaleString()}</td></tr>`).join('')}
             </tbody>
           </table>
-          <div style="display: flex; justify-content: flex-end;">
+          <div style="display: flex; justify-content: flex-end; gap: 40px; align-items: flex-start;">
+            ${accountSummaryHTML}
             <div style="width: 250px; padding: 15px; border: 2px solid #000; border-radius: 12px;">
-              <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: #666; margin-bottom: 5px;"><span>Prev Bal</span><span>${currency}${previousDebt.toLocaleString()}</span></div>
-              <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: #666; margin-bottom: 5px;"><span>Current</span><span>${currency}${currentInvoiceTotal.toLocaleString()}</span></div>
-              <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 700; color: #666; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;"><span>Paid</span><span>${currency}${amountPaid.toLocaleString()}</span></div>
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 950; color: #000;">
-                <span>BALANCE</span>
-                <span>${currency}${remainingBalance.toLocaleString()}</span>
+              <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">
+                <span>SUBTOTAL</span>
+                <span>${currency}${inv.subtotal.toLocaleString()}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: 950; color: #000; border-top: 2px solid #eee; padding-top: 8px;">
+                <span>TOTAL</span>
+                <span>${currency}${inv.total.toLocaleString()}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 800; color: #10b981; margin-top: 4px;">
+                <span>PAID</span>
+                <span>${currency}${inv.paidAmount.toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -623,7 +630,7 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                 {filteredInvoices.map((inv) => {
                   const customer = state.customers.find(c => c.id === inv.customerId);
                   return (
-                    <tr key={inv.id} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-500/5 transition-colors group">
+                    <tr key={inv.id} className="hover:bg-indigo-50/20 dark:hover:bg-indigo-500/5 transition-colors group cursor-pointer" onClick={() => setViewingInvoice(inv)}>
                       <td className="px-8 py-5 font-black text-sm dark:text-white">#{inv.id.padStart(4, '0')}</td>
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-3">
@@ -647,8 +654,8 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                         </span>
                       </td>
                       <td className="px-8 py-5 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="Print/View"><Printer size={18}/></button>
+                        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={() => setViewingInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors" title="View"><Eye size={18}/></button>
                           <button onClick={() => handleEditInvoice(inv)} className="p-2 text-slate-400 hover:text-amber-600 transition-colors" title="Edit"><Edit size={18}/></button>
                           <button onClick={() => deleteInvoice(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100" title="Delete"><Trash2 size={18}/></button>
                         </div>
@@ -878,89 +885,125 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
                               <span>Tax ({state.settings.taxRate}%)</span>
                               <span>{state.settings.currency}{tax.toFixed(2)}</span>
                            </div>
-                           <div className="flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-widest">
-                              <span>Discount</span>
-                              <span className="text-rose-500">-{state.settings.currency}{builderDiscount.toFixed(2)}</span>
-                           </div>
-                           <div className="flex justify-between items-center text-xl font-black dark:text-white uppercase tracking-tighter pt-2">
-                              <span>Total</span>
-                              <span>{state.settings.currency}{total.toFixed(2)}</span>
+                           {builderDiscount > 0 && (
+                              <div className="flex justify-between items-center text-xs font-bold text-emerald-500 uppercase tracking-widest">
+                                 <span>Discount</span>
+                                 <span>- {state.settings.currency}{builderDiscount.toFixed(2)}</span>
+                              </div>
+                           )}
+                           <div className="flex justify-between items-center pt-2">
+                              <span className="text-sm font-black dark:text-white uppercase tracking-widest">Total</span>
+                              <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter">{state.settings.currency}{total.toFixed(2)}</span>
                            </div>
                         </div>
 
-                        <div className="pt-4">
-                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Amount Paid</label>
+                        <div>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Paid Amount</label>
                            <div className="relative">
-                              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500 font-black">{state.settings.currency}</span>
+                              <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
                               <input 
-                                 type="number"
-                                 value={builderPaidAmount}
-                                 onChange={(e) => setBuilderPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                                 className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-6 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-black text-xl dark:text-white"
-                                 placeholder={total.toFixed(2)}
+                                type="number" 
+                                value={builderPaidAmount}
+                                onChange={(e) => setBuilderPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-12 pr-6 outline-none font-black text-xl dark:text-white transition-all shadow-inner"
+                                placeholder={total.toFixed(2)}
                               />
                            </div>
-                           <div className="flex justify-between items-center mt-3 px-1">
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Balance Due</span>
-                              <span className={`text-sm font-black ${balanceDue > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                                 {state.settings.currency}{balanceDue.toFixed(2)}
-                              </span>
-                           </div>
                         </div>
                      </div>
-
-                     <div className="mt-auto pt-8">
-                        <button 
-                           onClick={saveInvoice}
-                           disabled={builderItems.length === 0}
-                           className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 dark:shadow-none disabled:opacity-50 disabled:shadow-none active:scale-[0.98]"
-                        >
-                           {editingInvoiceId ? 'Update Invoice' : 'Generate Invoice'}
-                        </button>
-                     </div>
                   </div>
+
+                  <button 
+                     onClick={saveInvoice}
+                     disabled={builderItems.length === 0}
+                     className="w-full py-5 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all uppercase tracking-widest text-xs active:scale-95 disabled:opacity-50 disabled:shadow-none"
+                  >
+                     {editingInvoiceId ? 'Update Record' : 'Generate Invoice'}
+                  </button>
                </div>
             </div>
           </div>
         </div>
       )}
 
-      {selectedInvoice && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-200">
-           <div className="bg-white dark:bg-slate-900 rounded-[32px] w-full max-w-sm p-8 shadow-2xl relative animate-in zoom-in duration-200">
-              <button onClick={() => setSelectedInvoice(null)} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"><X size={20}/></button>
-              <h3 className="text-xl font-black mb-6 text-center dark:text-white uppercase tracking-tighter">Select Format</h3>
-              <div className="space-y-3">
-                 <button 
-                   onClick={() => handlePrint(selectedInvoice, 'a4')}
-                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center gap-4 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-600 transition-all group"
-                 >
-                    <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 shadow-sm"><FileText size={24}/></div>
-                    <div className="text-left">
-                       <p className="font-black text-sm dark:text-white">Standard A4</p>
-                       <p className="text-[10px] text-slate-400 font-bold uppercase">For Office Printers</p>
+      {/* Viewing Invoice Modal (Modern Document View) */}
+      {viewingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-4xl h-[90vh] shadow-2xl relative flex flex-col overflow-hidden animate-in zoom-in duration-300">
+              <header className="p-8 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-white dark:bg-slate-900 z-10">
+                 <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-2xl flex items-center justify-center font-black">
+                       <FileText size={24}/>
                     </div>
-                 </button>
-                 <button 
-                   onClick={() => handlePrint(selectedInvoice, 'thermal')}
-                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center gap-4 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-600 transition-all group"
-                 >
-                    <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 shadow-sm"><Smartphone size={24}/></div>
-                    <div className="text-left">
-                       <p className="font-black text-sm dark:text-white">Thermal Receipt</p>
-                       <p className="text-[10px] text-slate-400 font-bold uppercase">For Mobile/POS</p>
+                    <div>
+                       <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Archive: INV-#{viewingInvoice.id.padStart(4, '0')}</h3>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                          Recorded on {new Date(viewingInvoice.date).toLocaleDateString()} at {new Date(viewingInvoice.date).toLocaleTimeString()}
+                       </p>
                     </div>
-                 </button>
-                 <button 
-                   onClick={() => handlePrint(selectedInvoice, 'advice')}
-                   className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center gap-4 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border-2 border-transparent hover:border-indigo-600 transition-all group"
-                 >
-                    <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 shadow-sm"><FileSpreadsheet size={24}/></div>
-                    <div className="text-left">
-                       <p className="font-black text-sm dark:text-white">Advice Note</p>
-                       <p className="text-[10px] text-slate-400 font-bold uppercase">Delivery Document</p>
+                 </div>
+                 <div className="flex items-center gap-2">
+                    <button onClick={() => handleEditInvoice(viewingInvoice)} className="p-3 bg-amber-50 text-amber-600 rounded-2xl hover:bg-amber-100 transition-colors"><Edit size={20}/></button>
+                    <button onClick={() => setViewingInvoice(null)} className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-400"><X size={24}/></button>
+                 </div>
+              </header>
+
+              <div className="flex-1 overflow-y-auto p-8 lg:p-12 custom-scrollbar">
+                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                    <div className="lg:col-span-2 space-y-10">
+                       <div className="space-y-4">
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 pb-2">Line Items</h4>
+                          <div className="space-y-3">
+                             {viewingInvoice.items.map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-transparent hover:border-slate-200 transition-all">
+                                   <div className="flex items-center gap-4">
+                                      <div className="w-10 h-10 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center font-black text-slate-400 border border-slate-100 dark:border-slate-600">
+                                         {idx + 1}
+                                      </div>
+                                      <div>
+                                         <p className="font-bold text-sm dark:text-white">{item.name}</p>
+                                         <p className="text-[10px] text-slate-400 font-black uppercase">SKU: {item.sku} <span className="mx-2">•</span> {item.quantity} x {state.settings.currency}{item.price.toFixed(2)}</p>
+                                      </div>
+                                   </div>
+                                   <div className="text-right">
+                                      <p className="font-black text-sm dark:text-white">{state.settings.currency}{(item.price * item.quantity).toLocaleString()}</p>
+                                   </div>
+                                </div>
+                             ))}
+                          </div>
+                       </div>
                     </div>
-                 </button>
+
+                    <div className="space-y-6">
+                       <div className="p-6 bg-slate-50 dark:bg-slate-800 rounded-[32px] border border-slate-100 dark:border-slate-700 space-y-6">
+                          <div className="flex items-center justify-between">
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Financial Summary</p>
+                             <div className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${viewingInvoice.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                {viewingInvoice.status}
+                             </div>
+                          </div>
+                          
+                          <div className="space-y-3">
+                             <div className="flex justify-between text-xs font-bold text-slate-500"><span>Subtotal:</span><span>{state.settings.currency}{viewingInvoice.subtotal.toLocaleString()}</span></div>
+                             <div className="flex justify-between text-xs font-bold text-slate-500"><span>Tax (${state.settings.taxRate}%):</span><span>{state.settings.currency}{viewingInvoice.tax.toLocaleString()}</span></div>
+                             <div className="flex justify-between text-xl font-black dark:text-white pt-2 border-t border-slate-200 dark:border-slate-700"><span>Total:</span><span>{state.settings.currency}{viewingInvoice.total.toLocaleString()}</span></div>
+                          </div>
+
+                          <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                             <div className="flex justify-between text-sm font-black text-emerald-600"><span>Paid via ${viewingInvoice.paymentMethod}:</span><span>${state.settings.currency}${viewingInvoice.paidAmount.toLocaleString()}</span></div>
+                             {(viewingInvoice.total - viewingInvoice.paidAmount > 0) && (
+                                <div className="flex justify-between text-sm font-black text-rose-600"><span>Unpaid / Debt:</span><span>${state.settings.currency}${(viewingInvoice.total - viewingInvoice.paidAmount).toLocaleString()}</span></div>
+                             )}
+                          </div>
+                       </div>
+
+                       <div className="grid grid-cols-1 gap-3">
+                          <button onClick={() => handlePrint(viewingInvoice, 'advice')} className="w-full py-4 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all"><FileText size={16} className="text-indigo-600"/> Print Advice Note</button>
+                          <button onClick={() => handlePrint(viewingInvoice, 'thermal')} className="w-full py-4 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 hover:border-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all"><Smartphone size={16} className="text-indigo-600"/> Print POS Thermal</button>
+                          <button onClick={() => handlePrint(viewingInvoice, 'a4')} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-xl shadow-indigo-100 dark:shadow-none"><Printer size={16}/> Print A4 Invoice</button>
+                       </div>
+                    </div>
+                 </div>
               </div>
            </div>
         </div>

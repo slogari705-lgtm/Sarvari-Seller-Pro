@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Store, 
@@ -208,6 +207,7 @@ const Settings: React.FC<Props> = ({ state, updateState }) => {
                         value={formData.shopName}
                         onChange={(e) => setFormData({...formData, shopName: e.target.value})}
                         className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-6 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold dark:text-white"
+                        placeholder="SefatUllah Sarvari's Terminal"
                       />
                     </div>
                   </div>
@@ -224,7 +224,7 @@ const Settings: React.FC<Props> = ({ state, updateState }) => {
                               value={formData.businessId || ''}
                               onChange={(e) => setFormData({...formData, businessId: e.target.value})}
                               className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-6 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold dark:text-white text-sm"
-                              placeholder="e.g. VAT-12345678"
+                              placeholder="AFG-93795950136"
                             />
                          </div>
                       </div>
@@ -237,7 +237,7 @@ const Settings: React.FC<Props> = ({ state, updateState }) => {
                               value={formData.shopWebsite || ''}
                               onChange={(e) => setFormData({...formData, shopWebsite: e.target.value})}
                               className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-6 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold dark:text-white text-sm"
-                              placeholder="www.myshop.com"
+                              placeholder="www.sarvari.af"
                             />
                          </div>
                       </div>
@@ -255,7 +255,7 @@ const Settings: React.FC<Props> = ({ state, updateState }) => {
                               value={formData.shopPhone || ''}
                               onChange={(e) => setFormData({...formData, shopPhone: e.target.value})}
                               className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-6 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold dark:text-white text-sm"
-                              placeholder="+1 234 567 890"
+                              placeholder="+93795950136"
                             />
                          </div>
                       </div>
@@ -268,7 +268,7 @@ const Settings: React.FC<Props> = ({ state, updateState }) => {
                               value={formData.shopEmail || ''}
                               onChange={(e) => setFormData({...formData, shopEmail: e.target.value})}
                               className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-6 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold dark:text-white text-sm"
-                              placeholder="contact@shop.com"
+                              placeholder="sefatullah@sarvari.com"
                             />
                          </div>
                       </div>
@@ -284,7 +284,7 @@ const Settings: React.FC<Props> = ({ state, updateState }) => {
                               value={formData.shopAddress || ''}
                               onChange={(e) => setFormData({...formData, shopAddress: e.target.value})}
                               className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 rounded-2xl py-4 pl-12 pr-6 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold dark:text-white text-sm"
-                              placeholder="123 Market St, City"
+                              placeholder="Wardak/ Jaghatoo/ Chino"
                             />
                          </div>
                       </div>

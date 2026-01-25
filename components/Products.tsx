@@ -617,7 +617,7 @@ const Products: React.FC<Props> = ({ state, updateState }) => {
                 <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-8">
                   <div className="sm:col-span-2">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">{t.displayName}</label>
-                    <input type="text" value={productForm.name || ''} onChange={(e) => setProductForm({...productForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl px-6 py-4 outline-none font-bold text-base dark:text-white shadow-inner" placeholder="e.g. Premium Item Name" />
+                    <input type="text" value={productForm.name || ''} onChange={(e) => setProductForm({...productForm, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl px-6 py-4 outline-none font-bold text-base dark:text-white shadow-inner" placeholder="e.g. Sarvari Premium Item" />
                   </div>
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">{t.productSKU}</label>
