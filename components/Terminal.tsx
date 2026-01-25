@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { AppState, Product, CartItem, Invoice, Customer } from '../types';
 import { translations } from '../translations';
+import { generatePrintHTML, PrintLayout } from '../services/printService';
 
 const QuickAddCustInline = ({ t, onClose, onSave }: any) => {
   const [name, setName] = useState('');
@@ -82,7 +83,7 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const [showCartMobile, setShowCartMobile] = useState(false);
   const [showQuickAddCust, setShowQuickAddCust] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-  const [previewType, setPreviewType] = useState<'a4' | 'advice' | 'thermal'>('thermal');
+  const [previewType, setPreviewType] = useState<PrintLayout>('thermal');
   
   const t = translations[state.settings.language || 'en'];
 
@@ -113,63 +114,8 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
   const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const tax = (subtotal * state.settings.taxRate) / 100;
   const total = subtotal + tax;
-  const finalPaid = paidAmountInput === '' ? total : paidAmountInput;
+  const finalPaid = paidAmountInput === '' ? total : Number(paidAmountInput);
   const balanceDue = Math.max(0, total - finalPaid);
-
-  const generatePrintHTML = (inv: Invoice, layout: 'a4' | 'advice' | 'thermal') => {
-    const cust = state.customers.find(c => c.id === inv.customerId);
-    const currency = state.settings.currency;
-    const shop = state.settings;
-    
-    if (layout === 'a4' || layout === 'advice') {
-      const isAdvice = layout === 'advice';
-      const itemsHTML = inv.items.map((it, idx) => `
-        <tr style="border-bottom: 1px solid #f1f5f9;">
-          <td style="padding: 12px 8px; font-size: 11px;">${idx+1}</td>
-          <td style="padding: 12px 8px; font-size: 12px; font-weight: 600;">${it.name}<br/><small style="color: #94a3b8;">${it.sku}</small></td>
-          <td style="padding: 12px 8px; text-align: center; font-size: 12px;">${it.quantity}</td>
-          <td style="padding: 12px 8px; text-align: right; font-size: 12px;">${currency}${it.price.toLocaleString()}</td>
-          <td style="padding: 12px 8px; text-align: right; font-weight: 700; font-size: 12px;">${currency}${(it.price * it.quantity).toLocaleString()}</td>
-        </tr>`).join('');
-
-      return `<div style="padding: 15mm; font-family: sans-serif; background: #fff; width: 210mm; min-height: 297mm; margin: 0 auto; color: #1e293b;">
-        <div style="display: flex; justify-content: space-between; border-bottom: 4px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px;">
-          <div>
-            <h1 style="margin: 0; font-size: 24px; font-weight: 900;">${shop.shopName}</h1>
-            <div style="font-size: 11px; color: #64748b; margin-top: 5px;">${shop.shopAddress || ''} | ${shop.shopPhone || ''}</div>
-          </div>
-          <div style="text-align: right;">
-            <h2 style="margin: 0; font-size: 22px; color: #4f46e5; font-weight: 900;">${isAdvice ? 'PAYMENT ADVICE' : 'TAX INVOICE'}</h2>
-            <div style="font-size: 14px; font-weight: 800;">#INV-${inv.id.padStart(4, '0')}</div>
-          </div>
-        </div>
-        <div style="margin-bottom: 30px; display: flex; justify-content: space-between; background: #f8fafc; padding: 20px; border-radius: 12px;">
-          <div><p style="margin: 0; font-size: 10px; color: #94a3b8; font-weight: 800;">BILL TO</p><p style="margin: 5px 0; font-size: 16px; font-weight: 900;">${cust?.name || 'Walk-in Customer'}</p></div>
-          <div style="text-align: right;"><p style="margin: 0; font-size: 10px; color: #94a3b8; font-weight: 800;">DATE</p><p style="margin: 5px 0; font-size: 14px; font-weight: 700;">${new Date(inv.date).toLocaleDateString()}</p></div>
-        </div>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-          <thead><tr style="background: #1e293b; color: #fff;"><th style="padding: 10px; text-align: left; font-size: 10px;">#</th><th style="padding: 10px; text-align: left; font-size: 10px;">ITEM</th><th style="padding: 10px; text-align: center; font-size: 10px;">QTY</th><th style="padding: 10px; text-align: right; font-size: 10px;">UNIT</th><th style="padding: 10px; text-align: right; font-size: 10px;">TOTAL</th></tr></thead>
-          <tbody>${itemsHTML}</tbody>
-        </table>
-        <div style="display: flex; justify-content: flex-end;"><div style="width: 250px; background: #f8fafc; padding: 20px; border-radius: 12px;">
-          <div style="display: flex; justify-content: space-between; padding: 5px 0;"><span>Subtotal</span><span>${currency}${inv.total.toLocaleString()}</span></div>
-          <div style="display: flex; justify-content: space-between; padding: 5px 0;"><span>Paid</span><span style="color: #16a34a;">${currency}${inv.paidAmount.toLocaleString()}</span></div>
-          <div style="display: flex; justify-content: space-between; padding: 10px 0 0 0; margin-top: 10px; border-top: 2px solid #e2e8f0; font-weight: 900; font-size: 16px;"><span>DUE</span><span style="color: #dc2626;">${currency}${(inv.total - inv.paidAmount).toLocaleString()}</span></div>
-        </div></div>
-      </div>`;
-    }
-
-    return `<div style="width: 80mm; padding: 5mm; font-family: monospace; text-align: center;">
-      <h2 style="margin: 0;">${shop.shopName}</h2>
-      <p style="font-size: 10px; margin: 5px 0;">#INV-${inv.id.padStart(4, '0')} | ${new Date(inv.date).toLocaleString()}</p>
-      <div style="border-top: 1px dashed #000; margin: 10px 0;"></div>
-      ${inv.items.map(it => `<div style="display: flex; justify-content: space-between; font-size: 11px;"><span>${it.quantity}x ${it.name.slice(0, 15)}</span><span>${currency}${(it.price * it.quantity).toLocaleString()}</span></div>`).join('')}
-      <div style="border-top: 1px dashed #000; margin: 10px 0;"></div>
-      <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px;"><span>TOTAL</span><span>${currency}${inv.total.toLocaleString()}</span></div>
-      <div style="display: flex; justify-content: space-between; margin-top: 5px;"><span>PAID</span><span>${currency}${inv.paidAmount.toLocaleString()}</span></div>
-      <p style="margin-top: 20px; font-size: 10px;">THANK YOU FOR YOUR VISIT</p>
-    </div>`;
-  };
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
@@ -179,11 +125,26 @@ const Terminal: React.FC<Props> = ({ state, updateState }) => {
     updateState('products', state.products.map(p => { const it = cart.find(c => c.id === p.id); return it ? { ...p, stock: p.stock - it.quantity } : p; }));
     if (selectedCustomer) updateState('customers', state.customers.map(c => c.id === selectedCustomer.id ? { ...c, totalSpent: c.totalSpent + total, totalDebt: (c.totalDebt || 0) + balanceDue, lastVisit: new Date().toISOString().split('T')[0], transactionCount: (c.transactionCount || 0) + 1 } : c));
     setLastInvoice(newInvoice); setCart([]); setPaymentModal(false); setSuccessModal(true); setShowCartMobile(false);
+    setPaidAmountInput('');
   };
 
-  const handlePreview = (layout: 'a4' | 'advice' | 'thermal') => {
-    const inv = lastInvoice || { id: 'DRAFT', date: new Date().toISOString(), customerId: selectedCustomer?.id, items: cart, total, subtotal, tax, paymentMethod: 'cash' as const, status: 'unpaid' as const };
-    setPreviewHtml(generatePrintHTML(inv as Invoice, layout)); setPreviewType(layout);
+  const handlePreview = (layout: PrintLayout) => {
+    const invToPreview = lastInvoice || { 
+      id: 'DRAFT', 
+      date: new Date().toISOString(), 
+      customerId: selectedCustomer?.id, 
+      items: cart, 
+      total, 
+      subtotal, 
+      tax, 
+      discount: 0,
+      paidAmount: finalPaid,
+      profit: 0,
+      paymentMethod: paymentMethod, 
+      status: finalPaid >= total ? 'paid' : (finalPaid > 0 ? 'partial' : 'unpaid')
+    };
+    setPreviewHtml(generatePrintHTML(state, invToPreview as Invoice, layout)); 
+    setPreviewType(layout);
   };
 
   return (
