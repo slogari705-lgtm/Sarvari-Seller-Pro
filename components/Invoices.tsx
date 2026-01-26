@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   FileText, 
   Search, 
@@ -7,112 +6,144 @@ import {
   Printer,
   Calendar,
   X,
-  User,
   Trash2,
-  Package,
-  Plus,
-  Minus,
-  Edit,
-  Filter,
-  RotateCcw,
-  ChevronDown,
-  ArrowRight,
-  Smartphone,
-  FileSpreadsheet,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  Banknote,
-  CreditCard,
-  ArrowUpRight,
-  Scale,
-  MoreVertical,
-  ChevronUp,
-  ArrowUpDown,
-  SortAsc,
-  SortDesc,
-  CheckSquare,
-  Square,
-  Download,
-  History,
   TrendingUp,
   FileCheck,
-  ShieldAlert,
-  BarChart2,
-  Share2,
+  FileDown,
+  Scale,
+  Loader2,
+  CheckSquare,
+  Square,
+  RotateCcw,
+  RefreshCw,
+  AlertCircle,
+  Package,
+  MinusCircle,
+  PlusCircle,
+  ArrowDownLeft,
   ChevronRight,
-  MapPin,
-  Phone,
-  Monitor,
-  FileDown
+  ShieldCheck,
+  Banknote,
+  History,
+  Info,
+  Plus,
+  User,
+  Zap,
+  Tag,
+  CreditCard,
+  ShoppingCart,
+  CheckCircle2,
+  ArrowRight,
+  DollarSign,
+  Percent,
+  Wallet,
+  ArrowUpRight,
+  ScanLine,
+  Flashlight
 } from 'lucide-react';
-import { AppState, Product, Customer, CartItem, Invoice, View, LoanTransaction } from '../types';
+import { Html5Qrcode } from 'html5-qrcode';
+import { AppState, Invoice, View, CartItem, Product, LoanTransaction, Customer, ProductVariation } from '../types';
 import { translations } from '../translations';
-import { generatePrintHTML, PrintLayout } from '../services/printService';
+import { generatePrintHTML, PrintLayout } from '../printService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import ConfirmDialog from './ConfirmDialog';
 
 interface Props {
   state: AppState;
   updateState: <K extends keyof AppState>(key: K, value: AppState[K]) => void;
-  setCurrentView?: (view: View) => void;
+  setCurrentView: (view: View) => void;
 }
 
 type SortKey = 'id' | 'date' | 'total' | 'status';
 type SortOrder = 'asc' | 'desc';
 
-const Invoices: React.FC<Props> = ({ state, updateState }) => {
+export default function Invoices({ state, updateState, setCurrentView }: Props) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('id');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [previewData, setPreviewData] = useState<{inv: Invoice, layout: PrintLayout} | null>(null);
-  const [isPrinting, setIsPrinting] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [isPrinting, setIsPrinting] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [methodFilter, setMethodFilter] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState<string>('');
+  const [trashConfirm, setTrashConfirm] = useState<string | null>(null);
+  
+  // Creation Flow State
+  const [isCreating, setIsCreating] = useState(false);
+  const [draftItems, setDraftItems] = useState<CartItem[]>([]);
+  const [draftCustomerId, setDraftCustomerId] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [draftDiscount, setDraftDiscount] = useState<number>(0);
+  const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('fixed');
+  const [draftPayment, setDraftPayment] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [draftPaidAmount, setDraftPaidAmount] = useState<number | ''>('');
+  const [paymentStatusMode, setPaymentStatusMode] = useState<'paid' | 'partial' | 'unpaid'>('paid');
+  const [productSearch, setProductSearch] = useState('');
+
+  // Scanner State for Invoices
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+
+  // Return Logic State
+  const [returningInvoice, setReturningInvoice] = useState<Invoice | null>(null);
+  const [returnQtys, setReturnQtys] = useState<Record<string, number>>({});
 
   const t = translations[state.settings.language || 'en'];
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortOrder('desc');
-    }
-  };
+  const activeInvoices = useMemo(() => state.invoices.filter(i => !i.isDeleted), [state.invoices]);
 
   const filteredInvoices = useMemo(() => {
-    let result = state.invoices.filter(inv => {
+    let result = activeInvoices.filter(inv => {
       const customer = state.customers.find(c => c.id === inv.customerId);
       const matchesSearch = inv.id.toString().includes(searchTerm) || 
                             customer?.name.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = statusFilter === 'all' || inv.status === statusFilter;
-      const matchesMethod = methodFilter === 'all' || inv.paymentMethod === methodFilter;
-      const matchesDate = !dateFilter || inv.date.startsWith(dateFilter);
-      
-      return matchesSearch && matchesStatus && matchesMethod && matchesDate;
+      return matchesSearch && matchesStatus;
     });
-
     result.sort((a, b) => {
       let comparison = 0;
       if (sortKey === 'id') comparison = Number(a.id) - Number(b.id);
       else if (sortKey === 'date') comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
       else if (sortKey === 'total') comparison = a.total - b.total;
       else if (sortKey === 'status') comparison = a.status.localeCompare(b.status);
-      
       return sortOrder === 'asc' ? comparison : -comparison;
     });
-
     return result;
-  }, [state.invoices, searchTerm, statusFilter, methodFilter, dateFilter, state.customers, sortKey, sortOrder]);
+  }, [activeInvoices, searchTerm, statusFilter, state.customers, sortKey, sortOrder]);
+
+  // Derived Creation Stats
+  const draftSubtotal = useMemo(() => draftItems.reduce((acc, it) => acc + (it.price * it.quantity), 0), [draftItems]);
+  const draftTax = draftSubtotal * (state.settings.taxRate / 100);
+  const discountVal = discountType === 'percent' ? (draftSubtotal * (draftDiscount / 100)) : draftDiscount;
+  const draftTotal = Math.max(0, draftSubtotal + draftTax - discountVal);
+
+  // Auto-manage draftPaidAmount based on status mode
+  useEffect(() => {
+    if (paymentStatusMode === 'paid') setDraftPaidAmount(draftTotal);
+    else if (paymentStatusMode === 'unpaid') setDraftPaidAmount(0);
+  }, [paymentStatusMode, draftTotal]);
+
+  const availableProducts = useMemo(() => {
+    if (!productSearch) return [];
+    return state.products.filter(p => !p.isDeleted && p.stock > 0 && (
+      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+      p.sku.toLowerCase().includes(productSearch.toLowerCase())
+    )).slice(0, 8);
+  }, [state.products, productSearch]);
+
+  const searchedCustomers = useMemo(() => {
+    if (!customerSearch) return [];
+    return state.customers.filter(c => !c.isDeleted && (
+      c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+      c.phone.includes(customerSearch)
+    )).slice(0, 5);
+  }, [state.customers, customerSearch]);
+
+  const selectedCustomer = useMemo(() => state.customers.find(c => c.id === draftCustomerId), [draftCustomerId, state.customers]);
 
   const totals = useMemo(() => {
-    return filteredInvoices.reduce((acc, inv) => ({
+    const nonVoided = filteredInvoices.filter(i => !i.isVoided);
+    return nonVoided.reduce((acc, inv) => ({
       total: acc.total + inv.total,
       collected: acc.collected + inv.paidAmount,
       balance: acc.balance + (inv.total - inv.paidAmount),
@@ -128,390 +159,706 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredInvoices.length && filteredInvoices.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredInvoices.map(i => i.id)));
-    }
+    if (selectedIds.size === filteredInvoices.length && filteredInvoices.length > 0) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredInvoices.map(i => i.id)));
   };
 
-  const deleteInvoice = (id: string) => {
-    if (window.confirm("Are you sure? This will return items to stock and adjust customer balances.")) {
-      const inv = state.invoices.find(i => i.id === id);
-      if (inv) {
-        updateState('products', state.products.map(p => {
-          const item = inv.items.find(it => it.id === p.id);
-          return item ? { ...p, stock: p.stock + item.quantity } : p;
-        }));
-        if (inv.customerId) {
-          updateState('customers', state.customers.map(c => c.id === inv.customerId ? { ...c, totalSpent: Math.max(0, c.totalSpent - inv.total), totalDebt: Math.max(0, c.totalDebt - (inv.total - inv.paidAmount)) } : c));
-        }
+  const moveToTrash = (id: string) => {
+    const inv = state.invoices.find(i => i.id === id);
+    if (!inv) return;
+    
+    const updatedInvoices = state.invoices.map(i => i.id === id ? { ...i, isDeleted: true, isVoided: true, status: 'voided' as const } : i);
+    const updatedProducts = state.products.map(p => {
+      const item = inv.items.find(it => it.id === p.id);
+      return item ? { ...p, stock: p.stock + item.quantity } : p;
+    });
+    
+    updateState('invoices', updatedInvoices);
+    updateState('products', updatedProducts);
+    setTrashConfirm(null);
+  };
+
+  const handleAuthorizeInvoice = () => {
+    if (draftItems.length === 0) return;
+    if (paymentStatusMode !== 'paid' && !draftCustomerId) {
+      alert("Error: A customer must be assigned for Unpaid or Partial invoices to track debt.");
+      return;
+    }
+    
+    const paidAmount = Number(draftPaidAmount) || 0;
+    const debtIncurred = draftTotal - paidAmount;
+    const profit = draftItems.reduce((acc, it) => acc + ((it.price - it.costPrice) * it.quantity), 0) - discountVal;
+    const newId = (state.invoices.reduce((max, i) => Math.max(max, parseInt(i.id) || 0), 0) + 1).toString();
+
+    let finalStatus: 'paid' | 'partial' | 'unpaid' = 'paid';
+    if (paidAmount === 0) finalStatus = 'unpaid';
+    else if (paidAmount < draftTotal) finalStatus = 'partial';
+
+    const invoice: Invoice = {
+      id: newId,
+      date: new Date().toISOString(),
+      customerId: draftCustomerId || undefined,
+      items: draftItems,
+      subtotal: draftSubtotal,
+      tax: draftTax,
+      discount: discountVal,
+      total: draftTotal,
+      paidAmount: paidAmount,
+      profit: profit,
+      status: finalStatus,
+      paymentMethod: draftPayment,
+      pointsEarned: Math.floor(draftTotal * state.settings.loyaltySettings.pointsPerUnit)
+    };
+
+    const updatedProducts = state.products.map(p => {
+      const lineItems = draftItems.filter(it => it.id === p.id);
+      if (lineItems.length > 0) {
+        const consumed = lineItems.reduce((a, b) => a + b.quantity, 0);
+        return { ...p, stock: p.stock - consumed };
       }
-      updateState('invoices', state.invoices.filter(i => i.id !== id));
-      setSelectedInvoice(null);
-    }
-  };
-
-  const bulkDelete = () => {
-    if (window.confirm(`Delete ${selectedIds.size} invoices? Stock and customer data will be reverted.`)) {
-      let updatedProducts = [...state.products];
-      let updatedCustomers = [...state.customers];
-      
-      selectedIds.forEach(id => {
-        const inv = state.invoices.find(i => i.id === id);
-        if (inv) {
-          updatedProducts = updatedProducts.map(p => {
-            const item = inv.items.find(it => it.id === p.id);
-            return item ? { ...p, stock: p.stock + item.quantity } : p;
-          });
-          if (inv.customerId) {
-            updatedCustomers = updatedCustomers.map(c => c.id === inv.customerId ? { ...c, totalSpent: Math.max(0, c.totalSpent - inv.total), totalDebt: Math.max(0, c.totalDebt - (inv.total - inv.paidAmount)) } : c);
-          }
-        }
-      });
-
-      updateState('products', updatedProducts);
-      updateState('customers', updatedCustomers);
-      updateState('invoices', state.invoices.filter(i => !selectedIds.has(i.id)));
-      setSelectedIds(new Set());
-    }
-  };
-
-  const bulkMarkAsPaid = () => {
-    if (window.confirm(`Mark ${selectedIds.size} invoices as fully paid? This will reconcile outstanding debt.`)) {
-      let updatedCustomers = [...state.customers];
-      const updatedInvoices = state.invoices.map(inv => {
-        if (selectedIds.has(inv.id) && inv.status !== 'paid') {
-          const balance = inv.total - inv.paidAmount;
-          if (inv.customerId) {
-            updatedCustomers = updatedCustomers.map(c => c.id === inv.customerId ? { ...c, totalDebt: Math.max(0, c.totalDebt - balance) } : c);
-          }
-          return { ...inv, paidAmount: inv.total, status: 'paid' as const };
-        }
-        return inv;
-      });
-
-      updateState('customers', updatedCustomers);
-      updateState('invoices', updatedInvoices);
-      setSelectedIds(new Set());
-    }
-  };
-
-  const exportToCSV = () => {
-    const headers = ['Invoice ID', 'Date', 'Customer', 'Total', 'Paid', 'Balance', 'Profit', 'Status', 'Method'];
-    const rows = filteredInvoices.map(inv => {
-      const cust = state.customers.find(c => c.id === inv.customerId);
-      return [
-        inv.id,
-        new Date(inv.date).toLocaleDateString(),
-        cust?.name || 'Walk-in',
-        inv.total,
-        inv.paidAmount,
-        inv.total - inv.paidAmount,
-        inv.profit || 0,
-        inv.status,
-        inv.paymentMethod
-      ];
+      return p;
     });
 
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + headers.join(",") + "\n" 
-      + rows.map(e => e.join(",")).join("\n");
+    const updatedLoanTransactions = [...state.loanTransactions];
+    if (draftCustomerId) {
+      const updatedCustomers = state.customers.map(c => {
+        if (c.id === draftCustomerId) {
+          return { 
+            ...c, 
+            totalSpent: c.totalSpent + draftTotal,
+            totalDebt: (c.totalDebt || 0) + debtIncurred,
+            loyaltyPoints: (c.loyaltyPoints || 0) + (invoice.pointsEarned || 0),
+            transactionCount: (c.transactionCount || 0) + 1,
+            lastVisit: new Date().toISOString()
+          };
+        }
+        return c;
+      });
+      updateState('customers', updatedCustomers);
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Sarvari_Invoices_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handlePrint = (inv: Invoice, layout: PrintLayout) => {
-    if (isPrinting) return;
-    setIsPrinting(true);
-
-    const html = generatePrintHTML(state, inv, layout);
-    const holder = document.getElementById('print-holder');
-    if (!holder) {
-      setIsPrinting(false);
-      return;
-    }
-    
-    holder.innerHTML = '';
-    const iframe = document.createElement('iframe');
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    iframe.style.border = '0';
-    holder.appendChild(iframe);
-
-    const doc = iframe.contentWindow?.document || iframe.contentDocument;
-    if (doc) {
-      doc.open();
-      doc.write(html);
-      doc.close();
-
-      const printAction = () => {
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            iframe.contentWindow?.focus();
-            iframe.contentWindow?.print();
-            setIsPrinting(false);
-            setTimeout(() => {
-              if (holder.contains(iframe)) holder.innerHTML = '';
-            }, 3000);
-          }, 600);
+      if (debtIncurred > 0) {
+        updatedLoanTransactions.push({
+          id: Math.random().toString(36).substr(2, 9),
+          customerId: draftCustomerId,
+          invoiceId: newId,
+          date: new Date().toISOString(),
+          amount: debtIncurred,
+          type: 'debt',
+          note: `Auto-logged from Invoice #${newId}`
         });
-      };
-
-      if (iframe.contentWindow?.document.readyState === 'complete') {
-        printAction();
-      } else {
-        iframe.onload = printAction;
       }
-    } else {
-      setIsPrinting(false);
-    }
-  };
-
-  const handleDownloadPDF = async (inv: Invoice, layout: PrintLayout = 'a4') => {
-    if (isDownloading) return;
-    setIsDownloading(true);
-
-    const html = generatePrintHTML(state, inv, layout);
-    const container = document.getElementById('pdf-render-container');
-    if (!container) {
-      setIsDownloading(false);
-      return;
     }
 
-    container.innerHTML = html;
+    updateState('products', updatedProducts);
+    updateState('invoices', [...state.invoices, invoice]);
+    updateState('loanTransactions', updatedLoanTransactions);
     
-    // Give images and fonts a moment to load
-    await new Promise(resolve => setTimeout(resolve, 800));
+    setIsCreating(false);
+    setDraftItems([]);
+    setDraftCustomerId('');
+    setDraftDiscount(0);
+    setDraftPayment('cash');
+    setPaymentStatusMode('paid');
+    setDraftPaidAmount('');
+  };
 
+  const handleOpenReturn = (inv: Invoice) => {
+    setReturningInvoice(inv);
+    const initialQtys: Record<string, number> = {};
+    inv.items.forEach(item => {
+      const maxReturnable = item.quantity - (item.returnedQuantity || 0);
+      initialQtys[item.id] = maxReturnable;
+    });
+    setReturnQtys(initialQtys);
+  };
+
+  const handleProcessReturn = () => {
+    if (!returningInvoice) return;
+    
+    let totalRefundValue = 0;
+    let totalPointsToRemove = 0;
+    
+    const updatedItems = returningInvoice.items.map(item => {
+      const returning = returnQtys[item.id] || 0;
+      if (returning > 0) {
+        totalRefundValue += returning * item.price;
+        if (returningInvoice.pointsEarned) {
+          const ratio = (returning * item.price) / returningInvoice.total;
+          totalPointsToRemove += Math.floor(returningInvoice.pointsEarned * ratio);
+        }
+        return { ...item, returnedQuantity: (item.returnedQuantity || 0) + returning };
+      }
+      return item;
+    });
+
+    const updatedInvoices = state.invoices.map(inv => {
+      if (inv.id === returningInvoice.id) {
+        const isFullyReturned = updatedItems.every(i => (i.returnedQuantity || 0) >= i.quantity);
+        return { 
+          ...inv, 
+          items: updatedItems,
+          status: isFullyReturned ? 'returned' : (totalRefundValue > 0 ? 'partial' : inv.status),
+          pointsEarned: Math.max(0, (inv.pointsEarned || 0) - totalPointsToRemove),
+          returnHistory: [
+            ...(inv.returnHistory || []),
+            { 
+              date: new Date().toISOString(), 
+              items: Object.entries(returnQtys).filter(([_, q]) => q > 0).map(([id, q]) => ({ productId: id, quantity: q })),
+              refundAmount: totalRefundValue
+            }
+          ]
+        };
+      }
+      return inv;
+    });
+
+    const updatedProducts = state.products.map(p => {
+      const returnedCount = returnQtys[p.id] || 0;
+      if (returnedCount > 0) return { ...p, stock: p.stock + returnedCount };
+      return p;
+    });
+
+    const updatedCustomers = state.customers.map(c => {
+      if (c.id === returningInvoice.customerId) {
+        let remainingRefund = totalRefundValue;
+        let newDebt = c.totalDebt || 0;
+
+        if (newDebt > 0) {
+          const deduction = Math.min(newDebt, remainingRefund);
+          newDebt -= deduction;
+          remainingRefund -= deduction;
+        }
+
+        return { 
+          ...c, 
+          totalSpent: Math.max(0, c.totalSpent - totalRefundValue),
+          totalDebt: newDebt,
+          loyaltyPoints: Math.max(0, (c.loyaltyPoints || 0) - totalPointsToRemove)
+        };
+      }
+      return c;
+    });
+
+    const newRefundTrans: LoanTransaction = {
+      id: Math.random().toString(36).substr(2, 9),
+      customerId: returningInvoice.customerId || 'walk-in',
+      date: new Date().toISOString(),
+      amount: totalRefundValue,
+      type: 'refund',
+      note: `Refund for items on Inv #${returningInvoice.id}`
+    };
+
+    updateState('invoices', updatedInvoices as Invoice[]);
+    updateState('products', updatedProducts);
+    updateState('customers', updatedCustomers);
+    updateState('loanTransactions', [...state.loanTransactions, newRefundTrans]);
+
+    setReturningInvoice(null);
+  };
+
+  const handlePrint = async (inv: Invoice, overrideLayout: PrintLayout = 'auto') => {
+    setIsPrinting(inv.id);
     try {
-      const canvas = await html2canvas(container, {
-        scale: 2, // Better quality
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: layout === 'thermal' ? 'portrait' : 'portrait',
-        unit: 'mm',
-        format: layout === 'thermal' ? [80, 200] : 'a4'
-      });
-
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Invoice_#${inv.id.padStart(4, '0')}.pdf`);
-    } catch (error) {
-      console.error("PDF Export Error:", error);
-      alert("Failed to generate PDF. Please try the Print option instead.");
+      const html = generatePrintHTML(state, inv, overrideLayout);
+      const holder = document.getElementById('print-holder');
+      if (holder) {
+        holder.innerHTML = html;
+        window.print();
+        holder.innerHTML = '';
+      }
+    } catch (e) {
+      console.error("Print Error:", e);
     } finally {
-      container.innerHTML = '';
-      setIsDownloading(false);
+      setIsPrinting(null);
     }
   };
 
-  const repaymentHistory = useMemo(() => {
-    if (!selectedInvoice) return [];
-    return state.loanTransactions.filter(t => t.invoiceId === selectedInvoice.id || (t.customerId === selectedInvoice.customerId && t.type === 'repayment')).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [selectedInvoice, state.loanTransactions]);
+  const handleDownloadPDF = async (inv: Invoice) => {
+    if (isDownloading) return;
+    setIsDownloading(inv.id);
+    try {
+      const html = generatePrintHTML(state, inv, 'a4');
+      const container = document.getElementById('pdf-render-container');
+      if (!container) throw new Error("Render target missing");
+      
+      container.innerHTML = html;
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      const canvas = await html2canvas(container, { 
+        scale: 2, 
+        useCORS: true, 
+        logging: false, 
+        backgroundColor: '#ffffff' 
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Invoice_#${inv.id}.pdf`);
+    } catch (e) { 
+      console.error(e); 
+    } finally { 
+      const container = document.getElementById('pdf-render-container');
+      if (container) container.innerHTML = ''; 
+      setIsDownloading(null); 
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'paid': return <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase rounded-lg border border-emerald-100">Paid</span>;
+      case 'returned': return <span className="px-3 py-1 bg-rose-50 text-rose-600 text-[9px] font-black uppercase rounded-lg border border-rose-100">Returned</span>;
+      case 'partial': return <span className="px-3 py-1 bg-amber-50 text-amber-600 text-[9px] font-black uppercase rounded-lg border border-amber-100">Partial</span>;
+      case 'voided': return <span className="px-3 py-1 bg-slate-100 text-slate-400 text-[9px] font-black uppercase rounded-lg border border-slate-200">Voided</span>;
+      default: return <span className="px-3 py-1 bg-rose-50 text-rose-500 text-[9px] font-black uppercase rounded-lg border border-rose-100">{status}</span>;
+    }
+  };
+
+  // Integrated Barcode Scanner Logic for Invoices
+  useEffect(() => {
+    if (isScannerOpen && isCreating) {
+      const startScanner = async () => {
+        try {
+          const html5QrCode = new Html5Qrcode("invoice-scanner-container");
+          scannerRef.current = html5QrCode;
+          await html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 20, qrbox: { width: 280, height: 180 } },
+            (decodedText) => {
+              let foundProduct: Product | null = null;
+              let foundVariation: ProductVariation | undefined = undefined;
+
+              for (const p of state.products) {
+                if (p.isDeleted) continue;
+                if (p.sku === decodedText) { foundProduct = p; break; }
+                const vMatch = p.variations?.find(v => v.sku === decodedText);
+                if (vMatch) { foundProduct = p; foundVariation = vMatch; break; }
+              }
+
+              if (foundProduct) {
+                const target = foundVariation || foundProduct;
+                const existing = draftItems.find(it => it.id === foundProduct!.id && it.variationId === foundVariation?.id);
+                
+                if (existing) {
+                  if (existing.quantity < target.stock) {
+                    setDraftItems(draftItems.map(it => (it.id === foundProduct!.id && it.variationId === foundVariation?.id) ? { ...it, quantity: it.quantity + 1 } : it));
+                  }
+                } else {
+                  setDraftItems([...draftItems, { 
+                    ...foundProduct, 
+                    name: foundVariation ? `${foundProduct.name} (${foundVariation.name})` : foundProduct.name,
+                    sku: target.sku,
+                    price: foundVariation?.salePrice ?? foundVariation?.price ?? foundProduct.salePrice ?? foundProduct.price,
+                    costPrice: target.costPrice,
+                    stock: target.stock,
+                    quantity: 1, 
+                    buyPrice: foundVariation?.salePrice ?? foundVariation?.price ?? foundProduct.salePrice ?? foundProduct.price,
+                    variationId: foundVariation?.id,
+                    variationName: foundVariation?.name
+                  }]);
+                }
+                setIsScannerOpen(false); // Close after successful scan to not overwhelm UI
+              }
+            },
+            () => {}
+          );
+        } catch (err) {
+          console.error("Scanner failed:", err);
+          setIsScannerOpen(false);
+        }
+      };
+      startScanner();
+    }
+    return () => {
+      if (scannerRef.current) {
+        scannerRef.current.stop().then(() => { scannerRef.current = null; }).catch(() => {});
+      }
+    };
+  }, [isScannerOpen, isCreating, state.products, draftItems]);
 
   return (
     <div className="space-y-4 animate-in fade-in duration-500 max-w-full overflow-hidden pb-20">
-      {/* High-Level Financial Ledger Header */}
+      <ConfirmDialog 
+        isOpen={!!trashConfirm} 
+        onClose={() => setTrashConfirm(null)} 
+        onConfirm={() => trashConfirm && moveToTrash(trashConfirm)} 
+        title="Move Invoice to Trash?" 
+        message="Trashing an invoice will automatically void it and return items to inventory." 
+        confirmText="Move to Trash" 
+        type="warning" 
+      />
+
+      {/* Optimized Invoice Creator Modal */}
+      {isCreating && (
+        <div className="fixed inset-0 z-[160] flex items-center justify-center p-2 md:p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-slate-900 rounded-[40px] md:rounded-[56px] w-full max-w-6xl h-[95vh] md:h-auto md:max-h-[92vh] shadow-2xl relative overflow-hidden flex flex-col border border-white/10 animate-in zoom-in-95 duration-300">
+              
+              <header className="p-6 md:p-8 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0">
+                 <div className="flex items-center gap-4 md:gap-6">
+                    <div className="w-10 h-10 md:w-14 md:h-14 bg-indigo-600 text-white rounded-[16px] md:rounded-[22px] flex items-center justify-center shadow-lg"><FileText size={20}/></div>
+                    <div>
+                       <h3 className="text-xl md:text-2xl font-black dark:text-white uppercase tracking-tighter leading-none">Draft Invoice Builder</h3>
+                       <p className="text-slate-400 font-bold text-[8px] md:text-[10px] uppercase tracking-[0.2em] mt-1">Registry Terminal Entry</p>
+                    </div>
+                 </div>
+                 <div className="flex items-center gap-2">
+                    <button onClick={() => setIsScannerOpen(!isScannerOpen)} className={`p-3 rounded-2xl transition-all border ${isScannerOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`} title="Toggle Scanner"><ScanLine size={20}/></button>
+                    <button onClick={() => setIsCreating(false)} className="p-3 md:p-4 bg-slate-100 dark:bg-slate-800 rounded-2xl md:rounded-3xl text-slate-400 hover:text-rose-600 transition-all active:scale-95"><X size={20}/></button>
+                 </div>
+              </header>
+
+              <div className="flex-1 overflow-hidden flex flex-col lg:flex-row bg-slate-50/20 dark:bg-slate-950/10">
+                 
+                 {/* Asset & Customer Discovery Pane */}
+                 <div className="lg:w-[400px] border-r border-slate-100 dark:border-slate-800 flex flex-col h-full bg-white dark:bg-slate-900 shrink-0">
+                    <div className="p-6 md:p-8 space-y-6 md:space-y-8 flex-1 overflow-y-auto custom-scrollbar">
+                       
+                       {isScannerOpen && (
+                         <div id="invoice-scanner-container" className="w-full aspect-[4/3] bg-black rounded-3xl overflow-hidden mb-6 relative animate-in zoom-in">
+                            <div className="absolute inset-0 pointer-events-none border-2 border-indigo-500/50 rounded-3xl z-10"></div>
+                         </div>
+                       )}
+
+                       <section className="space-y-4">
+                          <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest ml-1 flex items-center gap-2"><User size={14}/> Client Assignment</label>
+                          <div className="space-y-3">
+                             {selectedCustomer ? (
+                               <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-[20px] border border-indigo-100 dark:border-indigo-800 animate-in zoom-in-95 flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                     <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-xs font-black">{selectedCustomer.name.charAt(0)}</div>
+                                     <div className="min-w-0">
+                                        <p className="text-xs font-black dark:text-white uppercase leading-none truncate">{selectedCustomer.name}</p>
+                                        <p className="text-[8px] font-bold text-slate-400 mt-1">{selectedCustomer.phone}</p>
+                                     </div>
+                                  </div>
+                                  <button onClick={() => setDraftCustomerId('')} className="p-1.5 hover:bg-indigo-100 dark:hover:bg-indigo-800 rounded-lg text-indigo-600"><X size={14}/></button>
+                               </div>
+                             ) : (
+                               <div className="relative">
+                                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                                  <input 
+                                    type="text" 
+                                    value={customerSearch} 
+                                    onChange={e => setCustomerSearch(e.target.value)}
+                                    className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-3 pl-10 pr-4 font-bold text-xs outline-none transition-all dark:text-white"
+                                    placeholder="Lookup Client Registry..."
+                                  />
+                                  {customerSearch && (
+                                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 z-50 overflow-hidden">
+                                       {searchedCustomers.map(c => (
+                                         <button key={c.id} onClick={() => { setDraftCustomerId(c.id); setCustomerSearch(''); }} className="w-full p-3 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 flex items-center justify-between group transition-colors">
+                                            <div className="flex items-center gap-3">
+                                               <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black">{c.name.charAt(0)}</div>
+                                               <div><p className="text-[11px] font-black dark:text-white uppercase leading-none">{c.name}</p><p className="text-[8px] text-slate-400 font-bold">{c.phone}</p></div>
+                                            </div>
+                                            <ArrowRight size={12} className="text-indigo-600 opacity-0 group-hover:opacity-100" />
+                                         </button>
+                                       ))}
+                                    </div>
+                                  )}
+                               </div>
+                             )}
+                          </div>
+                       </section>
+
+                       <section className="space-y-4">
+                          <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest ml-1 flex items-center gap-2"><Package size={14}/> Asset Discovery</label>
+                          <div className="relative">
+                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                             <input 
+                               type="text" 
+                               value={productSearch} 
+                               onChange={e => setProductSearch(e.target.value)}
+                               className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-3 pl-10 pr-4 font-bold text-xs outline-none transition-all dark:text-white"
+                               placeholder="Type label or Scan..."
+                             />
+                          </div>
+                          
+                          <div className="space-y-2 max-h-[180px] md:max-h-[220px] overflow-y-auto no-scrollbar">
+                             {availableProducts.map(p => (
+                               <button 
+                                 key={p.id} 
+                                 onClick={() => {
+                                   const existing = draftItems.find(it => it.id === p.id && !it.variationId);
+                                   if (existing) {
+                                     setDraftItems(draftItems.map(it => (it.id === p.id && !it.variationId) ? { ...it, quantity: Math.min(p.stock, it.quantity + 1) } : it));
+                                   } else {
+                                     setDraftItems([...draftItems, { ...p, quantity: 1, buyPrice: p.salePrice ?? p.price }]);
+                                   }
+                                   setProductSearch('');
+                                 }}
+                                 className="w-full p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-50 dark:border-slate-700 hover:border-indigo-400 transition-all text-left flex items-center justify-between group shadow-sm"
+                               >
+                                  <div className="flex items-center gap-3">
+                                     <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-slate-300 group-hover:text-indigo-500 transition-colors"><Package size={16}/></div>
+                                     <div className="min-w-0">
+                                        <p className="font-black text-[11px] uppercase dark:text-white truncate leading-tight">{p.name}</p>
+                                        <p className="text-[8px] font-black uppercase text-slate-400 mt-0.5">{p.stock} units in reserve</p>
+                                     </div>
+                                  </div>
+                                  <p className="font-black text-xs text-indigo-600">{state.settings.currency}{(p.salePrice ?? p.price).toLocaleString()}</p>
+                               </button>
+                             ))}
+                          </div>
+                       </section>
+                    </div>
+
+                    <div className="p-6 md:p-8 bg-slate-50/50 dark:bg-slate-800/20 border-t border-slate-100 dark:border-slate-800 space-y-6">
+                       <div className="space-y-4">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Wallet size={14}/> Settlement Mode</label>
+                          <div className="grid grid-cols-3 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                             {[
+                               { id: 'paid', label: 'Paid Full', icon: CheckCircle2, color: 'text-emerald-500' },
+                               { id: 'partial', label: 'Partial', icon: History, color: 'text-amber-500' },
+                               { id: 'unpaid', label: 'Unpaid', icon: AlertCircle, color: 'text-rose-500' }
+                             ].map(s => (
+                               <button key={s.id} onClick={() => setPaymentStatusMode(s.id as any)} className={`py-2.5 rounded-lg flex flex-col items-center gap-0.5 transition-all ${paymentStatusMode === s.id ? 'bg-white dark:bg-slate-700 shadow-sm scale-105' : 'opacity-40 grayscale'}`}>
+                                  <s.icon size={14} className={s.color}/>
+                                  <span className="text-[8px] font-black uppercase tracking-widest">{s.label}</span>
+                               </button>
+                             ))}
+                          </div>
+                          
+                          {paymentStatusMode === 'partial' && (
+                             <div className="animate-in slide-in-from-top-2 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-100 dark:border-amber-800">
+                                <label className="block text-[8px] font-black text-amber-600 uppercase mb-2">Deposit Magnitude</label>
+                                <div className="relative">
+                                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-300" size={16} />
+                                   <input 
+                                     type="number" 
+                                     value={draftPaidAmount} 
+                                     onChange={e => setDraftPaidAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                                     className="w-full bg-white dark:bg-slate-800 rounded-xl py-2 pl-8 pr-4 font-black text-lg text-amber-600 outline-none"
+                                     placeholder="0.00"
+                                   />
+                                </div>
+                             </div>
+                          )}
+                       </div>
+                    </div>
+                 </div>
+
+                 {/* Document Preview Pane */}
+                 <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-900 overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+                       <div className="bg-slate-50/40 dark:bg-slate-950/20 rounded-[32px] md:rounded-[40px] border border-slate-100 dark:border-slate-800 p-6 md:p-8 min-h-full flex flex-col shadow-inner">
+                          
+                          <div className="flex justify-between items-start mb-6">
+                             <div>
+                                <h4 className="text-lg md:text-xl font-black dark:text-white uppercase tracking-tighter">Draft Ledger Point</h4>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Status: Authorization Pending</p>
+                             </div>
+                             <div className="text-right">
+                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Temporal Log</p>
+                                <p className="text-[10px] font-black dark:text-white">{new Date().toLocaleDateString()}</p>
+                             </div>
+                          </div>
+
+                          <div className="flex-1">
+                             <table className="w-full text-left">
+                                <thead className="border-b border-slate-200 dark:border-slate-700">
+                                   <tr>
+                                      <th className="pb-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Description</th>
+                                      <th className="pb-2 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Volume</th>
+                                      <th className="pb-2 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Unit</th>
+                                      <th className="pb-2 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Sum</th>
+                                      <th className="pb-2"></th>
+                                   </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                   {draftItems.map((it, idx) => (
+                                      <tr key={idx} className="group">
+                                         <td className="py-3">
+                                            <p className="font-black text-[11px] uppercase dark:text-white truncate max-w-[100px] md:max-w-[180px]">{it.name}</p>
+                                            <p className="text-[7px] font-bold text-slate-400 uppercase">SKU: {it.sku}</p>
+                                         </td>
+                                         <td className="py-3">
+                                            <div className="flex items-center justify-center gap-1.5 bg-white dark:bg-slate-800 rounded-lg p-0.5 w-16 md:w-20 mx-auto shadow-sm">
+                                               <button onClick={() => setDraftItems(draftItems.map((item, i) => i === idx ? { ...item, quantity: Math.max(0, item.quantity - 1) } : item).filter(it => it.quantity > 0))} className="p-0.5 hover:text-rose-500"><MinusCircle size={12}/></button>
+                                               <span className="font-black text-[10px] dark:text-white tabular-nums">{it.quantity}</span>
+                                               <button onClick={() => it.quantity < it.stock && setDraftItems(draftItems.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item))} className="p-0.5 hover:text-indigo-600"><PlusCircle size={12}/></button>
+                                            </div>
+                                         </td>
+                                         <td className="py-3 text-right font-bold text-[10px] text-slate-500 dark:text-slate-400">{state.settings.currency}{it.price.toLocaleString()}</td>
+                                         <td className="py-3 text-right font-black text-[11px] dark:text-white">
+                                            {state.settings.currency}{(it.price * it.quantity).toLocaleString()}
+                                         </td>
+                                         <td className="py-3 text-right">
+                                            <button onClick={() => setDraftItems(draftItems.filter((_, i) => i !== idx))} className="p-1.5 text-slate-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"><X size={12}/></button>
+                                         </td>
+                                      </tr>
+                                   ))}
+                                </tbody>
+                             </table>
+
+                             {draftItems.length === 0 && (
+                               <div className="py-16 text-center opacity-10 grayscale">
+                                  <ShoppingCart size={40} className="mx-auto" strokeWidth={1} />
+                                  <p className="font-black text-[8px] uppercase tracking-[0.4em] mt-3">Manifest Null</p>
+                               </div>
+                             )}
+                          </div>
+
+                          <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                                <div className="space-y-1.5 px-1 flex-1">
+                                   <div className="flex justify-between md:justify-start md:gap-8 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                      <span>Registry Base</span>
+                                      <span className="dark:text-slate-300 font-black">{state.settings.currency}{draftSubtotal.toLocaleString()}</span>
+                                   </div>
+                                   <div className="flex justify-between md:justify-start md:gap-8 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                      <span>Fiscal VAT ({state.settings.taxRate}%)</span>
+                                      <span className="dark:text-slate-300 font-black">+{state.settings.currency}{draftTax.toLocaleString()}</span>
+                                   </div>
+                                   <div className="flex justify-between md:justify-start md:gap-8 items-center pt-1">
+                                      <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest">Concession (Disc)</span>
+                                      <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 p-0.5 rounded-lg border">
+                                        <input 
+                                          type="number" 
+                                          value={draftDiscount || ''} 
+                                          onChange={e => setDraftDiscount(Number(e.target.value))}
+                                          className="w-14 bg-transparent border-none text-[10px] font-black text-right outline-none dark:text-white p-0.5"
+                                          placeholder="0"
+                                        />
+                                        <button onClick={() => setDiscountType(discountType === 'percent' ? 'fixed' : 'percent')} className="text-[8px] font-black bg-slate-50 dark:bg-slate-700 px-1 py-0.5 rounded text-indigo-600 uppercase">
+                                          {discountType === 'percent' ? '%' : state.settings.currency}
+                                        </button>
+                                      </div>
+                                   </div>
+                                </div>
+                                <div className="text-right border-t md:border-t-0 pt-3 md:pt-0">
+                                   <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-0.5">Authorization Sum</p>
+                                   <h3 className="text-4xl md:text-5xl font-black dark:text-white tracking-tighter tabular-nums">{state.settings.currency}{draftTotal.toLocaleString()}</h3>
+                                </div>
+                             </div>
+                             
+                             <div className="pt-5 border-t border-slate-200 dark:border-slate-800 flex gap-3">
+                                <button onClick={() => setIsCreating(false)} className="px-6 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all">Abort</button>
+                                <button 
+                                  onClick={handleAuthorizeInvoice}
+                                  disabled={draftItems.length === 0}
+                                  className="flex-1 py-4 bg-indigo-600 text-white rounded-[24px] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3 active:scale-[0.98]"
+                                >
+                                   Finalize Registry <CheckCircle2 size={20}/>
+                                </button>
+                             </div>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Registry Tools Header */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-2">
+        <div>
+          <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">Authorized Ledger</h3>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Managed Fiscal Archive Nodes</p>
+        </div>
+        <button 
+          onClick={() => setIsCreating(true)}
+          className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-3"
+        >
+          <Plus size={20} strokeWidth={3} />
+          Create New Invoice
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Document Volume', value: filteredInvoices.length, icon: FileText, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
-          { label: 'Total Valuation', value: totals.total, isCurrency: true, icon: TrendingUp, color: 'text-slate-800 dark:text-white', bg: 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800' },
-          { label: 'Projected Margins', value: totals.profit, isCurrency: true, icon: FileCheck, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
-          { label: 'Outstanding Balance', value: totals.balance, isCurrency: true, icon: Scale, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10' },
+          { label: 'Total Invoices', value: filteredInvoices.length, icon: FileText, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
+          { label: 'Cumulative Revenue', value: totals.total, isCurrency: true, icon: TrendingUp, color: 'text-slate-800 dark:text-white', bg: 'bg-white dark:bg-slate-900' },
+          { label: 'Net Profit Pool', value: totals.profit, isCurrency: true, icon: FileCheck, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+          { label: 'Pending Receivables', value: totals.balance, isCurrency: true, icon: Scale, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10' },
         ].map((stat, i) => (
-          <div key={i} className={`p-5 rounded-[32px] border dark:border-slate-800 shadow-sm flex items-center gap-5 transition-all hover:shadow-md ${stat.bg}`}>
-             <div className={`${stat.color} w-12 h-12 flex items-center justify-center rounded-2xl shrink-0 bg-white dark:bg-slate-800 shadow-inner`}>
-                <stat.icon size={22} strokeWidth={2.5}/>
-             </div>
+          <div key={i} className={`p-5 rounded-[32px] border dark:border-slate-800 shadow-sm flex items-center gap-5 ${stat.bg}`}>
+             <div className={`${stat.color} w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-800 shadow-inner`}><stat.icon size={20} strokeWidth={2.5}/></div>
              <div className="min-w-0">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 truncate">{stat.label}</p>
-                <h4 className={`text-lg font-black truncate leading-none ${stat.color}`}>
-                   {stat.isCurrency ? state.settings.currency : ''}{stat.value.toLocaleString()}
-                </h4>
+                <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase mb-0.5 md:mb-1 truncate">{stat.label}</p>
+                <h4 className={`text-sm md:text-lg font-black truncate leading-none ${stat.color}`}>{stat.isCurrency ? state.settings.currency : ''}{stat.value.toLocaleString()}</h4>
              </div>
           </div>
         ))}
       </div>
 
-      {/* Advanced Control & Search Panel */}
-      <div className="bg-white dark:bg-slate-900 p-5 rounded-[36px] border border-slate-100 dark:border-slate-800 shadow-sm space-y-4">
-        <div className="flex flex-col lg:flex-row items-center gap-4">
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Query Audit Vault (Invoice ID or Customer Name)..." 
-              value={searchTerm} 
-              onChange={(e) => setSearchTerm(e.target.value)} 
-              className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl py-4 pl-12 pr-6 outline-none text-xs font-black dark:text-white placeholder:text-slate-400" 
-            />
-          </div>
-          <div className="flex items-center gap-2 w-full lg:w-auto shrink-0">
-            {selectedIds.size > 0 && (
-              <div className="flex gap-2 animate-in slide-in-from-right-2">
-                <button onClick={bulkMarkAsPaid} className="px-5 py-3.5 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-emerald-200 dark:shadow-none flex items-center gap-2">
-                  <CheckCircle2 size={16}/> {t.bulkPaid}
-                </button>
-                <button onClick={bulkDelete} className="px-5 py-3.5 bg-rose-50 text-rose-600 rounded-2xl font-black text-[10px] uppercase border border-rose-100 flex items-center gap-2">
-                  <Trash2 size={16}/> Wipe
-                </button>
-              </div>
-            )}
-            <button 
-              onClick={exportToCSV}
-              className="flex-1 lg:flex-none px-6 py-3.5 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg"
-            >
-              <FileSpreadsheet size={16}/> {t.exportCsv}
-            </button>
-            <button 
-              onClick={() => setShowFilters(!showFilters)} 
-              className={`flex-1 lg:flex-none px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase border transition-all flex items-center justify-center gap-2 ${showFilters ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white dark:bg-slate-900 text-slate-400'}`}
-            >
-              <Filter size={16}/> {showFilters ? 'Hide Parameters' : 'Audit Parameters'}
-            </button>
-            <button onClick={() => { setSearchTerm(''); setStatusFilter('all'); setMethodFilter('all'); setDateFilter(''); }} className="p-3.5 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-2xl hover:text-indigo-600 transition-all">
-               <RotateCcw size={20}/>
-            </button>
-          </div>
+      <div className="flex flex-col md:flex-row items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input 
+            type="text" 
+            placeholder="Query documents by ID or Client..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl py-3 pl-12 pr-6 outline-none text-xs font-bold dark:text-white"
+          />
         </div>
-
-        {showFilters && (
-          <div className="pt-4 border-t dark:border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-6 animate-in slide-in-from-top-2 duration-300">
-             <div className="space-y-2">
-                <label className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1"><Calendar size={12}/> Temporal Range</label>
-                <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl py-3 px-4 text-[11px] font-black dark:text-white outline-none focus:ring-2 ring-indigo-500/20" />
-             </div>
-             <div className="space-y-2">
-                <label className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1"><CheckCircle2 size={12}/> Settlement Status</label>
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl py-3 px-4 text-[11px] font-black dark:text-white outline-none">
-                   <option value="all">Global Status</option>
-                   <option value="paid">Settled (Full)</option>
-                   <option value="partial">Awaiting Partial</option>
-                   <option value="unpaid">Zero Deposit</option>
-                </select>
-             </div>
-             <div className="space-y-2">
-                <label className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1"><CreditCard size={12}/> Disbursement Method</label>
-                <select value={methodFilter} onChange={e => setMethodFilter(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl py-3 px-4 text-[11px] font-black dark:text-white outline-none">
-                   <option value="all">Global Channels</option>
-                   <option value="cash">Liquid Currency</option>
-                   <option value="card">Digital Processing</option>
-                   <option value="transfer">Direct Deposit</option>
-                </select>
-             </div>
-          </div>
-        )}
+        <select 
+          value={statusFilter} 
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-[10px] font-black uppercase outline-none border-none dark:text-white cursor-pointer"
+        >
+          <option value="all">All Status</option>
+          <option value="paid">Paid Only</option>
+          <option value="partial">Partial Payment</option>
+          <option value="unpaid">Unpaid / Debt</option>
+          <option value="returned">Returns Only</option>
+        </select>
       </div>
 
-      {/* Main Table Ledger */}
       <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[1000px]">
-            <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+            <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b">
               <tr>
                 <th className="px-6 py-5 w-16 text-center">
-                  <button onClick={toggleSelectAll} className="text-slate-400 hover:text-indigo-600 transition-colors">
-                    {selectedIds.size === filteredInvoices.length && filteredInvoices.length > 0 ? <CheckSquare size={20} className="text-indigo-600" /> : <Square size={20} />}
+                  <button onClick={toggleSelectAll} className="text-slate-400 hover:text-indigo-600">
+                    {selectedIds.size === filteredInvoices.length && filteredInvoices.length > 0 ? <CheckSquare size={20} className="text-indigo-600"/> : <Square size={20} />}
                   </button>
                 </th>
-                <th onClick={() => handleSort('id')} className="px-6 py-5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors group">
-                  <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">
-                    ID {sortKey === 'id' ? (sortOrder === 'asc' ? <SortAsc size={14} className="text-indigo-600" /> : <SortDesc size={14} className="text-indigo-600" />) : <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100" />}
-                  </div>
-                </th>
-                <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Entity Signature</th>
-                <th onClick={() => handleSort('date')} className="px-6 py-5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors group">
-                  <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">
-                    Timestamp {sortKey === 'date' ? (sortOrder === 'asc' ? <SortAsc size={14} className="text-indigo-600" /> : <SortDesc size={14} className="text-indigo-600" />) : <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100" />}
-                  </div>
-                </th>
-                <th onClick={() => handleSort('total')} className="px-6 py-5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors group">
-                  <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">
-                    Bill Value {sortKey === 'total' ? (sortOrder === 'asc' ? <SortAsc size={14} className="text-indigo-600" /> : <SortDesc size={14} className="text-indigo-600" />) : <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100" />}
-                  </div>
-                </th>
-                <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Margin Index</th>
-                <th onClick={() => handleSort('status')} className="px-6 py-5 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors group text-center">
-                  <div className="flex items-center justify-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">
-                    Audit {sortKey === 'status' ? (sortOrder === 'asc' ? <SortAsc size={14} className="text-indigo-600" /> : <SortDesc size={14} className="text-indigo-600" />) : <ArrowUpDown size={14} className="opacity-0 group-hover:opacity-100" />}
-                  </div>
-                </th>
-                <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] text-right">Actions</th>
+                <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Registry ID</th>
+                <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Client Integrity</th>
+                <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Temporal Date</th>
+                <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Protocol Status</th>
+                <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Settlement Value</th>
+                <th className="px-6 py-5 text-right uppercase text-[10px] font-black text-slate-400">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredInvoices.map((inv) => {
                 const customer = state.customers.find(c => c.id === inv.customerId);
                 const isSelected = selectedIds.has(inv.id);
-                const marginPercent = ((inv.profit || 0) / (inv.total || 1)) * 100;
-                
                 return (
-                  <tr key={inv.id} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all cursor-pointer group ${isSelected ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''}`} onClick={() => setSelectedInvoice(inv)}>
-                    <td className="px-6 py-4 text-center" onClick={e => e.stopPropagation()}>
-                       <button onClick={() => toggleSelect(inv.id)} className={`${isSelected ? 'text-indigo-600' : 'text-slate-300'} hover:text-indigo-600`}>
-                          {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
-                       </button>
+                  <tr 
+                    key={inv.id} 
+                    onClick={() => toggleSelect(inv.id)}
+                    className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all cursor-pointer group ${isSelected ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''}`}
+                  >
+                    <td className="px-6 py-4 text-center">
+                      <button className={`${isSelected ? 'text-indigo-600' : 'text-slate-300'}`}>
+                        {isSelected ? <CheckSquare size={20}/> : <Square size={20} />}
+                      </button>
                     </td>
-                    <td className="px-6 py-4">
-                       <span className="font-black text-[12px] text-slate-500 group-hover:text-indigo-600 transition-colors">#INV-{inv.id.padStart(4, '0')}</span>
-                    </td>
+                    <td className="px-6 py-4 font-black text-[12px] text-slate-500">#INV-{inv.id.padStart(4, '0')}</td>
                     <td className="px-6 py-4">
                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[11px] font-black dark:text-slate-400 border border-transparent group-hover:border-indigo-200">{customer?.name?.charAt(0) || 'W'}</div>
-                          <div className="min-w-0">
-                            <p className="text-[12px] font-black dark:text-slate-200 truncate max-w-[140px] leading-tight">{customer?.name || 'Walk-in Customer'}</p>
-                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{inv.paymentMethod}</p>
-                          </div>
+                          <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-black text-[10px] uppercase">{customer?.name.charAt(0) || 'W'}</div>
+                          <span className="text-[12px] font-black dark:text-slate-200">{customer?.name || 'Anonymous Guest'}</span>
                        </div>
                     </td>
-                    <td className="px-6 py-4">
-                       <p className="text-[11px] font-black dark:text-slate-300">{new Date(inv.date).toLocaleDateString()}</p>
-                       <p className="text-[9px] font-bold text-slate-400 uppercase">{new Date(inv.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                       <p className="font-black text-slate-900 dark:text-white text-[14px] leading-tight">{state.settings.currency}{inv.total.toLocaleString()}</p>
-                       <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${inv.status === 'paid' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{state.settings.currency}{inv.paidAmount.toLocaleString()} Dep</span>
-                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                       <div className="space-y-1">
-                          <p className={`text-[11px] font-black ${marginPercent > 25 ? 'text-emerald-500' : marginPercent > 10 ? 'text-amber-500' : 'text-rose-500'}`}>{marginPercent.toFixed(1)}% Efficiency</p>
-                          <div className="w-20 h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                             <div className={`h-full ${marginPercent > 25 ? 'bg-emerald-500' : marginPercent > 10 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${Math.min(100, Math.max(0, marginPercent))}%` }}></div>
-                          </div>
-                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                       <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : inv.status === 'partial' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}`}>
-                          {inv.status === 'paid' ? <CheckCircle2 size={12}/> : inv.status === 'partial' ? <Clock size={12}/> : <AlertCircle size={12}/>}
-                          {inv.status}
-                       </span>
-                    </td>
+                    <td className="px-6 py-4 text-[11px] font-bold text-slate-400">{new Date(inv.date).toLocaleDateString()}</td>
+                    <td className="px-6 py-4 text-center">{getStatusBadge(inv.status)}</td>
+                    <td className="px-6 py-4 text-right font-black text-slate-900 dark:text-white">{state.settings.currency}{inv.total.toLocaleString()}</td>
                     <td className="px-6 py-4 text-right">
                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all" onClick={e => e.stopPropagation()}>
-                          <button onClick={() => setSelectedInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="View Detailed Audit"><Eye size={18}/></button>
-                          <button onClick={() => handleDownloadPDF(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="Download PDF"><FileDown size={18}/></button>
-                          <button onClick={() => setPreviewData({inv, layout: 'a4'})} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="Print Preview"><Monitor size={18}/></button>
-                          <button onClick={() => handlePrint(inv, 'thermal')} className="p-2 text-slate-400 hover:text-indigo-600 transition-transform active:scale-90" title="Direct Thermal Print"><Printer size={18}/></button>
-                          <button onClick={() => deleteInvoice(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-transform active:scale-90"><Trash2 size={18}/></button>
+                          <button onClick={() => handleOpenReturn(inv)} className="p-2 text-slate-400 hover:text-amber-600" title="Return Items"><RotateCcw size={18}/></button>
+                          <button onClick={() => handlePrint(inv)} className="p-2 text-slate-400 hover:text-indigo-600"><Printer size={18}/></button>
+                          <button onClick={() => handleDownloadPDF(inv)} className="p-2 text-slate-400 hover:text-indigo-600"><FileDown size={18}/></button>
+                          <button onClick={() => setTrashConfirm(inv.id)} className="p-2 text-slate-300 hover:text-rose-600"><Trash2 size={18}/></button>
                        </div>
                     </td>
                   </tr>
@@ -519,189 +866,146 @@ const Invoices: React.FC<Props> = ({ state, updateState }) => {
               })}
             </tbody>
           </table>
+          {filteredInvoices.length === 0 && (
+             <div className="py-24 text-center flex flex-col items-center justify-center gap-4 opacity-30">
+                <FileText size={64} strokeWidth={1} />
+                <p className="font-black text-xs uppercase tracking-widest">Registry Search Null</p>
+             </div>
+          )}
         </div>
       </div>
 
-      {/* Preview Modal */}
-      {previewData && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-200">
-           <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-4xl h-[90vh] shadow-2xl relative flex flex-col overflow-hidden animate-in zoom-in duration-200">
-              <header className="p-6 border-b flex flex-col sm:flex-row items-center justify-between bg-white dark:bg-slate-900 z-10 gap-4">
-                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center text-indigo-600"><Monitor size={20}/></div>
+      {/* Return Items Modal */}
+      {returningInvoice && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-slate-900 rounded-[48px] w-full max-w-2xl shadow-2xl relative overflow-hidden flex flex-col border border-white/10 animate-in zoom-in-95 duration-300">
+              <header className="p-10 pb-6 flex items-center justify-between border-b border-slate-50 dark:border-slate-800">
+                 <div className="flex items-center gap-5">
+                    <div className="w-14 h-14 bg-amber-100 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center text-amber-600 shadow-lg"><RotateCcw size={28}/></div>
                     <div>
-                       <h3 className="text-sm font-black dark:text-white uppercase tracking-widest">Print Preview</h3>
-                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Reference #INV-{previewData.inv.id.padStart(4, '0')}</p>
+                       <h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">Process Return</h3>
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Document #INV-{returningInvoice.id.padStart(4, '0')}</p>
                     </div>
                  </div>
-                 <div className="flex items-center gap-2">
-                    <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex gap-1 overflow-x-auto no-scrollbar max-w-[280px] sm:max-w-none">
-                       {(['a4', 'advice', 'thermal'] as PrintLayout[]).map(l => (
-                         <button 
-                          key={l}
-                          onClick={() => setPreviewData({...previewData, layout: l})}
-                          className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${previewData.layout === l ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                         >{l === 'a4' ? 'A4 Invoice' : l}</button>
-                       ))}
-                    </div>
-                    <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2 hidden sm:block" />
-                    <button 
-                      onClick={() => handleDownloadPDF(previewData.inv, previewData.layout)}
-                      className="p-3 bg-white dark:bg-slate-800 text-indigo-600 border border-indigo-100 dark:border-indigo-900 rounded-xl hover:bg-indigo-50 transition-all flex items-center gap-2 font-black text-[10px] uppercase"
-                    >
-                      <FileDown size={16}/>
-                      Download
-                    </button>
-                    <button 
-                      onClick={() => handlePrint(previewData.inv, previewData.layout)} 
-                      disabled={isPrinting}
-                      className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2 font-black text-[10px] uppercase disabled:opacity-50"
-                    >
-                       {isPrinting ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Printer size={16}/>}
-                       Print Now
-                    </button>
-                    <button onClick={() => setPreviewData(null)} className="p-3 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all">
-                       <X size={20}/>
-                    </button>
-                 </div>
-              </header>
-              <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-4 lg:p-10 overflow-y-auto flex justify-center custom-scrollbar">
-                 <div className="bg-white shadow-2xl relative h-fit" style={{ width: previewData.layout === 'thermal' ? '80mm' : '210mm', minHeight: 'auto' }}>
-                    <iframe 
-                      srcDoc={generatePrintHTML(state, previewData.inv, previewData.layout)} 
-                      className="w-full h-full border-none pointer-events-none" 
-                      style={{ minHeight: previewData.layout === 'thermal' ? '150mm' : '297mm', height: 'auto' }}
-                      title="Invoice Preview" 
-                    />
-                 </div>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {selectedInvoice && !previewData && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
-           <div className="bg-white dark:bg-slate-900 rounded-t-[48px] sm:rounded-[60px] w-full max-w-6xl h-[95vh] sm:h-[90vh] shadow-2xl relative flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:zoom-in duration-300">
-              <header className="p-8 lg:p-10 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 z-10 shrink-0">
-                 <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-indigo-600 text-white rounded-[24px] flex items-center justify-center font-black text-2xl shadow-2xl shrink-0 border-4 border-white dark:border-slate-800">
-                      <FileCheck size={28}/>
-                    </div>
-                    <div>
-                       <h3 className="text-2xl sm:text-3xl font-black dark:text-white leading-tight uppercase tracking-tighter flex items-center gap-3">Entry #INV-{selectedInvoice.id.padStart(4, '0')} <ShieldAlert size={20} className="text-emerald-500" /></h3>
-                       <div className="flex items-center gap-3 mt-1.5">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${selectedInvoice.status === 'paid' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
-                            Audit: {selectedInvoice.status}
-                          </span>
-                          <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest opacity-60">
-                            Logged {new Date(selectedInvoice.date).toLocaleString()}
-                          </span>
-                       </div>
-                    </div>
-                 </div>
-                 <div className="flex items-center gap-3">
-                    <button 
-                      onClick={() => handleDownloadPDF(selectedInvoice)}
-                      disabled={isDownloading}
-                      className="hidden lg:flex p-4 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-[22px] font-black text-[10px] uppercase tracking-widest items-center gap-2 hover:bg-slate-200 transition-all"
-                    >
-                      {isDownloading ? <div className="w-4 h-4 border-2 border-slate-400 border-t-slate-800 rounded-full animate-spin"></div> : <FileDown size={20}/>}
-                      Download PDF
-                    </button>
-                    <button 
-                      onClick={() => setPreviewData({inv: selectedInvoice, layout: 'a4'})} 
-                      className="hidden lg:flex p-4 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900 rounded-[22px] font-black text-[10px] uppercase tracking-widest items-center gap-2 shadow-sm hover:bg-indigo-50 dark:hover:bg-indigo-950 transition-all"
-                    >
-                      <Monitor size={20}/> Print Preview
-                    </button>
-                    <button 
-                      onClick={() => handlePrint(selectedInvoice, 'thermal')} 
-                      className="hidden lg:flex p-4 bg-indigo-600 text-white rounded-[22px] font-black text-[10px] uppercase tracking-widest items-center gap-2 shadow-lg hover:bg-indigo-700 transition-all"
-                    >
-                      <Printer size={20}/> Print Direct
-                    </button>
-                    <button onClick={() => setSelectedInvoice(null)} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-[22px] text-slate-400 hover:text-rose-600 transition-all"><X size={28}/></button>
-                 </div>
+                 <button onClick={() => setReturningInvoice(null)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-400 hover:text-rose-500 transition-all"><X size={24}/></button>
               </header>
 
-              <div className="flex-1 overflow-y-auto p-8 lg:p-12 custom-scrollbar bg-slate-50/50 dark:bg-slate-950/20 grid grid-cols-1 lg:grid-cols-4 gap-10">
-                 <div className="lg:col-span-1 space-y-8">
-                    <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm space-y-8">
+              <div className="flex-1 overflow-y-auto p-10 space-y-6 custom-scrollbar">
+                 <div className="p-6 bg-slate-50 dark:bg-slate-800/40 rounded-3xl space-y-4 border border-slate-100 dark:border-slate-800">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 flex items-center gap-2">
+                       <Package size={12} /> Select Items for Restock
+                    </h4>
+                    <div className="space-y-3">
+                       {returningInvoice.items.map(item => {
+                          const maxReturnable = item.quantity - (item.returnedQuantity || 0);
+                          const returning = returnQtys[item.id] || 0;
+                          const hasPreviousReturns = (item.returnedQuantity || 0) > 0;
+                          
+                          return (
+                             <div key={item.id} className={`p-4 rounded-2xl border transition-all ${hasPreviousReturns ? 'bg-amber-50/30 border-amber-200' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800'} flex items-center justify-between group hover:border-amber-400`}>
+                                <div className="flex items-center gap-4 min-w-0">
+                                   <div className="relative">
+                                      <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
+                                         {item.image ? <img src={item.image} className="w-full h-full object-cover rounded-xl" /> : <Package size={18}/>}
+                                      </div>
+                                      {hasPreviousReturns && (
+                                         <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-white rounded-full p-0.5 shadow-sm" title="Already partially returned">
+                                            <RotateCcw size={10} strokeWidth={4} />
+                                         </div>
+                                      )}
+                                   </div>
+                                   <div className="min-w-0">
+                                      <div className="flex items-center gap-2">
+                                         <p className="font-black text-xs dark:text-white truncate uppercase">{item.name}</p>
+                                         {hasPreviousReturns && (
+                                            <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-600 text-[7px] font-black uppercase rounded border border-amber-200">
+                                               Return History
+                                            </span>
+                                         )}
+                                      </div>
+                                      <div className="flex items-center gap-2 mt-0.5">
+                                         <span className="text-[9px] font-black text-indigo-600 uppercase tracking-tight">{state.settings.currency}{item.price.toLocaleString()}</span>
+                                         <span className="text-[8px] font-bold text-slate-300">|</span>
+                                         <span className="text-[9px] font-bold text-slate-400 uppercase">
+                                            {maxReturnable} available
+                                            {hasPreviousReturns && ` (${item.returnedQuantity} already back)`}
+                                         </span>
+                                      </div>
+                                   </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                   <div className="flex bg-slate-50 dark:bg-slate-800 rounded-xl p-1 border">
+                                      <button 
+                                        disabled={returning <= 0}
+                                        onClick={() => setReturnQtys(prev => ({ ...prev, [item.id]: Math.max(0, prev[item.id] - 1) }))}
+                                        className="p-1.5 text-slate-400 hover:text-rose-600 transition-all disabled:opacity-20"
+                                      >
+                                        <MinusCircle size={16}/>
+                                      </button>
+                                      <span className={`w-8 text-center font-black text-xs flex items-center justify-center ${returning > 0 ? 'text-amber-600' : 'text-slate-400'} dark:text-white`}>
+                                         {returning}
+                                      </span>
+                                      <button 
+                                        disabled={returning >= maxReturnable}
+                                        onClick={() => setReturnQtys(prev => ({ ...prev, [item.id]: Math.min(maxReturnable, prev[item.id] + 1) }))}
+                                        className="p-1.5 text-slate-400 hover:text-emerald-600 disabled:opacity-20 transition-all"
+                                      >
+                                        <PlusCircle size={16}/>
+                                      </button>
+                                   </div>
+                                </div>
+                             </div>
+                          );
+                       })}
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="p-6 bg-amber-50 dark:bg-amber-900/10 rounded-3xl border border-amber-100 dark:border-amber-800">
+                       <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Estimated Credit</p>
+                       <h3 className="text-3xl font-black text-amber-700 dark:text-amber-400">
+                          {state.settings.currency}{Object.entries(returnQtys).reduce((acc, [id, q]) => acc + (q * (returningInvoice.items.find(i => i.id === id)?.price || 0)), 0).toLocaleString()}
+                       </h3>
+                    </div>
+                    <div className="p-6 bg-slate-50 dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-800 flex flex-col justify-center">
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Restock Action</p>
+                       <h3 className="text-3xl font-black dark:text-white">
+                          +{Object.values(returnQtys).reduce((a, b) => a + b, 0)} <span className="text-sm font-bold text-slate-400">Units</span>
+                       </h3>
+                    </div>
+                 </div>
+
+                 <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-start gap-3">
+                    <div className="p-2 bg-white dark:bg-slate-700 rounded-lg shadow-sm text-indigo-600 shrink-0"><Info size={16}/></div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase leading-relaxed">
+                       Quantities are pre-filled with the maximum available items from this invoice. Adjust them manually to process a partial return.
+                    </p>
+                 </div>
+
+                 {returningInvoice.customerId && (
+                    <div className="p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex items-center gap-3">
+                       <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center"><ShieldCheck size={20}/></div>
                        <div>
-                          <h5 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest border-b dark:border-slate-800 pb-4 flex items-center gap-2"><User size={14}/> Identity</h5>
-                          <div className="flex items-center gap-4 mt-6">
-                             <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center font-black text-base border">{state.customers.find(c => c.id === selectedInvoice.customerId)?.name.charAt(0) || 'W'}</div>
-                             <div className="min-w-0">
-                                <p className="text-[10px] font-black text-slate-400 uppercase">Billing To</p>
-                                <p className="text-base font-black dark:text-white truncate">{state.customers.find(c => c.id === selectedInvoice.customerId)?.name || 'Walk-in Customer'}</p>
-                             </div>
-                          </div>
-                       </div>
-                       <div className="space-y-4">
-                          <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Bill Total</span><span className="font-black dark:text-white text-lg">{state.settings.currency}{selectedInvoice.total.toLocaleString()}</span></div>
-                          <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Paid Amount</span><span className="font-black text-emerald-500 text-lg">{state.settings.currency}{selectedInvoice.paidAmount.toLocaleString()}</span></div>
-                          <div className="flex justify-between items-center pt-4 border-t dark:border-slate-800"><span className="text-[10px] font-black text-slate-400 uppercase">Balance</span><span className="font-black text-rose-500 text-xl">{state.settings.currency}{(selectedInvoice.total - selectedInvoice.paidAmount).toLocaleString()}</span></div>
+                          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Accounting Policy</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase">Refunds are automatically deducted from customer liability (Debt) before cash issuance.</p>
                        </div>
                     </div>
-
-                    <div className="bg-slate-950 p-8 rounded-[40px] text-white shadow-2xl space-y-8">
-                       <h5 className="text-[11px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2"><History size={14}/> Reconciliation History</h5>
-                       <div className="space-y-4">
-                          {repaymentHistory.map((h, i) => (
-                             <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10">
-                                <div><p className="text-[10px] font-black uppercase text-indigo-300">{h.type}</p><p className="text-[8px] font-bold text-slate-500 mt-0.5">{new Date(h.date).toLocaleDateString()}</p></div>
-                                <p className="text-sm font-black text-emerald-400">+{state.settings.currency}{h.amount.toLocaleString()}</p>
-                             </div>
-                          ))}
-                          {repaymentHistory.length === 0 && <div className="text-center py-6 opacity-30 text-[9px] font-black uppercase tracking-widest">No reconciliation history</div>}
-                       </div>
-                    </div>
-                 </div>
-
-                 <div className="lg:col-span-3 space-y-8">
-                    <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
-                       <table className="w-full text-left border-collapse">
-                          <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
-                             <tr>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Operational Breakdown</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Qty</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Unit Price</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total</th>
-                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                             {selectedInvoice.items.map((it, i) => (
-                                <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                   <td className="px-8 py-5">
-                                      <p className="text-sm font-black dark:text-slate-200">{it.name}</p>
-                                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">{it.sku}</p>
-                                   </td>
-                                   <td className="px-8 py-5 text-center"><span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-xl font-black text-[11px] dark:text-slate-400">x{it.quantity}</span></td>
-                                   <td className="px-8 py-5 text-right text-sm font-bold text-slate-500">{state.settings.currency}{it.price.toLocaleString()}</td>
-                                   <td className="px-8 py-5 text-right text-base font-black dark:text-white">{state.settings.currency}{(it.price * it.quantity).toLocaleString()}</td>
-                                </tr>
-                             ))}
-                          </tbody>
-                       </table>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
-                       <div className="p-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[32px] shadow-sm">
-                          <p className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">Entry Profit</p>
-                          <p className="text-2xl font-black text-emerald-500 tracking-tighter">{state.settings.currency}{(selectedInvoice.profit || 0).toLocaleString()}</p>
-                       </div>
-                       <div className="p-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[32px] shadow-sm">
-                          <p className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">Margin Efficacy</p>
-                          <p className="text-2xl font-black text-indigo-600 tracking-tighter">{(( (selectedInvoice.profit || 0) / (selectedInvoice.total || 1) ) * 100).toFixed(1)}%</p>
-                       </div>
-                    </div>
-                 </div>
+                 )}
               </div>
+
+              <footer className="p-10 border-t border-slate-50 dark:border-slate-800 flex gap-4 bg-white dark:bg-slate-900">
+                 <button onClick={() => setReturningInvoice(null)} className="flex-1 py-6 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-3xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-200 transition-all">Cancel</button>
+                 <button 
+                  onClick={handleProcessReturn}
+                  disabled={Object.values(returnQtys).reduce((a,b)=>a+b,0) === 0}
+                  className="flex-[2] py-6 bg-amber-600 text-white rounded-3xl font-black text-[11px] uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 hover:bg-amber-700 transition-all"
+                 >
+                   <RefreshCw size={18}/> Execute Restock & Refund
+                 </button>
+              </footer>
            </div>
         </div>
       )}
     </div>
   );
-};
-
-export default Invoices;
+}

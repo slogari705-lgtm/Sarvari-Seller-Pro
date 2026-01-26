@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
   Package, 
   ShoppingCart, 
+  ShoppingBag,
   FileText, 
   Receipt, 
   BarChart3, 
@@ -12,16 +13,20 @@ import {
   X,
   Moon,
   Sun,
-  Sparkles,
   Scale,
   Wand2,
-  ChevronRight,
-  Wifi,
-  WifiOff,
-  CloudSync,
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  Lock,
+  User as UserIcon,
+  Bell,
+  Monitor,
+  Save,
+  RotateCcw,
+  AlertTriangle,
+  History
 } from 'lucide-react';
-import { AppState, View, InvoiceTemplate } from './types';
+import { AppState, View } from './types';
 import { translations } from './translations';
 import Dashboard from './components/Dashboard';
 import Products from './components/Products';
@@ -33,21 +38,69 @@ import Reports from './components/Reports';
 import Settings from './components/Settings';
 import Loans from './components/Loans';
 import DashboardCostume from './components/DashboardCostume';
+import Trash from './components/Trash';
+import LockScreen from './components/LockScreen';
+import Returns from './components/Returns';
 
 const INITIAL_STATE: AppState = {
   products: [],
   customers: [],
+  workers: [],
   invoices: [],
   expenses: [],
   templates: [{ id: 'modern', name: 'Standard Modern', layout: 'modern', brandColor: '#6366f1', showLogo: true }],
   loanTransactions: [],
   expenseCategories: ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Marketing', 'Maintenance', 'Other'],
   lastSync: new Date().toISOString(),
-  // Added showSignatures: false to resolve type mismatch with AppState interface
-  settings: { shopName: 'Sarvari Seller Pro', shopAddress: '', shopPhone: '', shopEmail: '', shopWebsite: '', currency: '$', taxRate: 0, lowStockThreshold: 5, invoiceTemplate: 'modern', brandColor: '#6366f1', language: 'en', theme: 'light', defaultCustomerId: '', showSignatures: false }
+  lastLocalBackup: new Date().toISOString(),
+  settings: { 
+    shopName: 'Sarvari Seller Pro', 
+    shopAddress: '', 
+    shopPhone: '', 
+    shopEmail: '', 
+    shopWebsite: '', 
+    currency: '$', 
+    taxRate: 0, 
+    lowStockThreshold: 5, 
+    invoiceTemplate: 'modern', 
+    brandColor: '#6366f1', 
+    language: 'en', 
+    theme: 'light', 
+    defaultCustomerId: '', 
+    showSignatures: false,
+    autoFileBackup: true,
+    autoLocalBackup: true,
+    autoBackupFolderLinked: false,
+    cardDesign: {
+      layout: 'horizontal',
+      theme: 'mesh',
+      primaryColor: '#4f46e5',
+      secondaryColor: '#8b5cf6',
+      pattern: 'mesh',
+      borderRadius: 24,
+      borderWidth: 1,
+      fontFamily: 'sans',
+      showQr: true,
+      showPoints: true,
+      showJoinDate: true,
+      showLogo: true,
+      textColor: 'light',
+      glossy: true
+    },
+    loyaltySettings: {
+      pointsPerUnit: 1,
+      conversionRate: 0.01,
+      enableTiers: true
+    },
+    security: {
+      isLockEnabled: false,
+      highSecurityMode: false,
+      autoLockTimeout: 0
+    }
+  }
 };
 
-const App: React.FC = () => {
+export default function App() {
   const [state, setState] = useState<AppState>(() => {
     const saved = localStorage.getItem('sarvari_pos_data');
     return saved ? { ...INITIAL_STATE, ...JSON.parse(saved) } : INITIAL_STATE;
@@ -57,122 +110,202 @@ const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [isAppLocked, setIsAppLocked] = useState(() => 
+    !!state.settings.security?.isLockEnabled && !!state.settings.security?.passcode
+  );
+
+  // Maintain a stable reference to state for the background interval service
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const t = translations[state.settings.language || 'en'];
   const isRTL = state.settings.language === 'ps' || state.settings.language === 'dr';
 
+  const lowStockCount = useMemo(() => {
+    return state.products.filter(p => !p.isDeleted && p.stock <= (p.lowStockThreshold ?? state.settings.lowStockThreshold)).length;
+  }, [state.products, state.settings.lowStockThreshold]);
+
   useEffect(() => {
-    localStorage.setItem('sarvari_pos_data', JSON.stringify(state));
     document.documentElement.classList.toggle('dark', state.settings.theme === 'dark');
     document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
-  }, [state, isRTL]);
+  }, [state.settings.theme, isRTL]);
 
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      triggerSync();
-    };
-    const handleOffline = () => setIsOnline(false);
+    const timeoutMin = state.settings.security?.autoLockTimeout;
+    if (isAppLocked || !state.settings.security?.isLockEnabled || !timeoutMin || timeoutMin <= 0) return;
 
+    let timeoutId: any;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        setIsAppLocked(true);
+      }, timeoutMin * 60 * 1000);
+    };
+
+    const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    activityEvents.forEach(event => document.addEventListener(event, resetTimer));
+    
+    resetTimer();
+
+    return () => {
+      activityEvents.forEach(event => document.removeEventListener(event, resetTimer));
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isAppLocked, state.settings.security?.autoLockTimeout, state.settings.security?.isLockEnabled]);
+
+  useEffect(() => {
+    const backupService = setInterval(() => {
+      if (stateRef.current.settings.autoLocalBackup) {
+        try {
+          localStorage.setItem('sarvari_pos_data', JSON.stringify(stateRef.current));
+          console.debug("Background Backup: Data synchronized to disk.");
+        } catch (error) {
+          console.error("Storage Error: Failed to backup data locally.", error);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(backupService);
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  const triggerSync = () => {
-    if (!navigator.onLine) return;
-    setIsSyncing(true);
-    // Simulated sync delay to show consistency handling
-    setTimeout(() => {
-      setState(prev => ({ ...prev, lastSync: new Date().toISOString() }));
-      setIsSyncing(false);
-    }, 1500);
-  };
-
   const updateState = <K extends keyof AppState>(key: K, value: AppState[K]) => setState(prev => ({ ...prev, [key]: value }));
 
   const navItems = [
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
-    { id: 'terminal', label: t.terminal, icon: ShoppingCart },
-    { id: 'products', label: t.products, icon: Package },
+    { id: 'terminal', label: t.terminal, icon: ShoppingBag },
+    { id: 'products', label: t.products, icon: Package, badge: lowStockCount > 0 ? lowStockCount : null },
     { id: 'customers', label: t.customers, icon: Users },
     { id: 'loans', label: t.loan, icon: Scale },
     { id: 'invoices', label: t.invoices, icon: FileText },
+    { id: 'returns', label: t.returns, icon: RotateCcw },
     { id: 'expenses', label: t.expenses, icon: Receipt },
     { id: 'reports', label: t.reports, icon: BarChart3 },
     { id: 'settings', label: t.settings, icon: SettingsIcon },
+    { id: 'trash', label: 'Recycle Bin', icon: Trash2 },
   ];
+
+  if (isAppLocked && state.settings.security?.isLockEnabled && state.settings.security?.passcode) {
+    return (
+      <LockScreen 
+        correctPasscode={state.settings.security.passcode} 
+        securityQuestion={state.settings.security.securityQuestion}
+        securityAnswer={state.settings.security.securityAnswer}
+        highSecurityMode={state.settings.security.highSecurityMode}
+        onUnlock={() => setIsAppLocked(false)} 
+        shopName={state.settings.shopName} 
+      />
+    );
+  }
 
   return (
     <div className={`flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden ${isRTL ? 'font-arabic' : ''}`}>
-      <aside className={`hidden lg:flex ${sidebarOpen ? 'w-64' : 'w-20'} bg-white dark:bg-slate-900 border-x transition-all duration-300 flex-col z-40 shadow-sm`}>
-        <div className="p-4 flex items-center justify-between border-b shrink-0">
-          {sidebarOpen && <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap"><div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-base shadow-md">S</div><span className="font-black text-base tracking-tighter dark:text-white">Sarvari Pro</span></div>}
-          {!sidebarOpen && <div className="mx-auto w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-sm">S</div>}
+      {/* Mobile Sidebar Overlay */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[50] lg:hidden animate-in fade-in" onClick={() => setMobileMenuOpen(false)}/>
+      )}
+
+      {/* Sidebar Navigation */}
+      <aside className={`fixed lg:static inset-y-0 left-0 z-[60] ${sidebarOpen ? 'w-64' : 'w-20'} ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col shadow-xl lg:shadow-none`}>
+        <div className="p-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 shrink-0">
+          {(sidebarOpen || mobileMenuOpen) && (
+            <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
+              <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-lg">S</div>
+              <span className="font-black text-lg tracking-tighter dark:text-white">Sarvari Pro</span>
+            </div>
+          )}
+          {!sidebarOpen && !mobileMenuOpen && (
+            <div className="mx-auto w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-lg">S</div>
+          )}
+          <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden p-2 text-slate-400 hover:bg-slate-100 rounded-lg"><X size={20}/></button>
         </div>
-        <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto custom-scrollbar">
+
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto custom-scrollbar">
           {navItems.map((item) => (
-            <button key={item.id} onClick={() => setCurrentView(item.id as View)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all ${currentView === item.id ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-              <item.icon size={18} /> {sidebarOpen && <span className="font-bold text-[13px]">{item.label}</span>}
+            <button 
+              key={item.id} 
+              onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+            >
+              <div className="flex items-center gap-3">
+                <item.icon size={18} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
+                {(sidebarOpen || mobileMenuOpen) && <span className="font-bold text-[13px] tracking-tight">{item.label}</span>}
+              </div>
+              {(sidebarOpen || mobileMenuOpen) && item.badge !== null && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${currentView === item.id ? 'bg-white text-indigo-600' : 'bg-rose-50 text-white animate-pulse'}`}>
+                  {item.badge}
+                </span>
+              )}
             </button>
           ))}
-          <div className="h-px bg-slate-100 dark:bg-slate-800 my-4" />
-          <button onClick={() => setCurrentView('dashboard-costume')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all ${currentView === 'dashboard-costume' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-            <Wand2 size={18} /> {sidebarOpen && <span className="font-bold text-[13px]">Costume View</span>}
+          <div className="h-px bg-slate-100 dark:bg-slate-800 my-4 mx-2" />
+          <button 
+            onClick={() => { setCurrentView('dashboard-costume'); setMobileMenuOpen(false); }} 
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all group ${currentView === 'dashboard-costume' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+          >
+            <Wand2 size={18} className={currentView === 'dashboard-costume' ? 'text-white' : 'text-amber-500'} /> 
+            {(sidebarOpen || mobileMenuOpen) && <span className="font-bold text-[13px] tracking-tight">Dashboard Costume</span>}
           </button>
         </nav>
-        <div className="p-3 border-t">
-          <div className={`mb-3 flex items-center gap-2 px-2 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${isOnline ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20'}`}>
-            {isOnline ? <Wifi size={12}/> : <WifiOff size={12}/>}
-            {sidebarOpen && (isOnline ? 'Online Engine' : 'Offline Mode')}
-          </div>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="w-full flex items-center justify-center p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">{sidebarOpen ? <X size={16}/> : <Menu size={16}/>}</button>
+
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+          {state.settings.security?.isLockEnabled && (
+            <button onClick={() => setIsAppLocked(true)} className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all font-black text-[10px] uppercase tracking-widest"><Lock size={14}/> {(sidebarOpen || mobileMenuOpen) && 'Lock Screen'}</button>
+          )}
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:flex w-full items-center justify-center p-2.5 text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all border border-transparent hover:border-slate-100 dark:hover:border-slate-700">{sidebarOpen ? <X size={18}/> : <Menu size={18}/>}</button>
         </div>
       </aside>
 
-      <aside className={`fixed inset-y-0 ${isRTL ? 'right-0' : 'left-0'} w-64 bg-white dark:bg-slate-900 z-50 transform lg:hidden transition-transform duration-300 shadow-2xl ${mobileMenuOpen ? 'translate-x-0' : (isRTL ? 'translate-x-full' : '-translate-x-full')}`}>
-        <div className="p-5 border-b flex items-center justify-between"><div className="flex items-center gap-2"><div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-sm">S</div><span className="font-black text-base dark:text-white">Sarvari Pro</span></div><button onClick={() => setMobileMenuOpen(false)} className="text-slate-400"><X size={20}/></button></div>
-        <nav className="p-3 space-y-1 overflow-y-auto">{navItems.map((item) => (
-          <button key={item.id} onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all ${currentView === item.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}><item.icon size={20} /><span className="text-sm font-bold">{item.label}</span></button>
-        ))}</nav>
-      </aside>
-
-      {mobileMenuOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)}></div>}
-
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-12 bg-white dark:bg-slate-900 border-b px-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setMobileMenuOpen(true)} className="lg:hidden text-slate-500"><Menu size={20}/></button>
-            <h2 className="text-sm font-black dark:text-white uppercase tracking-tighter truncate">{currentView.replace('-', ' ')}</h2>
-            {isSyncing && (
-              <div className="flex items-center gap-1.5 ml-2 text-indigo-500 animate-pulse">
-                <RefreshCw size={12} className="animate-spin" />
-                <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Syncing Core...</span>
-              </div>
-            )}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        <header className="h-16 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 flex items-center justify-between shrink-0 z-40 shadow-sm">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setMobileMenuOpen(true)} className="lg:hidden p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl">
+              <Menu size={22}/>
+            </button>
+            <div className="flex flex-col">
+              <h2 className="text-[10px] md:text-[11px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] leading-none mb-1">
+                {state.settings.shopName}
+              </h2>
+              <h3 className="text-xs md:text-sm font-black dark:text-white uppercase tracking-tighter truncate max-w-[120px] md:max-w-none">
+                {currentView.replace('-', ' ')}
+              </h3>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => updateState('settings', { ...state.settings, theme: state.settings.theme === 'dark' ? 'light' : 'dark' })} className="p-1.5 text-slate-400 hover:bg-slate-50 rounded-lg">{state.settings.theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}</button>
-            <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
-            <Sparkles size={16} className="text-indigo-500 animate-pulse" />
+
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-xl border transition-all ${isOnline ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></div>
+              <span className="text-[8px] md:text-[9px] font-black uppercase whitespace-nowrap">
+                {isOnline ? 'Online' : 'Local'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button onClick={() => updateState('settings', { ...state.settings, theme: state.settings.theme === 'dark' ? 'light' : 'dark' })} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all">
+                {state.settings.theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+              <button onClick={() => setCurrentView('settings')} className="ml-1 w-9 h-9 bg-indigo-600 dark:bg-indigo-500 rounded-xl flex items-center justify-center text-white shadow-lg transition-all active:scale-95">
+                <UserIcon size={18} strokeWidth={2.5} />
+              </button>
+            </div>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto p-3 lg:p-6 custom-scrollbar">
-          <div className="max-w-7xl mx-auto">
-            {!isOnline && (
-              <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/50 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-2">
-                <div className="flex items-center gap-3">
-                   <WifiOff size={16} className="text-amber-600" />
-                   <p className="text-[10px] font-black text-amber-800 dark:text-amber-200 uppercase tracking-widest">Running in Local-Only Isolation. Data will be unified upon restoration of link.</p>
-                </div>
-                <button onClick={() => window.location.reload()} className="px-3 py-1 bg-white dark:bg-slate-800 rounded-lg text-[9px] font-black uppercase shadow-sm">Check Connection</button>
-              </div>
-            )}
+
+        <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar">
+          <div className="max-w-7xl mx-auto min-h-full">
             {(() => {
               switch (currentView) {
                 case 'dashboard': return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} />;
@@ -180,11 +313,13 @@ const App: React.FC = () => {
                 case 'products': return <Products state={state} updateState={updateState} />;
                 case 'customers': return <Customers state={state} updateState={updateState} setCurrentView={setCurrentView} />;
                 case 'terminal': return <Terminal state={state} updateState={updateState} />;
-                case 'invoices': return <Invoices state={state} updateState={updateState} />;
+                case 'invoices': return <Invoices state={state} updateState={updateState} setCurrentView={setCurrentView} />;
+                case 'returns': return <Returns state={state} setCurrentView={setCurrentView} />;
                 case 'expenses': return <Expenses state={state} updateState={updateState} />;
                 case 'reports': return <Reports state={state} />;
                 case 'settings': return <Settings state={state} updateState={updateState} />;
                 case 'loans': return <Loans state={state} updateState={updateState} setCurrentView={setCurrentView} />;
+                case 'trash': return <Trash state={state} updateState={updateState} />;
                 default: return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} />;
               }
             })()}
@@ -193,6 +328,4 @@ const App: React.FC = () => {
       </main>
     </div>
   );
-};
-
-export default App;
+}

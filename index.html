@@ -1,16 +1,21 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Sarvari Seller Pro</title>
     
-    <!-- PWA & Mobile Conversion Meta Tags -->
+    <!-- PWA Core -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#4f46e5">
+    
+    <!-- iOS Native Feel -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Sarvari POS">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/9422/9422501.png">
+    
+    <!-- Android Native Feel -->
     <meta name="mobile-web-app-capable" content="yes">
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -35,25 +40,32 @@
             font-family: 'Inter', sans-serif;
             transition: background-color 0.3s ease;
             overscroll-behavior-y: contain;
+            -webkit-tap-highlight-color: transparent;
+            /* Prevent bounce effects on mobile */
+            position: fixed;
+            width: 100%;
+            height: 100%;
         }
         
         [dir="rtl"] {
             font-family: 'Noto Sans Arabic', sans-serif;
         }
 
+        #root {
+            height: 100%;
+            overflow: hidden;
+        }
+
         ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
+            width: 4px;
+            height: 4px;
         }
         ::-webkit-scrollbar-track {
             background: transparent;
         }
         ::-webkit-scrollbar-thumb {
-            background: rgba(0,0,0,0.1);
+            background: rgba(99, 102, 241, 0.2);
             border-radius: 20px;
-        }
-        .dark ::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.1);
         }
 
         .custom-scrollbar {
@@ -62,7 +74,6 @@
         }
 
         @media print {
-            /* Hide everything in the main app during print */
             body > *:not(#print-holder) {
                 display: none !important;
             }
@@ -72,11 +83,11 @@
             }
         }
 
-        /* Essential for hidden iframe printing */
         #print-holder {
             display: none;
         }
 
+        /* Essential for mobile usability: ensure inputs don't zoom in Safari */
         input, select, textarea {
             font-size: 16px !important;
         }
@@ -88,7 +99,10 @@
             align-items: center;
             justify-content: center;
             background: #f8fafc;
-            z-index: 100;
+            z-index: 1000;
+        }
+        .dark #fallback-loader {
+            background: #020617;
         }
     </style>
 <script type="importmap">
@@ -101,37 +115,39 @@
     "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
     "recharts": "https://esm.sh/recharts@^3.7.0",
     "jsbarcode": "https://esm.sh/jsbarcode@^3.12.3",
-    "vite": "https://esm.sh/vite@^7.3.1",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
     "jspdf": "https://esm.sh/jspdf@^2.5.1",
-    "html2canvas": "https://esm.sh/html2canvas@^1.4.1"
+    "html2canvas": "https://esm.sh/html2canvas@^1.4.1",
+    "html5-qrcode": "https://esm.sh/html5-qrcode@2.3.8",
+    "qrcode": "https://esm.sh/qrcode@^1.5.4",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
 </head>
-<body class="overflow-hidden bg-slate-50 dark:bg-slate-950">
+<body class="bg-slate-50 dark:bg-slate-950">
     <div id="root">
         <div id="fallback-loader">
             <div class="text-center animate-pulse">
-                <div class="w-12 h-12 bg-indigo-600 rounded-2xl mx-auto mb-4"></div>
-                <p class="text-slate-400 font-black text-xs uppercase tracking-widest">Initializing Terminal...</p>
+                <div class="w-16 h-16 bg-indigo-600 rounded-3xl mx-auto mb-6 flex items-center justify-center text-white font-black text-2xl shadow-2xl shadow-indigo-200">S</div>
+                <p class="text-slate-400 font-black text-[10px] uppercase tracking-[0.3em]">Initializing Secure Core...</p>
             </div>
         </div>
     </div>
-    <!-- Dedicated container for printing lifecycle -->
     <div id="print-holder"></div>
-    <!-- Hidden container for PDF rendering -->
     <div id="pdf-render-container" style="position: absolute; left: -9999px; top: -9999px; width: 210mm;"></div>
     
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js', { scope: './' })
-            .then(reg => console.log('SW Registered'))
-            .catch(err => console.warn('SW Skip:', err.message));
+          navigator.serviceWorker.register('./sw.js')
+            .then(reg => {
+              console.log('PWA Service Worker Operational');
+            })
+            .catch(err => console.warn('PWA Offline Core Failure:', err));
         });
       }
     </script>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>

@@ -1,44 +1,27 @@
-
 {
-  "id": "com.sarvari.sellerpro.pos",
+  "id": "com.sarvari.sellerpro.v1",
   "name": "Sarvari Seller Pro POS",
   "short_name": "Sarvari POS",
-  "description": "Professional offline-first POS system for retail management with AI insights and loan tracking.",
-  "start_url": "./index.html",
-  "scope": "./",
+  "description": "Enterprise-grade offline POS system for professional retail management.",
+  "start_url": ".",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "background_color": "#4f46e5",
   "theme_color": "#4f46e5",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/512/9422/9422501.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "https://cdn-icons-png.flaticon.com/512/9422/9422501.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     }
   ],
-  "categories": ["business", "finance", "productivity"],
-  "shortcuts": [
-    {
-      "name": "New Sale",
-      "url": "./index.html?view=terminal",
-      "description": "Quickly jump to the POS terminal",
-      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/512/9422/9422501.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Inventory",
-      "url": "./index.html?view=products",
-      "description": "Check current stock levels",
-      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/512/9422/9422501.png", "sizes": "192x192" }]
-    }
-  ],
-  "prefer_related_applications": false,
-  "related_applications": []
+  "categories": ["business", "finance", "productivity"]
 }

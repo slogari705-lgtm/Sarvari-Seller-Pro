@@ -1,15 +1,34 @@
+export interface ProductOption {
+  name: string;
+  values: string[];
+}
+
+export interface ProductVariation {
+  id: string;
+  sku: string;
+  name: string; // e.g., "Red / XL"
+  price: number;
+  salePrice?: number; // Price override for discounts
+  costPrice: number;
+  stock: number;
+}
 
 export interface Product {
   id: string;
   name: string;
   category: string;
-  price: number; // Sell Price
-  costPrice: number; // Buy Price
+  price: number; 
+  salePrice?: number; // Price override for discounts
+  costPrice: number; 
   stock: number;
   sku: string;
   image?: string;
   isFavorite?: boolean;
   lowStockThreshold?: number;
+  isDeleted?: boolean;
+  // Variations Support
+  options?: ProductOption[];
+  variations?: ProductVariation[];
 }
 
 export interface Customer {
@@ -17,22 +36,46 @@ export interface Customer {
   name: string;
   email: string;
   phone: string;
+  secondaryPhone?: string;
+  photo?: string; 
   address?: string;
   dob?: string;
+  gender?: 'Male' | 'Female' | 'Other';
+  occupation?: string;
+  company?: string;
+  reference?: string;
   totalSpent: number;
   totalDebt: number; 
   lastVisit: string;
-  company?: string;
+  joinedDate: string;
   notes?: string;
-  tags?: string[];
-  skills?: string[]; 
   loyaltyPoints?: number;
   transactionCount?: number;
+  isArchived?: boolean; 
+  isDeleted?: boolean;
+  tier?: 'Bronze' | 'Silver' | 'Gold' | 'Platinum';
+  preferredPayment?: 'Cash' | 'Card' | 'Transfer';
+}
+
+export interface Worker {
+  id: string;
+  employeeId: string; 
+  name: string;
+  phone: string;
+  position: string;
+  photo?: string;
+  joinDate: string;
+  baseSalary: number;
+  isDeleted?: boolean;
 }
 
 export interface CartItem extends Product {
   quantity: number;
   buyPrice: number;
+  returnedQuantity?: number;
+  // Track specific variation
+  variationId?: string;
+  variationName?: string;
 }
 
 export interface InvoiceTemplate {
@@ -56,9 +99,18 @@ export interface Invoice {
   total: number;
   paidAmount: number; 
   profit: number; 
-  status: 'paid' | 'partial' | 'unpaid'; 
+  status: 'paid' | 'partial' | 'unpaid' | 'voided' | 'returned'; 
   paymentMethod: 'cash' | 'card' | 'transfer';
   notes?: string;
+  isVoided?: boolean; 
+  isDeleted?: boolean;
+  pointsEarned?: number;
+  pointsRedeemed?: number;
+  returnHistory?: {
+    date: string;
+    items: { productId: string; quantity: number }[];
+    refundAmount: number;
+  }[];
 }
 
 export interface LoanTransaction {
@@ -67,7 +119,7 @@ export interface LoanTransaction {
   invoiceId?: string;
   date: string;
   amount: number;
-  type: 'debt' | 'repayment' | 'adjustment';
+  type: 'debt' | 'repayment' | 'adjustment' | 'void_reversal' | 'refund';
   note?: string;
   dueDate?: string;
 }
@@ -78,27 +130,51 @@ export interface Expense {
   category: string;
   amount: number;
   date: string;
+  workerId?: string; 
+  isDeleted?: boolean;
 }
 
 export type Language = 'en' | 'ps' | 'dr';
 export type Theme = 'light' | 'dark';
 
+export interface CardDesign {
+  layout: 'horizontal' | 'vertical';
+  theme: 'solid' | 'gradient' | 'mesh' | 'glass';
+  primaryColor: string;
+  secondaryColor: string;
+  pattern: 'none' | 'mesh' | 'dots' | 'waves' | 'circuit';
+  borderRadius: number;
+  borderWidth: number;
+  fontFamily: 'sans' | 'serif' | 'mono';
+  showQr: boolean;
+  showPoints: boolean;
+  showJoinDate: boolean;
+  showLogo: boolean;
+  textColor: 'light' | 'dark';
+  glossy: boolean;
+}
+
 export interface AppState {
   products: Product[];
   customers: Customer[];
+  workers: Worker[];
   invoices: Invoice[];
   expenses: Expense[];
   templates: InvoiceTemplate[];
   loanTransactions: LoanTransaction[];
   expenseCategories: string[];
   lastSync?: string;
+  lastLocalBackup?: string;
+  lastFileBackup?: string;
   settings: {
     shopName: string;
+    ownerName?: string;
+    shopTagline?: string;
     shopAddress?: string;
     shopPhone?: string;
     shopEmail?: string;
     shopWebsite?: string;
-    shopLogo?: string; // Base64 Logo String
+    shopLogo?: string; 
     invoiceHeaderNote?: string;
     invoiceFooterNote?: string;
     invoicePrefix?: string;
@@ -113,7 +189,24 @@ export interface AppState {
     language: Language;
     theme: Theme;
     defaultCustomerId?: string;
+    autoFileBackup: boolean;
+    autoLocalBackup: boolean;
+    autoBackupFolderLinked: boolean;
+    cardDesign: CardDesign;
+    loyaltySettings: {
+      pointsPerUnit: number; // e.g. 1 point per $10
+      conversionRate: number; // e.g. $1 per 100 points
+      enableTiers: boolean;
+    };
+    security: {
+      passcode?: string;
+      isLockEnabled: boolean;
+      securityQuestion?: string;
+      securityAnswer?: string;
+      highSecurityMode: boolean; 
+      autoLockTimeout?: number;
+    }
   };
 }
 
-export type View = 'dashboard' | 'customers' | 'products' | 'terminal' | 'invoices' | 'expenses' | 'reports' | 'settings' | 'loans' | 'dashboard-costume';
+export type View = 'dashboard' | 'customers' | 'products' | 'terminal' | 'invoices' | 'expenses' | 'reports' | 'settings' | 'loans' | 'dashboard-costume' | 'trash' | 'returns';
