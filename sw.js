@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sarvari-pos-v8';
+const CACHE_NAME = 'sarvari-pos-v10'; // Incremented version for deployment
 
 const ASSETS_TO_CACHE = [
   './',
@@ -21,7 +21,7 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      // Force cache all critical assets for full offline mode
+      console.log('SW: Pre-caching Core Assets');
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
@@ -32,7 +32,10 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => Promise.all(
       keys.map((key) => {
-        if (key !== CACHE_NAME) return caches.delete(key);
+        if (key !== CACHE_NAME) {
+          console.log('SW: Purging Legacy Cache', key);
+          return caches.delete(key);
+        }
       })
     ))
   );
@@ -40,12 +43,11 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Only cache GET requests
   if (event.request.method !== 'GET') return;
 
+  // Stale-while-revalidate strategy
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      // Return cache immediately if found, then update cache in background (Stale-While-Revalidate)
       const fetchPromise = fetch(event.request).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const responseClone = networkResponse.clone();
@@ -55,7 +57,6 @@ self.addEventListener('fetch', (event) => {
         }
         return networkResponse;
       }).catch(() => {
-        // Silent fail - network errors are expected in offline mode
         return cachedResponse;
       });
 
