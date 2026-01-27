@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   FileText, 
@@ -167,8 +168,9 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     const inv = state.invoices.find(i => i.id === id);
     if (!inv) return;
     
-    const updatedInvoices = state.invoices.map(i => i.id === id ? { ...i, isDeleted: true, isVoided: true, status: 'voided' as const } : i);
-    const updatedProducts = state.products.map(p => {
+    // Explicit type added to mapping callbacks to prevent inference errors
+    const updatedInvoices = state.invoices.map((i: Invoice) => i.id === id ? { ...i, isDeleted: true, isVoided: true, status: 'voided' as const } : i);
+    const updatedProducts = state.products.map((p: Product) => {
       const item = inv.items.find(it => it.id === p.id);
       return item ? { ...p, stock: p.stock + item.quantity } : p;
     });
@@ -210,7 +212,8 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
       pointsEarned: Math.floor(draftTotal * state.settings.loyaltySettings.pointsPerUnit)
     };
 
-    const updatedProducts = state.products.map(p => {
+    // Explicit type added to mapping callback to prevent inference errors
+    const updatedProducts = state.products.map((p: Product) => {
       const lineItems = draftItems.filter(it => it.id === p.id);
       if (lineItems.length > 0) {
         const consumed = lineItems.reduce((a, b) => a + b.quantity, 0);
@@ -221,7 +224,8 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
 
     const updatedLoanTransactions = [...state.loanTransactions];
     if (draftCustomerId) {
-      const updatedCustomers = state.customers.map(c => {
+      // Explicit type added to mapping callback to prevent inference errors
+      const updatedCustomers = state.customers.map((c: Customer) => {
         if (c.id === draftCustomerId) {
           return { 
             ...c, 
@@ -291,7 +295,8 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
       return item;
     });
 
-    const updatedInvoices = state.invoices.map(inv => {
+    // Explicit type added to mapping callback to prevent inference errors
+    const updatedInvoices = state.invoices.map((inv: Invoice) => {
       if (inv.id === returningInvoice.id) {
         const isFullyReturned = updatedItems.every(i => (i.returnedQuantity || 0) >= i.quantity);
         return { 
@@ -312,13 +317,15 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
       return inv;
     });
 
-    const updatedProducts = state.products.map(p => {
+    // Explicit type added to mapping callback to prevent inference errors
+    const updatedProducts = state.products.map((p: Product) => {
       const returnedCount = returnQtys[p.id] || 0;
       if (returnedCount > 0) return { ...p, stock: p.stock + returnedCount };
       return p;
     });
 
-    const updatedCustomers = state.customers.map(c => {
+    // Explicit type added to mapping callback to fix line 306 error (operator '>' on unknown)
+    const updatedCustomers = state.customers.map((c: Customer) => {
       if (c.id === returningInvoice.customerId) {
         let remainingRefund = totalRefundValue;
         let newDebt = c.totalDebt || 0;

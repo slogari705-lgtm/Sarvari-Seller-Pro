@@ -21,7 +21,7 @@ import {
   Settings,
   ArrowRight
 } from 'lucide-react';
-import { AppState, Customer, View, LoanTransaction } from '../types';
+import { AppState, Customer, View, LoanTransaction, Invoice } from '../types';
 import { translations } from '../translations';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -82,11 +82,12 @@ const Loans: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     if (!targetCustomer || amount <= 0) return;
     
     let remainingPayment = amount;
-    const updatedInvoices = state.invoices.map(inv => ({ ...inv }));
+    // Explicit type added to mapping callback to prevent inference errors
+    const updatedInvoices = state.invoices.map((inv: Invoice) => ({ ...inv }));
     
     const customerInvoices = updatedInvoices
       .filter(inv => inv.customerId === targetCustomer.id && (inv.status === 'partial' || inv.status === 'unpaid'))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(a.date).getTime());
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     for (const inv of customerInvoices) {
       if (remainingPayment <= 0) break;
@@ -99,7 +100,8 @@ const Loans: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     }
 
     const actualReduction = amount - remainingPayment;
-    const updatedCustomers = state.customers.map(c => {
+    // Explicit type added to mapping callback to fix inference errors during arithmetic
+    const updatedCustomers = state.customers.map((c: Customer) => {
       if (c.id === targetCustomer.id) {
         return { 
           ...c, 
@@ -125,7 +127,7 @@ const Loans: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     setPayingCustomer(null);
     setRepaymentAmount('');
     if (viewingDebtor?.id === targetCustomer.id) {
-      setViewingDebtor(updatedCustomers.find(c => c.id === targetCustomer.id) || null);
+      setViewingDebtor(updatedCustomers.find(c => c.id === viewingDebtor.id) || null);
     }
   };
 
@@ -134,7 +136,8 @@ const Loans: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     if (manualType === 'repayment') {
       handleProcessRepayment(manualCustomer, Number(manualAmount), manualNote || "Manual repayment entry");
     } else {
-      const updatedCustomers = state.customers.map(c => {
+      // Explicit type added to mapping callback to prevent inference errors for line 1000
+      const updatedCustomers = state.customers.map((c: Customer) => {
         if (c.id === manualCustomer.id) {
           const adj = manualType === 'debt' ? Number(manualAmount) : -Number(manualAmount);
           return { 
