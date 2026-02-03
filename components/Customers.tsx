@@ -157,41 +157,42 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
       : design.primaryColor;
 
     return `
-      <div id="capture-member-card" style="width: 85mm; height: 55mm; background: ${background}; position: relative; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; border-radius: 4mm; color: ${design.textColor === 'light' ? '#ffffff' : '#0f172a'}; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; padding: 6mm;">
+      <div id="capture-member-card" style="width: 85mm; height: 55mm; background: ${background}; position: relative; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; border-radius: ${design.borderRadius / 4}mm; color: ${design.textColor === 'light' ? '#ffffff' : '#0f172a'}; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; padding: 6mm; border: ${design.borderWidth}px solid rgba(255,255,255,0.2);">
         <div style="position: absolute; inset: 0; pointer-events: none; opacity: 0.2; background-image: ${patternStyle}; background-size: 10px 10px;"></div>
-        <div style="position: absolute; top: 0; right: 0; width: 50%; height: 100%; background: linear-gradient(to left, rgba(255,255,255,0.1), transparent); pointer-events: none;"></div>
+        <div style="position: absolute; top: 0; right: 0; width: 60%; height: 100%; background: linear-gradient(to left, rgba(255,255,255,0.1), transparent); pointer-events: none;"></div>
+        ${design.glossy ? '<div style="position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent); transform: rotate(-45deg); pointer-events: none;"></div>' : ''}
         
         <div style="position: relative; z-index: 10; display: flex; justify-content: space-between; align-items: flex-start;">
            <div>
-              ${design.showLogo && state.settings.shopLogo ? `<img src="${state.settings.shopLogo}" style="height: 8mm; margin-bottom: 2mm; display: block;" />` : ''}
-              <div style="font-weight: 900; font-size: 14px; text-transform: uppercase; letter-spacing: -0.5px;">${state.settings.shopName}</div>
-              <div style="font-size: 6px; font-weight: 800; opacity: 0.6; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 1mm;">${state.settings.shopTagline || 'OFFICIAL MEMBER'}</div>
+              ${design.showLogo && state.settings.shopLogo ? `<img src="${state.settings.shopLogo}" style="height: 10mm; max-width: 30mm; margin-bottom: 2mm; display: block; filter: ${design.textColor === 'light' ? 'brightness(0) invert(1)' : 'none'};" />` : ''}
+              <div style="font-weight: 900; font-size: 16px; text-transform: uppercase; letter-spacing: -0.5px;">${state.settings.shopName}</div>
+              <div style="font-size: 7px; font-weight: 800; opacity: 0.7; text-transform: uppercase; letter-spacing: 2px; margin-top: 1mm;">${state.settings.shopTagline || 'OFFICIAL ECOSYSTEM MEMBER'}</div>
            </div>
            <div style="text-align: right;">
-              <div style="font-size: 12px; font-weight: 900; font-family: monospace; opacity: 0.9;">#UID-${customer.id.padStart(4, '0')}</div>
-              <div style="font-size: 6px; font-weight: 900; text-transform: uppercase; opacity: 0.4; letter-spacing: 1px;">Customer Identity Node</div>
+              <div style="font-size: 14px; font-weight: 900; font-family: monospace; opacity: 1;">#UID-${customer.id.padStart(4, '0')}</div>
+              <div style="font-size: 6px; font-weight: 900; text-transform: uppercase; opacity: 0.5; letter-spacing: 1.5px;">SECURE IDENTITY NODE</div>
            </div>
         </div>
 
-        <div style="position: relative; z-index: 10; display: flex; align-items: center; gap: 4mm;">
-           <div style="width: 18mm; height: 18mm; background: rgba(255,255,255,0.2); border-radius: 4mm; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 900; border: 1px solid rgba(255,255,255,0.3); overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <div style="position: relative; z-index: 10; display: flex; align-items: center; gap: 5mm;">
+           <div style="width: 20mm; height: 20mm; background: rgba(255,255,255,0.2); border-radius: 4mm; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 900; border: 2px solid rgba(255,255,255,0.3); overflow: hidden; box-shadow: 0 8px 25px rgba(0,0,0,0.2);">
               ${customer.photo ? `<img src="${customer.photo}" style="width: 100%; height: 100%; object-fit: cover;" />` : customer.name.charAt(0)}
            </div>
            <div style="flex: 1; min-width: 0;">
-              <div style="font-weight: 900; font-size: 16px; text-transform: uppercase; line-height: 1; margin-bottom: 1.5mm;">${customer.name}</div>
-              <div style="display: flex; align-items: center; gap: 2mm;">
-                 <div style="background: rgba(0,0,0,0.2); padding: 1mm 2mm; border-radius: 1.5mm; font-size: 7px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 1mm;">
-                    ${tier.label} STATUS
+              <div style="font-weight: 900; font-size: 20px; text-transform: uppercase; line-height: 1; margin-bottom: 2mm; letter-spacing: -1px;">${customer.name}</div>
+              <div style="display: flex; align-items: center; gap: 3mm;">
+                 <div style="background: rgba(0,0,0,0.3); padding: 1.5mm 3mm; border-radius: 2mm; font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 1.5mm; border: 1px solid rgba(255,255,255,0.1);">
+                    ${tier.label} PRIVILEGE
                  </div>
-                 ${design.showPoints ? `<div style="font-size: 7px; font-weight: 900; opacity: 0.8; text-transform: uppercase;">${customer.loyaltyPoints || 0} PTS</div>` : ''}
+                 ${design.showPoints ? `<div style="font-size: 9px; font-weight: 900; color: #fbbf24; text-transform: uppercase; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">${customer.loyaltyPoints || 0} CREDITS</div>` : ''}
               </div>
            </div>
-           ${design.showQr ? `<div style="width: 12mm; height: 12mm; background: #ffffff; border-radius: 2mm; padding: 1mm; box-sizing: border-box; opacity: 0.9; margin-left: auto;"><svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><rect x="7" y="7" width="3" height="3"/><rect x="14" y="7" width="3" height="3"/><rect x="7" y="14" width="3" height="3"/><rect x="14" y="14" width="3" height="3"/></svg></div>` : ''}
+           ${design.showQr ? `<div style="width: 14mm; height: 14mm; background: #ffffff; border-radius: 3mm; padding: 1.5mm; box-sizing: border-box; opacity: 0.95; margin-left: auto; shadow: 0 4px 10px rgba(0,0,0,0.1);"><svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><rect x="7" y="7" width="3" height="3"/><rect x="14" y="7" width="3" height="3"/><rect x="7" y="14" width="3" height="3"/><rect x="14" y="14" width="3" height="3"/></svg></div>` : ''}
         </div>
 
-        <div style="position: relative; z-index: 10; display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2mm;">
-           <div style="font-size: 6px; opacity: 0.5; font-weight: 700; text-transform: uppercase;">Valid thru Dec 2026 • Non-Transferable ID</div>
-           ${design.showJoinDate ? `<div style="font-size: 6px; font-weight: 900; text-transform: uppercase; opacity: 0.6;">Joined ${new Date(customer.joinedDate || Date.now()).getFullYear()}</div>` : ''}
+        <div style="position: relative; z-index: 10; display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 3mm;">
+           <div style="font-size: 7px; opacity: 0.6; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Valid thru 2026 • AUTHORIZED SIGNATURE REQ.</div>
+           ${design.showJoinDate ? `<div style="font-size: 7px; font-weight: 900; text-transform: uppercase; opacity: 0.8; letter-spacing: 0.5px;">ACTIVE SINCE ${new Date(customer.joinedDate || Date.now()).getFullYear()}</div>` : ''}
         </div>
       </div>
     `;
@@ -211,26 +212,28 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
       await new Promise(r => setTimeout(r, 600));
       const canvas = await html2canvas(target, { scale: 4, useCORS: true, backgroundColor: null });
       const imgData = canvas.toDataURL('image/png');
+      
+      // CR80 Standard Size: 85.6mm x 53.98mm. Using 85x55 for bleed margin safety.
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [85, 55] });
       pdf.addImage(imgData, 'PNG', 0, 0, 85, 55);
-      pdf.save(`MEMBER_CARD_${c.name.replace(/\s+/g, '_')}.pdf`);
+      pdf.save(`SARVARI_ID_${c.name.replace(/\s+/g, '_')}_${c.id}.pdf`);
     } catch (e) {
       console.error(e);
+      alert("Export failed. Please check permissions.");
     } finally {
       container.innerHTML = '';
       setIsExportingCard(false);
     }
   };
 
-  const handlePrintMemberCard = () => {
-    if (!viewingCustomer) return;
+  const handlePrintMemberCard = (c: Customer) => {
     const holder = document.getElementById('print-holder');
     if (!holder) return;
 
     holder.innerHTML = `
-      <div style="width: 100%; height: 100vh; display: flex; items-center; justify-center; background: white; padding: 40px;">
-        <div style="transform: scale(1.5);">
-          ${generateMemberCardHTML(viewingCustomer, state.settings.cardDesign)}
+      <div style="width: 100%; height: 100vh; display: flex; align-items: center; justify-content: center; background: white; padding: 0;">
+        <div style="transform: scale(2.5);">
+          ${generateMemberCardHTML(c, state.settings.cardDesign)}
         </div>
       </div>
     `;
@@ -403,18 +406,18 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                     <td className="px-8 py-6 text-right">
                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all" onClick={e => e.stopPropagation()}>
                           <button 
+                            onClick={() => handleDownloadMemberCard(c)} 
+                            className="p-2 text-slate-400 hover:text-indigo-600 transition-all"
+                            title="Export ID Card"
+                          >
+                             <IdCard size={20}/>
+                          </button>
+                          <button 
                             onClick={() => setRepayModal({customer: c, mode: 'repayment'})} 
                             className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
                             title="Quick Pay Settlement"
                           >
                              <DollarSign size={14}/> Pay
-                          </button>
-                          <button 
-                            onClick={() => setRepayModal({customer: c, mode: 'debt'})} 
-                            className="flex items-center gap-2 px-4 py-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all shadow-sm"
-                            title="Manual Loan Entry"
-                          >
-                             <ArrowDownLeft size={14}/> Loan
                           </button>
                           <button onClick={() => { setEditingCustomer(c); setNewCustomer(c); setIsAdding(true); }} className="p-2 text-slate-400 hover:text-indigo-600 transition-all"><Edit size={18}/></button>
                        </div>
@@ -491,18 +494,18 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                                  <button 
                                    onClick={() => handleDownloadMemberCard(viewingCustomer)}
                                    disabled={isExportingCard}
-                                   className="w-full py-4 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-[20px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all border border-transparent hover:border-indigo-100"
+                                   className="w-full py-4 bg-indigo-600 text-white rounded-[20px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-indigo-700 transition-all shadow-xl active:scale-95"
                                  >
-                                    {isExportingCard ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />} Export Digital ID
+                                    {isExportingCard ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />} Download Member PDF
                                  </button>
                                  <button 
-                                   onClick={handlePrintMemberCard}
+                                   onClick={() => handlePrintMemberCard(viewingCustomer)}
                                    className="w-full py-4 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-[20px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all border border-transparent hover:border-indigo-100"
                                  >
-                                    <Printer size={14}/> Print Physical Identity
+                                    <Printer size={14}/> Print Physical Card
                                  </button>
                               </div>
-                              <p className="text-[8px] font-bold text-slate-400 uppercase text-center leading-relaxed px-4">Utilizes global design architecture from system settings</p>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase text-center leading-relaxed px-4">Standard 85x55mm Format Optimized</p>
                            </div>
 
                            <div className="bg-white dark:bg-slate-900 p-10 rounded-[48px] border shadow-sm flex flex-col justify-center relative overflow-hidden group">

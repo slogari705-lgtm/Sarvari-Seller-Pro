@@ -71,7 +71,9 @@ import {
   AppWindow,
   Terminal as TerminalIcon,
   PackageCheck,
-  SmartphoneNfc
+  SmartphoneNfc,
+  CloudLightning,
+  Github
 } from 'lucide-react';
 import { AppState, Language, Theme, CardDesign, InvoiceTemplate } from '../types';
 import { translations } from '../translations';
@@ -969,6 +971,44 @@ const Settings: React.FC<Props> = ({ state, updateState }) => {
                        </div>
                        <h4 className="text-3xl font-black dark:text-white uppercase tracking-tighter">System Credits</h4>
                        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest leading-relaxed">Software Architecture & Technical Development</p>
+                    </div>
+
+                    {/* Vercel Deployment Monitoring Module */}
+                    <div className="p-8 bg-slate-900 rounded-[48px] border-4 border-slate-800 shadow-2xl relative overflow-hidden group">
+                       <div className="relative z-10 flex flex-col md:flex-row items-center gap-10">
+                          <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-slate-900 shadow-xl shrink-0 group-hover:scale-110 transition-transform">
+                             <CloudLightning size={40} />
+                          </div>
+                          <div className="flex-1 text-center md:text-left">
+                             <div className="flex items-center gap-3 justify-center md:justify-start">
+                                <h5 className="text-lg font-black text-white uppercase tracking-tighter">Production Deployment Context</h5>
+                                <div className="px-3 py-1 bg-emerald-500 text-white rounded-full text-[8px] font-black uppercase animate-pulse">Live on Edge</div>
+                             </div>
+                             <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mt-6">
+                                <div>
+                                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Software Cluster</p>
+                                   <p className="text-sm font-black text-indigo-400 uppercase">Sarvari POS v1.2.1</p>
+                                </div>
+                                <div>
+                                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Host Node</p>
+                                   <p className="text-sm font-black text-white uppercase">Vercel Global</p>
+                                </div>
+                                <div className="col-span-2 md:col-span-1">
+                                   <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Update Mode</p>
+                                   <p className="text-sm font-black text-amber-400 uppercase">GitHub CI/CD</p>
+                                </div>
+                             </div>
+                             <div className="mt-8 flex gap-3">
+                                <a href="https://vercel.com" target="_blank" className="px-6 py-3 bg-white text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-50 transition-all">
+                                   <Monitor size={14}/> Dashboard
+                                </a>
+                                <button onClick={() => window.location.reload()} className="px-6 py-3 bg-slate-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:bg-slate-700 transition-all border border-slate-700">
+                                   <RefreshCw size={14}/> Check Updates
+                                </button>
+                             </div>
+                          </div>
+                       </div>
+                       <Github size={200} className="absolute -bottom-20 -right-20 text-white opacity-[0.03] rotate-12 pointer-events-none" />
                     </div>
 
                     <div className="bg-white dark:bg-slate-900 border-4 border-slate-50 dark:border-slate-800 rounded-[56px] overflow-hidden p-12 relative group shadow-sm transition-all hover:shadow-2xl">
