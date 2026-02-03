@@ -36,13 +36,14 @@ import {
   CheckCircle,
   Tag,
   DollarSign,
-  Coins
+  Coins,
+  Layout
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { AppState, Product, CartItem, Invoice, Customer, ProductVariation } from '../types';
 import { translations } from '../translations';
 import ConfirmDialog from './ConfirmDialog';
-import { generatePrintHTML } from '../printService';
+import { generatePrintHTML, PrintLayout } from '../printService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -91,6 +92,7 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
   // Post-sale receipt state
   const [finishedInvoice, setFinishedInvoice] = useState<Invoice | null>(null);
   const [isExportingReceipt, setIsExportingReceipt] = useState(false);
+  const [receiptPrintMode, setReceiptPrintMode] = useState<PrintLayout>('thermal');
   
   const [pickingProduct, setPickingProduct] = useState<Product | null>(null);
   
@@ -320,8 +322,8 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
     setScannerLog([]);
   };
 
-  const handlePrintReceipt = (inv: Invoice) => {
-    const html = generatePrintHTML(state, inv, 'auto');
+  const handlePrintReceipt = (inv: Invoice, layout: PrintLayout = 'auto') => {
+    const html = generatePrintHTML(state, inv, layout);
     const holder = document.getElementById('print-holder');
     if (holder) {
       holder.innerHTML = html;
@@ -337,7 +339,7 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
     if (!container) return setIsExportingReceipt(false);
 
     try {
-      const html = generatePrintHTML(state, inv, 'a4');
+      const html = generatePrintHTML(state, inv, receiptPrintMode === 'auto' ? 'a4' : receiptPrintMode);
       container.innerHTML = html;
       await new Promise(r => setTimeout(r, 600));
 
@@ -908,7 +910,7 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
                  </div>
               </div>
 
-              <footer className="p-10 border-t border-slate-50 dark:border-slate-800 bg-white dark:bg-slate-900 flex gap-4">
+              <footer className="p-10 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex gap-4">
                  <button onClick={() => setIsCheckoutOpen(false)} className="flex-1 py-7 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-[32px] font-black text-xs uppercase tracking-[0.2em]">Abort Process</button>
                  <button onClick={finalizeSale} className="flex-[2] py-7 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-[0.98] flex items-center justify-center gap-4">
                     <CheckCircle2 size={24}/> Finalize Authorized Sale
@@ -918,90 +920,70 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
         </div>
       )}
 
-      {/* SUCCESS RECEIPT MODAL */}
+      {/* SUCCESS RECEIPT MODAL (ENHANCED) */}
       {finishedInvoice && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-xl animate-in fade-in duration-300">
-           <div className="bg-white dark:bg-slate-900 rounded-[64px] w-full max-w-2xl h-full max-h-[90vh] shadow-2xl overflow-hidden flex flex-col border border-white/10 animate-in zoom-in-95 duration-500">
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-2xl animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-slate-900 rounded-[64px] w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col border border-white/10 animate-in zoom-in-95 duration-500">
               <header className="p-10 pb-6 text-center shrink-0">
-                 <div className="w-20 h-20 bg-emerald-500 text-white rounded-[28px] flex items-center justify-center mx-auto shadow-2xl shadow-emerald-200 dark:shadow-none mb-6 animate-bounce">
+                 <div className="w-20 h-20 bg-emerald-500 text-white rounded-[32px] flex items-center justify-center mx-auto shadow-2xl shadow-emerald-200 dark:shadow-none mb-6 animate-bounce">
                     <CheckCircle size={40} strokeWidth={3} />
                  </div>
-                 <h2 className="text-4xl font-black dark:text-white uppercase tracking-tighter">Sale Authorized!</h2>
-                 <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] mt-2">Document #INV-{finishedInvoice.id.padStart(4, '0')}</p>
+                 <h2 className="text-4xl font-black dark:text-white uppercase tracking-tighter">Sale Authenticated!</h2>
+                 <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] mt-2">Ledger Reference #INV-{finishedInvoice.id.padStart(4, '0')}</p>
               </header>
 
               <div className="flex-1 overflow-y-auto custom-scrollbar px-10 py-6">
                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-[48px] border border-slate-100 dark:border-slate-800 p-8 space-y-8">
                     <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-6">
-                       <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm"><ReceiptIcon size={24}/></div>
-                          <div>
-                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aggregate Total</p>
-                             <p className="text-2xl font-black dark:text-white">{state.settings.currency}{finishedInvoice.total.toLocaleString()}</p>
-                          </div>
+                       <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fiscal Finality</p>
+                          <h4 className="text-3xl font-black text-emerald-600">{state.settings.currency}{finishedInvoice.total.toLocaleString()}</h4>
                        </div>
                        <div className="text-right">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Remittance</p>
-                          <p className="text-lg font-black text-emerald-600 uppercase">{finishedInvoice.paymentMethod}</p>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Channel</p>
+                          <p className="text-sm font-black text-slate-800 dark:text-white uppercase">{finishedInvoice.paymentMethod} • AUTHORIZED</p>
                        </div>
                     </div>
-
-                    {/* Money Receipt Logic Display */}
-                    {finishedInvoice.paymentMethod === 'cash' && (
-                       <div className="grid grid-cols-2 gap-4 p-6 bg-white dark:bg-slate-700 rounded-[32px] shadow-sm border border-slate-100 dark:border-slate-800">
-                          <div>
-                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cash In</p>
-                             <p className="text-2xl font-black dark:text-white">{state.settings.currency}{finishedInvoice.paidAmount.toLocaleString()}</p>
-                          </div>
-                          <div className="text-right">
-                             <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Change Out</p>
-                             <p className="text-2xl font-black text-emerald-500">{state.settings.currency}{(finishedInvoice.paidAmount - finishedInvoice.total).toLocaleString()}</p>
-                          </div>
-                       </div>
-                    )}
 
                     <div className="space-y-4">
-                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Asset Log</p>
-                       {finishedInvoice.items.map((it, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-sm">
-                             <div className="flex items-center gap-3">
-                                <span className="w-6 h-6 rounded-lg bg-white dark:bg-slate-700 flex items-center justify-center text-[10px] font-black text-slate-400">{it.quantity}</span>
-                                <p className="font-bold dark:text-slate-200 uppercase truncate max-w-[240px]">{it.name}</p>
+                       <label className="block text-[11px] font-black text-indigo-600 uppercase tracking-[0.3em] ml-2">Dispatch Mode</label>
+                       <div className="grid grid-cols-2 gap-4">
+                          <button 
+                            onClick={() => setReceiptPrintMode('thermal')}
+                            className={`p-6 rounded-[32px] border-4 transition-all text-left flex items-center gap-4 ${receiptPrintMode === 'thermal' ? 'border-indigo-600 bg-white dark:bg-slate-700 shadow-lg' : 'bg-white dark:bg-slate-800 border-transparent opacity-60'}`}
+                          >
+                             <Smartphone size={24} className={receiptPrintMode === 'thermal' ? 'text-indigo-600' : 'text-slate-400'} />
+                             <div>
+                                <p className="font-black text-sm dark:text-white uppercase">Thermal</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase">POS Tape</p>
                              </div>
-                             <p className="font-black dark:text-white">{state.settings.currency}{(it.price * it.quantity).toLocaleString()}</p>
-                          </div>
-                       ))}
-                    </div>
-
-                    <div className="pt-6 border-t border-slate-200 dark:border-slate-700 space-y-2">
-                       <div className="flex justify-between text-xs font-bold text-slate-400 uppercase">
-                          <span>Subtotal</span>
-                          <span>{state.settings.currency}{finishedInvoice.subtotal.toLocaleString()}</span>
-                       </div>
-                       {finishedInvoice.discount > 0 && (
-                          <div className="flex justify-between text-xs font-black text-rose-500 uppercase">
-                             <span>Discount Authorized</span>
-                             <span>-{state.settings.currency}{finishedInvoice.discount.toLocaleString()}</span>
-                          </div>
-                       )}
-                       <div className="flex justify-between text-xs font-bold text-slate-400 uppercase">
-                          <span>Fiscal Modules (Tax)</span>
-                          <span>+{state.settings.currency}{finishedInvoice.tax.toLocaleString()}</span>
+                          </button>
+                          <button 
+                            onClick={() => setReceiptPrintMode('a4')}
+                            className={`p-6 rounded-[32px] border-4 transition-all text-left flex items-center gap-4 ${receiptPrintMode === 'a4' ? 'border-indigo-600 bg-white dark:bg-slate-700 shadow-lg' : 'bg-white dark:bg-slate-800 border-transparent opacity-60'}`}
+                          >
+                             <Layout size={24} className={receiptPrintMode === 'a4' ? 'text-indigo-600' : 'text-slate-400'} />
+                             <div>
+                                <p className="font-black text-sm dark:text-white uppercase">Formal A4</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase">Ledger Spec</p>
+                             </div>
+                          </button>
                        </div>
                     </div>
                     
                     {finishedInvoice.customerId && (
-                       <div className="p-5 bg-indigo-600 rounded-[32px] text-white flex items-center justify-between shadow-xl">
-                          <div className="flex items-center gap-4">
-                             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center"><Star size={20} fill="white"/></div>
+                       <div className="p-6 bg-indigo-600 rounded-[32px] text-white flex items-center justify-between shadow-xl relative overflow-hidden group">
+                          <div className="flex items-center gap-4 relative z-10">
+                             <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center"><Star size={24} fill="white"/></div>
                              <div>
-                                <p className="text-[9px] font-black text-indigo-100 uppercase tracking-widest">Rewards Synchronized</p>
-                                <p className="text-sm font-black uppercase">{state.customers.find(c => c.id === finishedInvoice.customerId)?.name}</p>
+                                <p className="text-[9px] font-black text-indigo-100 uppercase tracking-widest">Rewards Sychronized</p>
+                                <p className="text-base font-black uppercase">{state.customers.find(c => c.id === finishedInvoice.customerId)?.name}</p>
                              </div>
                           </div>
-                          <div className="text-right">
-                             <p className="text-xl font-black">+{finishedInvoice.pointsEarned} <span className="text-[10px]">PTS</span></p>
+                          <div className="text-right relative z-10">
+                             <p className="text-2xl font-black">+{finishedInvoice.pointsEarned} <span className="text-[10px]">PTS</span></p>
                           </div>
+                          <Zap className="absolute -bottom-6 -right-6 text-white/10 rotate-12 group-hover:scale-125 transition-transform" size={100} />
                        </div>
                     )}
                  </div>
@@ -1010,24 +992,24 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
               <footer className="p-10 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col gap-4 shrink-0">
                  <div className="flex gap-4">
                     <button 
-                       onClick={() => handlePrintReceipt(finishedInvoice)}
-                       className="flex-1 py-5 bg-white dark:bg-slate-800 text-slate-700 dark:text-white border-2 rounded-[28px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-50 transition-all active:scale-95"
+                       onClick={() => handlePrintReceipt(finishedInvoice, receiptPrintMode)}
+                       className="flex-1 py-5 bg-indigo-600 text-white rounded-[28px] font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl hover:bg-indigo-700 transition-all active:scale-95"
                     >
-                       <Printer size={18}/> Print Receipt
+                       <Printer size={20}/> Dispatch Print
                     </button>
                     <button 
                        onClick={() => handleDownloadReceiptPDF(finishedInvoice)}
                        disabled={isExportingReceipt}
-                       className="flex-1 py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-[28px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:opacity-90 transition-all active:scale-95"
+                       className="flex-1 py-5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-white rounded-[28px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-200 transition-all active:scale-95"
                     >
-                       {isExportingReceipt ? <RefreshCw size={18} className="animate-spin"/> : <FileDown size={18}/>} Save Digital PDF
+                       {isExportingReceipt ? <RefreshCw size={20} className="animate-spin"/> : <FileDown size={20}/>} Download PDF
                     </button>
                  </div>
                  <button 
                     onClick={() => setFinishedInvoice(null)}
-                    className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-[0.98]"
+                    className="w-full py-6 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-[32px] font-black text-xs uppercase tracking-[0.3em] hover:opacity-90 transition-all active:scale-[0.98]"
                  >
-                    Initialize New Session
+                    Next Transaction Cycle
                  </button>
               </footer>
            </div>

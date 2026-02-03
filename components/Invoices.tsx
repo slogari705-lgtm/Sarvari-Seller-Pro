@@ -17,7 +17,15 @@ import {
   CheckCircle2,
   Package,
   User,
-  History
+  History,
+  Layout,
+  ExternalLink,
+  Zap,
+  Clock,
+  ChevronRight,
+  ShieldCheck,
+  Smartphone,
+  Maximize2
 } from 'lucide-react';
 import { AppState, Invoice, View, Product, CartItem, Customer, LoanTransaction } from '../types';
 import { translations } from '../translations';
@@ -53,6 +61,10 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
   const [returningInvoice, setReturningInvoice] = useState<Invoice | null>(null);
   const [returnQtys, setReturnQtys] = useState<Record<string, number>>({});
 
+  // Print Control State
+  const [printingInvoice, setPrintingInvoice] = useState<Invoice | null>(null);
+  const [printLayoutMode, setPrintLayoutMode] = useState<PrintLayout>('auto');
+
   const t = translations[state.settings.language || 'en'];
   const activeInvoices = useMemo(() => state.invoices.filter(i => !i.isDeleted), [state.invoices]);
 
@@ -67,7 +79,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     result.sort((a, b) => {
       let comparison = 0;
       if (sortKey === 'id') comparison = Number(a.id) - Number(b.id);
-      else if (sortKey === 'date') comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+      else if (sortKey === 'date') comparison = new Date(a.date).getTime() - new Date(a.date).getTime();
       else if (sortKey === 'total') comparison = a.total - b.total;
       else if (sortKey === 'status') comparison = a.status.localeCompare(b.status);
       return sortOrder === 'asc' ? comparison : -comparison;
@@ -250,7 +262,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     if (isDownloading) return;
     setIsDownloading(inv.id);
     try {
-      const html = generatePrintHTML(state, inv, 'a4');
+      const html = generatePrintHTML(state, inv, printLayoutMode === 'auto' ? 'a4' : printLayoutMode);
       const container = document.getElementById('pdf-render-container');
       if (!container) return;
       container.innerHTML = html;
@@ -290,6 +302,83 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
         confirmText="Confirm" 
         type="warning" 
       />
+
+      {/* DOCUMENT DISPATCH CENTER MODAL */}
+      {printingInvoice && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-slate-900 rounded-[56px] w-full max-w-2xl shadow-2xl overflow-hidden border border-white/10 flex flex-col animate-in zoom-in-95 duration-300">
+              <header className="p-10 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+                 <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-indigo-600 text-white rounded-[28px] flex items-center justify-center shadow-2xl shadow-indigo-200 dark:shadow-none"><Printer size={32}/></div>
+                    <div>
+                       <h3 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Document Dispatch</h3>
+                       <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] mt-2">Document ID: #INV-{printingInvoice.id.padStart(4, '0')}</p>
+                    </div>
+                 </div>
+                 <button onClick={() => setPrintingInvoice(null)} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-rose-500 transition-all"><X size={28}/></button>
+              </header>
+
+              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar space-y-12">
+                 <div className="p-10 bg-slate-50 dark:bg-slate-800/50 rounded-[48px] border border-slate-100 dark:border-slate-800 text-center relative overflow-hidden group">
+                    <div className="relative z-10">
+                       <ShieldCheck size={48} className="mx-auto text-emerald-500 mb-4 animate-pulse" />
+                       <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Ledger Integrity Verified</p>
+                       <h2 className="text-5xl font-black dark:text-white tracking-tighter mb-4">{state.settings.currency}{printingInvoice.total.toLocaleString()}</h2>
+                       <div className="inline-flex items-center gap-3 px-6 py-2 bg-white dark:bg-slate-700 rounded-full border border-slate-100 dark:border-slate-800 shadow-sm">
+                          <Clock size={14} className="text-indigo-500" />
+                          <span className="text-[10px] font-black uppercase text-slate-500">{new Date(printingInvoice.date).toLocaleString()}</span>
+                       </div>
+                    </div>
+                    <FileText className="absolute -bottom-10 -right-10 text-indigo-500/5 group-hover:scale-125 transition-transform duration-700" size={240} />
+                 </div>
+
+                 <div className="space-y-6">
+                    <label className="block text-[11px] font-black text-indigo-600 uppercase tracking-[0.3em] ml-2">Architecture Configuration</label>
+                    <div className="grid grid-cols-2 gap-4">
+                       <button 
+                         onClick={() => setPrintLayoutMode('thermal')}
+                         className={`p-8 rounded-[40px] border-4 transition-all text-left flex flex-col gap-4 relative overflow-hidden group ${printLayoutMode === 'thermal' ? 'border-indigo-600 bg-white dark:bg-slate-800 shadow-xl' : 'bg-slate-50 dark:bg-slate-950 border-transparent opacity-60'}`}
+                       >
+                          <Smartphone size={32} className={printLayoutMode === 'thermal' ? 'text-indigo-600' : 'text-slate-400'} />
+                          <div>
+                             <p className="font-black text-lg dark:text-white uppercase leading-none">Thermal Tape</p>
+                             <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">72mm POS Optimized</p>
+                          </div>
+                          {printLayoutMode === 'thermal' && <div className="absolute top-4 right-4 w-4 h-4 bg-indigo-600 rounded-full animate-ping" />}
+                       </button>
+                       <button 
+                         onClick={() => setPrintLayoutMode('a4')}
+                         className={`p-8 rounded-[40px] border-4 transition-all text-left flex flex-col gap-4 relative overflow-hidden group ${printLayoutMode === 'a4' ? 'border-indigo-600 bg-white dark:bg-slate-800 shadow-xl' : 'bg-slate-50 dark:bg-slate-950 border-transparent opacity-60'}`}
+                       >
+                          <Layout size={32} className={printLayoutMode === 'a4' ? 'text-indigo-600' : 'text-slate-400'} />
+                          <div>
+                             <p className="font-black text-lg dark:text-white uppercase leading-none">Full A4 Office</p>
+                             <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">Formal Business Ledger</p>
+                          </div>
+                          {printLayoutMode === 'a4' && <div className="absolute top-4 right-4 w-4 h-4 bg-indigo-600 rounded-full animate-ping" />}
+                       </button>
+                    </div>
+                 </div>
+              </div>
+
+              <footer className="p-12 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-col md:flex-row gap-4 shrink-0">
+                 <button 
+                   onClick={() => handlePrint(printingInvoice, printLayoutMode)}
+                   className="flex-1 py-7 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-4"
+                 >
+                    <Printer size={24}/> physical dispatch
+                 </button>
+                 <button 
+                   onClick={() => handleDownloadPDF(printingInvoice)}
+                   disabled={!!isDownloading}
+                   className="flex-1 py-7 bg-white dark:bg-slate-800 text-slate-700 dark:text-white border-2 rounded-[32px] font-black text-xs uppercase tracking-[0.3em] hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-4"
+                 >
+                    {isDownloading === printingInvoice.id ? <RefreshCw className="animate-spin" size={24}/> : <FileDown size={24}/>} Save Digital PDF
+                 </button>
+              </footer>
+           </div>
+        </div>
+      )}
 
       {isCreating && (
         <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
@@ -441,7 +530,9 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
                 const customer = state.customers.find(c => c.id === inv.customerId);
                 return (
                   <tr key={inv.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 group transition-all">
-                    <td className="px-6 py-4 font-black text-xs text-slate-500">#INV-{inv.id.padStart(4, '0')}</td>
+                    <td className="px-6 py-4 font-black text-xs text-slate-500">
+                       <span className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-indigo-600">#INV-{inv.id.padStart(4, '0')}</span>
+                    </td>
                     <td className="px-6 py-4 text-xs font-bold dark:text-slate-200">{customer?.name || 'Walk-in Account'}</td>
                     <td className="px-6 py-4 text-xs text-slate-400">{new Date(inv.date).toLocaleDateString()}</td>
                     <td className="px-6 py-4 font-black text-slate-900 dark:text-white text-right">{state.settings.currency}{inv.total.toLocaleString()}</td>
@@ -449,8 +540,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
                     <td className="px-6 py-4 text-right">
                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
                           <button onClick={() => handleOpenReturn(inv)} className="p-2 text-slate-400 hover:text-amber-600 transition-all" title="Return Items"><RotateCcw size={18}/></button>
-                          <button onClick={() => handlePrint(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-all"><Printer size={18}/></button>
-                          <button onClick={() => handleDownloadPDF(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-all"><FileDown size={18}/></button>
+                          <button onClick={() => setPrintingInvoice(inv)} className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all" title="Document Control Center"><Maximize2 size={18}/></button>
                           <button onClick={() => setTrashConfirm(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-all"><Trash2 size={18}/></button>
                        </div>
                     </td>
@@ -488,7 +578,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
                  })}
                  <div className="p-6 bg-amber-50 dark:bg-amber-900/10 rounded-3xl border border-amber-100 text-center"><p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Estimated Credit</p><h3 className="text-4xl font-black text-amber-600">{state.settings.currency}{Object.entries(returnQtys).reduce((acc, [id, q]) => acc + (Number(q) * (returningInvoice.items.find(i => i.id === id)?.price || 0)), 0).toLocaleString()}</h3></div>
               </div>
-              <footer className="p-10 border-t bg-white dark:bg-slate-900 flex gap-4"><button onClick={() => setReturningInvoice(null)} className="flex-1 py-6 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-3xl font-black text-xs uppercase tracking-widest">Discard</button><button onClick={handleProcessReturn} className="flex-[2] py-6 bg-amber-600 text-white rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center justify-center gap-3"><RefreshCw size={18}/> Execute Restock</button></footer>
+              <footer className="p-10 border-t bg-white dark:bg-slate-900 flex gap-4"><button onClick={() => setReturningInvoice(null)} className="flex-1 py-6 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-3xl font-black text-xs uppercase tracking-widest">Discard</button><button onClick={handleProcessReturn} className="flex-[2] py-6 bg-amber-600 text-white rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-3"><RefreshCw size={18}/> Execute Restock</button></footer>
            </div>
         </div>
       )}
