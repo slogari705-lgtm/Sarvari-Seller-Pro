@@ -27,7 +27,9 @@ import {
   Smartphone,
   Maximize2,
   UserMinus,
-  SearchCode
+  SearchCode,
+  Edit2,
+  AlertTriangle
 } from 'lucide-react';
 import { AppState, Invoice, View, Product, CartItem, Customer, LoanTransaction } from '../types';
 import { translations } from '../translations';
@@ -54,6 +56,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
   
   const [isCreating, setIsCreating] = useState(false);
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [draftItems, setDraftItems] = useState<CartItem[]>([]);
   const [draftCustomerId, setDraftCustomerId] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
@@ -119,47 +122,106 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
   const draftTotal = draftSubtotal + draftTax;
 
   useEffect(() => {
-    if (paymentStatusMode === 'paid') setDraftPaidAmount(draftTotal);
-    else if (paymentStatusMode === 'unpaid') setDraftPaidAmount(0);
-  }, [paymentStatusMode, draftTotal]);
+    if (!editingInvoiceId) {
+      if (paymentStatusMode === 'paid') setDraftPaidAmount(draftTotal);
+      else if (paymentStatusMode === 'unpaid') setDraftPaidAmount(0);
+    }
+  }, [paymentStatusMode, draftTotal, editingInvoiceId]);
+
+  const handleOpenEditInvoice = (inv: Invoice) => {
+    setEditingInvoiceId(inv.id);
+    setDraftItems([...inv.items]);
+    setDraftCustomerId(inv.customerId || '');
+    setDraftPaidAmount(inv.paidAmount);
+    setPaymentStatusMode(inv.status === 'paid' ? 'paid' : inv.status === 'unpaid' ? 'unpaid' : 'partial');
+    setIsCreating(true);
+  };
 
   const handleAuthorizeInvoice = () => {
     if (draftItems.length === 0) return;
     const paidAmount = Number(draftPaidAmount) || 0;
-    const debtIncurred = draftTotal - paidAmount;
+    const totalDue = draftTotal;
+    const debtIncurred = totalDue - paidAmount;
     const profit = draftItems.reduce((acc, it) => acc + ((it.price - it.costPrice) * it.quantity), 0);
-    const newId = (state.invoices.reduce((max, i) => Math.max(max, parseInt(i.id) || 0), 0) + 1).toString();
 
-    let finalStatus: 'paid' | 'partial' | 'unpaid' = 'paid';
+    let finalStatus: Invoice['status'] = 'paid';
     if (paidAmount === 0) finalStatus = 'unpaid';
-    else if (paidAmount < draftTotal) finalStatus = 'partial';
+    else if (paidAmount < totalDue) finalStatus = 'partial';
 
-    const invoice: Invoice = {
-      id: newId, date: new Date().toISOString(), customerId: draftCustomerId || undefined, items: draftItems,
-      subtotal: draftSubtotal, tax: draftTax, discount: 0, total: draftTotal, paidAmount: paidAmount, profit: profit,
-      status: finalStatus, paymentMethod: 'cash', pointsEarned: Math.floor(draftTotal * state.settings.loyaltySettings.pointsPerUnit)
-    };
+    if (editingInvoiceId) {
+      // Reconcile Stock and Debt for the OLD version
+      const oldInvoice = state.invoices.find(i => i.id === editingInvoiceId);
+      if (oldInvoice) {
+        // Restore stock
+        let stockRestore = [...state.products];
+        oldInvoice.items.forEach(oldItem => {
+          stockRestore = stockRestore.map(p => p.id === oldItem.id ? { ...p, stock: p.stock + oldItem.quantity } : p);
+        });
 
-    const updatedProducts = state.products.map((p: Product) => {
-      const lineItem = draftItems.find(it => it.id === p.id);
-      return lineItem ? { ...p, stock: p.stock - lineItem.quantity } : p;
-    });
+        // Apply new stock reduction
+        draftItems.forEach(newItem => {
+          stockRestore = stockRestore.map(p => p.id === newItem.id ? { ...p, stock: p.stock - newItem.quantity } : p);
+        });
 
-    if (draftCustomerId) {
-      updateState('customers', state.customers.map((c: Customer) => c.id === draftCustomerId ? { 
-        ...c, totalSpent: (Number(c.totalSpent) || 0) + draftTotal, totalDebt: (Number(c.totalDebt) || 0) + debtIncurred,
-        transactionCount: (c.transactionCount || 0) + 1, lastVisit: new Date().toISOString()
-      } : c));
-      if (debtIncurred > 0) {
-        updateState('loanTransactions', [...state.loanTransactions, {
-          id: Math.random().toString(36).substr(2, 9), customerId: draftCustomerId, invoiceId: newId,
-          date: new Date().toISOString(), amount: debtIncurred, type: 'debt', note: `Manual Draft #${newId}`
-        }]);
+        // Restore customer debt
+        let updatedCustomers = [...state.customers];
+        if (oldInvoice.customerId) {
+          const oldDebt = oldInvoice.total - oldInvoice.paidAmount;
+          updatedCustomers = updatedCustomers.map(c => c.id === oldInvoice.customerId ? { ...c, totalDebt: Math.max(0, c.totalDebt - oldDebt), totalSpent: c.totalSpent - oldInvoice.total } : c);
+        }
+
+        // Apply new customer debt
+        if (draftCustomerId) {
+          updatedCustomers = updatedCustomers.map(c => c.id === draftCustomerId ? { ...c, totalDebt: c.totalDebt + debtIncurred, totalSpent: c.totalSpent + totalDue } : c);
+        }
+
+        const updatedInvoice: Invoice = {
+          ...oldInvoice,
+          customerId: draftCustomerId || undefined,
+          items: draftItems,
+          subtotal: draftSubtotal,
+          tax: draftTax,
+          total: totalDue,
+          paidAmount: paidAmount,
+          profit: profit,
+          status: finalStatus
+        };
+
+        updateState('products', stockRestore);
+        updateState('customers', updatedCustomers);
+        updateState('invoices', state.invoices.map(i => i.id === editingInvoiceId ? updatedInvoice : i));
       }
+    } else {
+      // Logic for new invoice creation
+      const newId = (state.invoices.reduce((max, i) => Math.max(max, parseInt(i.id) || 0), 0) + 1).toString();
+      const invoice: Invoice = {
+        id: newId, date: new Date().toISOString(), customerId: draftCustomerId || undefined, items: draftItems,
+        subtotal: draftSubtotal, tax: draftTax, discount: 0, total: totalDue, paidAmount: paidAmount, profit: profit,
+        status: finalStatus, paymentMethod: 'cash', pointsEarned: Math.floor(totalDue * state.settings.loyaltySettings.pointsPerUnit)
+      };
+
+      const updatedProducts = state.products.map((p: Product) => {
+        const lineItem = draftItems.find(it => it.id === p.id);
+        return lineItem ? { ...p, stock: p.stock - lineItem.quantity } : p;
+      });
+
+      if (draftCustomerId) {
+        updateState('customers', state.customers.map((c: Customer) => c.id === draftCustomerId ? { 
+          ...c, totalSpent: (Number(c.totalSpent) || 0) + totalDue, totalDebt: (Number(c.totalDebt) || 0) + debtIncurred,
+          transactionCount: (c.transactionCount || 0) + 1, lastVisit: new Date().toISOString()
+        } : c));
+        if (debtIncurred > 0) {
+          updateState('loanTransactions', [...state.loanTransactions, {
+            id: Math.random().toString(36).substr(2, 9), customerId: draftCustomerId, invoiceId: newId,
+            date: new Date().toISOString(), amount: debtIncurred, type: 'debt', note: `Manual Draft #${newId}`
+          }]);
+        }
+      }
+      updateState('products', updatedProducts);
+      updateState('invoices', [...state.invoices, invoice]);
     }
-    updateState('products', updatedProducts);
-    updateState('invoices', [...state.invoices, invoice]);
-    setIsCreating(false); setDraftItems([]); setDraftCustomerId('');
+
+    setIsCreating(false); setEditingInvoiceId(null); setDraftItems([]); setDraftCustomerId('');
   };
 
   const handleOpenReturn = (inv: Invoice) => {
@@ -241,7 +303,6 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     const holder = document.getElementById('print-holder');
     if (holder) { 
       holder.innerHTML = html; 
-      // Ensure app is ready to hide and print holder is visible
       setTimeout(() => {
         window.print();
         holder.innerHTML = ''; 
@@ -258,11 +319,10 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
       if (!container) return;
       
       container.innerHTML = html;
-      // Wait for font/image loading in high-resolution
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       const canvas = await html2canvas(container, { 
-        scale: 3, // High DPI for professional print look
+        scale: 3, 
         useCORS: true, 
         backgroundColor: '#ffffff',
         width: printLayoutMode === 'thermal' ? 272 : 794,
@@ -371,7 +431,16 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
       {isCreating && (
         <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
            <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-5xl h-[90vh] shadow-2xl flex flex-col border border-white/10 animate-in zoom-in-95">
-              <header className="p-8 border-b flex items-center justify-between"><div className="flex items-center gap-4"><div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><FileText size={24}/></div><div><h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Draft Invoice Builder</h3><p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Manual Ledger Entry</p></div></div><button onClick={() => setIsCreating(false)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-400 hover:text-rose-600 transition-all"><X size={24}/></button></header>
+              <header className="p-8 border-b flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><FileText size={24}/></div>
+                  <div>
+                    <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">{editingInvoiceId ? 'Rectify Historical Invoice' : 'Draft Invoice Builder'}</h3>
+                    <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">{editingInvoiceId ? `Modifying ID: #INV-${editingInvoiceId.padStart(4, '0')}` : 'Manual Ledger Entry'}</p>
+                  </div>
+                </div>
+                <button onClick={() => { setIsCreating(false); setEditingInvoiceId(null); setDraftItems([]); }} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-400 hover:text-rose-600 transition-all"><X size={24}/></button>
+              </header>
               <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
                  <div className="lg:w-[350px] border-r border-slate-100 dark:border-slate-800 p-8 space-y-8 overflow-y-auto custom-scrollbar">
                     <section className="space-y-4">
@@ -425,7 +494,18 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
                  </div>
                  <div className="flex-1 flex flex-col bg-slate-50/50 dark:bg-slate-950/20">
                     <div className="flex-1 overflow-y-auto p-8 custom-scrollbar"><table className="w-full text-left"><thead className="border-b"><tr><th className="pb-4 text-[10px] font-black text-slate-400 uppercase">Description</th><th className="pb-4 text-[10px] font-black text-slate-400 uppercase text-center">Qty</th><th className="pb-4 text-[10px] font-black text-slate-400 uppercase text-right">Sum</th><th className="pb-4"></th></tr></thead><tbody className="divide-y">{draftItems.map((it, idx) => (<tr key={idx}><td className="py-4 font-black text-xs uppercase dark:text-white">{it.name}</td><td className="py-4"><div className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 rounded-xl p-1 w-24 mx-auto border shadow-sm"><button onClick={() => setDraftItems(draftItems.map((item, i) => i === idx ? { ...item, quantity: Math.max(1, item.quantity - 1) } : item))}><MinusCircle size={14}/></button><span className="font-black text-xs dark:text-white">{it.quantity}</span><button onClick={() => setDraftItems(draftItems.map((item, i) => i === idx ? { ...item, quantity: item.quantity + 1 } : item))}><PlusCircle size={14}/></button></div></td><td className="py-4 text-right font-black text-xs dark:text-white">{state.settings.currency}{(it.price * it.quantity).toLocaleString()}</td><td className="py-4 text-right"><button onClick={() => setDraftItems(draftItems.filter((_, i) => i !== idx))} className="text-slate-300 hover:text-rose-500"><X size={16}/></button></td></tr>))}</tbody></table></div>
-                    <footer className="p-8 bg-white dark:bg-slate-900 border-t space-y-6"><div className="grid grid-cols-2 md:grid-cols-4 gap-6"><div><p className="text-[10px] font-black text-slate-400 uppercase mb-2 px-1">Settlement Mode</p><div className="grid grid-cols-3 gap-1 p-1 bg-slate-50 dark:bg-slate-800 rounded-xl">{['paid', 'partial', 'unpaid'].map(m => (<button key={m} onClick={() => setPaymentStatusMode(m as any)} className={`py-2 rounded-lg text-[8px] font-black uppercase transition-all ${paymentStatusMode === m ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>{m}</button>))}</div></div>{paymentStatusMode === 'partial' && (<div><p className="text-[10px] font-black text-slate-400 uppercase mb-2 px-1">Amount Paid</p><input type="number" value={draftPaidAmount} onChange={e => setDraftPaidAmount(Number(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl py-2 px-4 font-black text-xs dark:text-white" /></div>)}<div className="col-start-4 text-right"><p className="text-[10px] font-black text-indigo-600 uppercase mb-1">Authorization Total</p><h4 className="text-4xl font-black dark:text-white tracking-tighter">{state.settings.currency}{draftTotal.toLocaleString()}</h4></div></div><button onClick={handleAuthorizeInvoice} disabled={draftItems.length === 0} className="w-full py-5 bg-indigo-600 text-white rounded-[28px] font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-4"><CheckCircle2 size={24}/> Authorize Transaction</button></footer>
+                    <footer className="p-8 bg-white dark:bg-slate-900 border-t space-y-6">
+                      {editingInvoiceId && (
+                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-3">
+                           <AlertTriangle size={18} className="text-amber-600" />
+                           <p className="text-[10px] font-black text-amber-700 uppercase leading-tight">Safety Protocol: Updating this invoice will automatically reconcile inventory stock and client debt buffers.</p>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6"><div><p className="text-[10px] font-black text-slate-400 uppercase mb-2 px-1">Settlement Mode</p><div className="grid grid-cols-3 gap-1 p-1 bg-slate-50 dark:bg-slate-800 rounded-xl">{['paid', 'partial', 'unpaid'].map(m => (<button key={m} onClick={() => setPaymentStatusMode(m as any)} className={`py-2 rounded-lg text-[8px] font-black uppercase transition-all ${paymentStatusMode === m ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>{m}</button>))}</div></div>{paymentStatusMode === 'partial' && (<div><p className="text-[10px] font-black text-slate-400 uppercase mb-2 px-1">Amount Paid</p><input type="number" value={draftPaidAmount} onChange={e => setDraftPaidAmount(Number(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl py-2 px-4 font-black text-xs dark:text-white" /></div>)}<div className="col-start-4 text-right"><p className="text-[10px] font-black text-indigo-600 uppercase mb-1">Authorization Total</p><h4 className="text-4xl font-black dark:text-white tracking-tighter">{state.settings.currency}{draftTotal.toLocaleString()}</h4></div></div>
+                      <button onClick={handleAuthorizeInvoice} disabled={draftItems.length === 0} className="w-full py-5 bg-indigo-600 text-white rounded-[28px] font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-4">
+                        <CheckCircle2 size={24}/> {editingInvoiceId ? 'Commit Invoice Correction' : 'Authorize Transaction'}
+                      </button>
+                    </footer>
                  </div>
               </div>
            </div>
@@ -434,7 +514,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
 
       <div className="flex justify-between items-center"><div><h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">Invoices</h3><p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Registry history node</p></div><div className="flex gap-2"><button onClick={() => setIsCreating(true)} className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl flex items-center gap-2"><Plus size={18} /> Manual Invoice</button><button onClick={() => setCurrentView('terminal')} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-sm flex items-center gap-2 hover:bg-slate-200 transition-all"><History size={18} /> POS Terminal</button></div></div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[{ label: 'Revenue Pool', value: totals.total, icon: TrendingUp, color: 'text-indigo-600' },{ label: 'Net Profit', value: totals.profit, icon: FileCheck, color: 'text-emerald-500' },{ label: 'Receivables', value: totals.balance, icon: Scale, color: 'text-rose-500' },{ label: 'Archive Volume', value: filteredInvoices.length, icon: FileText, color: 'text-slate-600' }].map((stat, i) => (<div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border shadow-sm flex items-center gap-4 transition-all hover:shadow-lg"><div className={`${stat.color} p-3 rounded-2xl bg-slate-50 dark:bg-slate-800`}><stat.icon size={20}/></div><div className="min-w-0"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">{stat.label}</p><h4 className="text-lg font-black dark:text-white truncate">{i < 3 ? state.settings.currency : ''}{stat.value.toLocaleString()}</h4></div></div>))}</div>
-      <div className="bg-white dark:bg-slate-900 rounded-[40px] border shadow-sm overflow-hidden flex flex-col"><div className="p-4 border-b flex flex-col md:flex-row gap-4 items-center"><div className="relative flex-1 w-full"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="text" placeholder="Search invoices by ID or customer..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl py-2.5 pl-12 pr-4 text-sm font-bold dark:text-white outline-none" /></div><select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-2 text-xs font-black uppercase outline-none cursor-pointer dark:text-white"><option value="all">All Status</option><option value="paid">Paid</option><option value="partial">Partial</option><option value="unpaid">Unpaid</option><option value="returned">Returned</option><option value="voided">Voided</option></select></div><div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b"><tr><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Document ID</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer Entity</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Temporal Log</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Value</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th><th className="px-6 py-4 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{filteredInvoices.map((inv) => {const customer = state.customers.find(c => c.id === inv.customerId);return (<tr key={inv.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 group transition-all"><td className="px-6 py-4 font-black text-xs text-slate-500"><span className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-indigo-600">#INV-{inv.id.padStart(4, '0')}</span></td><td className="px-6 py-4 text-xs font-bold dark:text-slate-200">{customer?.name || 'Walk-in Account'}</td><td className="px-6 py-4 text-xs text-slate-400">{new Date(inv.date).toLocaleDateString()}</td><td className="px-6 py-4 font-black text-slate-900 dark:text-white text-right">{state.settings.currency}{inv.total.toLocaleString()}</td><td className="px-6 py-4 text-center">{getStatusBadge(inv.status)}</td><td className="px-6 py-4 text-right"><div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all"><button onClick={() => handleOpenReturn(inv)} className="p-2 text-slate-400 hover:text-amber-600 transition-all" title="Return Items"><RotateCcw size={18}/></button><button onClick={() => setPrintingInvoice(inv)} className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all" title="Document Control Center"><Maximize2 size={18}/></button><button onClick={() => setTrashConfirm(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-all"><Trash2 size={18}/></button></div></td></tr>);})}</tbody></table></div></div>
+      <div className="bg-white dark:bg-slate-900 rounded-[40px] border shadow-sm overflow-hidden flex flex-col"><div className="p-4 border-b flex flex-col md:flex-row gap-4 items-center"><div className="relative flex-1 w-full"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="text" placeholder="Search invoices by ID or customer..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl py-2.5 pl-12 pr-4 text-sm font-bold dark:text-white outline-none" /></div><select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-2 text-xs font-black uppercase outline-none cursor-pointer dark:text-white"><option value="all">All Status</option><option value="paid">Paid</option><option value="partial">Partial</option><option value="unpaid">Unpaid</option><option value="returned">Returned</option><option value="voided">Voided</option></select></div><div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b"><tr><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Document ID</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer Entity</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Temporal Log</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Value</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th><th className="px-6 py-4 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{filteredInvoices.map((inv) => {const customer = state.customers.find(c => c.id === inv.customerId);return (<tr key={inv.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 group transition-all"><td className="px-6 py-4 font-black text-xs text-slate-500"><span className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-indigo-600">#INV-{inv.id.padStart(4, '0')}</span></td><td className="px-6 py-4 text-xs font-bold dark:text-slate-200">{customer?.name || 'Walk-in Account'}</td><td className="px-6 py-4 text-xs text-slate-400">{new Date(inv.date).toLocaleDateString()}</td><td className="px-6 py-4 font-black text-slate-900 dark:text-white text-right">{state.settings.currency}{inv.total.toLocaleString()}</td><td className="px-6 py-4 text-center">{getStatusBadge(inv.status)}</td><td className="px-6 py-4 text-right"><div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all"><button onClick={() => handleOpenReturn(inv)} className="p-2 text-slate-400 hover:text-amber-600 transition-all" title="Return Items"><RotateCcw size={18}/></button><button onClick={() => handleOpenEditInvoice(inv)} className="p-2 text-slate-400 hover:text-indigo-600 transition-all" title="Edit Invoice Details"><Edit2 size={18}/></button><button onClick={() => setPrintingInvoice(inv)} className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all" title="Document Control Center"><Maximize2 size={18}/></button><button onClick={() => setTrashConfirm(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-all"><Trash2 size={18}/></button></div></td></tr>);})}</tbody></table></div></div>
     </div>
   );
 }
