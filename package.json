@@ -1,6 +1,6 @@
 {
   "name": "sarvari-seller-pro-pos",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,7 +15,7 @@
     "recharts": "^2.15.0",
     "@google/genai": "^0.21.0",
     "jsbarcode": "^3.11.6",
-    "jspdf": "^2.5.2",
+    "jspdf": "^2.5.1",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
     "qrcode": "^1.5.4"

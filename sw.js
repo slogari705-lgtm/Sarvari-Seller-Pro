@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sarvari-pos-v1.2.0';
+const CACHE_NAME = 'sarvari-pos-v1.2.5';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -35,10 +35,8 @@ self.addEventListener('activate', (event) => {
 
 // Fetch Event - Offline First Strategy
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
-  // For navigation requests, always try the network first but fallback to the shell
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => {
@@ -48,11 +46,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Standard asset handling: Cache falling back to network
   event.respondWith(
     caches.match(event.request).then((response) => {
       return response || fetch(event.request).then((networkResponse) => {
-        // Cache external assets (like Google Fonts or CDNs) dynamically
         if (event.request.url.startsWith('http')) {
           return caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, networkResponse.clone());
@@ -62,7 +58,6 @@ self.addEventListener('fetch', (event) => {
         return networkResponse;
       });
     }).catch(() => {
-        // If both fail (truly offline and not in cache)
         if (event.request.destination === 'image') {
             return new Response('<svg role="img" aria-labelledby="offline-title" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg"><title id="offline-title">Offline</title><rect width="100%" height="100%" fill="#eee" /><text x="50%" y="50%" font-family="sans-serif" font-size="20" fill="#999" text-anchor="middle">Image Offline</text></svg>', { headers: { 'Content-Type': 'image/svg+xml' } });
         }

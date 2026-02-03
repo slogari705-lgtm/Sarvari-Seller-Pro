@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
@@ -199,7 +198,6 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
 
     const isFullyReturned = updatedItems.every(it => (it.returnedQuantity || 0) >= it.quantity);
 
-    // Fix: Cast the object to Invoice to ensure status property matches literal union type
     updateState('invoices', state.invoices.map(inv => inv.id === returningInvoice.id ? ({
       ...inv,
       items: updatedItems,
@@ -238,21 +236,19 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     setTrashConfirm(null);
   };
 
-  // Improved handlePrint with robust holder management
   const handlePrint = (inv: Invoice, overrideLayout: PrintLayout = 'auto') => {
     const html = generatePrintHTML(state, inv, overrideLayout);
     const holder = document.getElementById('print-holder');
     if (holder) { 
       holder.innerHTML = html; 
-      // Small timeout ensures styles are applied before print dialog
+      // Ensure app is ready to hide and print holder is visible
       setTimeout(() => {
         window.print();
         holder.innerHTML = ''; 
-      }, 50);
+      }, 150);
     }
   };
 
-  // Improved handleDownloadPDF with better capture reliability
   const handleDownloadPDF = async (inv: Invoice) => {
     if (isDownloading) return;
     setIsDownloading(inv.id);
@@ -262,14 +258,14 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
       if (!container) return;
       
       container.innerHTML = html;
-      // Critical: Wait for layout stabilization
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Wait for font/image loading in high-resolution
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       const canvas = await html2canvas(container, { 
-        scale: 2.5, 
+        scale: 3, // High DPI for professional print look
         useCORS: true, 
         backgroundColor: '#ffffff',
-        width: printLayoutMode === 'thermal' ? 272 : 794, // Fixed widths for canvas
+        width: printLayoutMode === 'thermal' ? 272 : 794,
         windowWidth: printLayoutMode === 'thermal' ? 272 : 794
       });
       
@@ -287,7 +283,9 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Invoice_#${inv.id}.pdf`);
+      pdf.save(`Sarvari_Invoice_#${inv.id}.pdf`);
+    } catch (err) {
+      console.error("PDF Export Error:", err);
     } finally { 
       const container = document.getElementById('pdf-render-container');
       if (container) container.innerHTML = ''; 
@@ -309,7 +307,6 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       <ConfirmDialog isOpen={!!trashConfirm} onClose={() => setTrashConfirm(null)} onConfirm={() => trashConfirm && moveToTrash(trashConfirm)} title="Move to Trash?" message="This will void the invoice and return items to stock." confirmText="Confirm" type="warning" />
 
-      {/* Return Items Modal */}
       {returningInvoice && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-2xl shadow-2xl flex flex-col border border-white/10 animate-in zoom-in-95">
