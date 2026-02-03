@@ -230,11 +230,13 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
          <div className="flex gap-2">
             {activeTab === 'ledger' ? (
               <button onClick={() => setIsAddingExpense(true)} className="flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all">
+                {/* Fixed TypeScript error by using logExpense from translations */}
                 <Plus size={18} /> {t.logExpense}
               </button>
             ) : (
               <button onClick={() => setIsAddingWorker(true)} className="flex items-center gap-3 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-700 transition-all">
-                <UserPlus size={18} /> Add Staff Member
+                {/* Updated to use translated text for add staff button consistency */}
+                <UserPlus size={18} /> {t.addStaff}
               </button>
             )}
          </div>
@@ -301,7 +303,7 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
                                       <div className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black text-[10px]">{worker.name.charAt(0)}</div>
                                       <span className="text-[11px] font-black dark:text-white">{worker.name}</span>
                                    </div>
-                                ) : <span className="text-[10px] font-bold text-slate-300 italic">General Cost</span>}
+                                ) : <span className="text-[10px] font-bold text-slate-300 italic">General Shop Cost</span>}
                              </td>
                              <td className="px-8 py-5 text-right">
                                 <p className="text-lg font-black text-rose-600">{state.settings.currency}{e.amount.toLocaleString()}</p>

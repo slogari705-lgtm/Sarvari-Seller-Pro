@@ -10,9 +10,16 @@ import {
   Sun,
   Lock,
   User as UserIcon,
-  Smartphone,
   RotateCcw,
-  Layout
+  Layout,
+  Palette,
+  Wand2,
+  Package,
+  FileText,
+  Receipt,
+  BarChart3,
+  History,
+  Trash2
 } from 'lucide-react';
 import { AppState, View } from './types';
 import { translations } from './translations';
@@ -143,8 +150,12 @@ export default function App() {
 
   const navItems = [
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
-    { id: 'customers', label: t.customers, icon: Users },
     { id: 'terminal', label: t.terminal, icon: ShoppingCart },
+    { id: 'products', label: t.products, icon: Package },
+    { id: 'customers', label: t.customers, icon: Users },
+    { id: 'invoices', label: t.invoices, icon: FileText },
+    { id: 'expenses', label: t.expenses, icon: Receipt },
+    { id: 'reports', label: t.reports, icon: BarChart3 },
     { id: 'settings', label: t.settings, icon: SettingsIcon },
   ];
 
@@ -186,25 +197,20 @@ export default function App() {
             <button 
               key={item.id} 
               onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
-              className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
             >
-              <item.icon size={22} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
-              {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[14px] uppercase tracking-wider">{item.label}</span>}
+              <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
+              {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
             </button>
           ))}
           
           <div className="pt-4 mt-4 border-t border-slate-50 dark:border-slate-800">
-             <p className="px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-4">Workspace</p>
-             <button 
-               onClick={() => { setCurrentView('dashboard-costume'); setMobileMenuOpen(false); }} 
-               className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${currentView === 'dashboard-costume' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-slate-400 hover:text-indigo-500'}`}
-             >
-               <Layout size={18} />
-               {(sidebarOpen || mobileMenuOpen) && <span className="font-bold text-[12px] uppercase">Custom Layout</span>}
-             </button>
+             <p className="px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-4">Operations</p>
              {[
-               { id: 'loans', label: t.loan, icon: RotateCcw },
-               { id: 'trash', label: 'Recycle Bin', icon: Lock }
+               { id: 'loans', label: t.loan, icon: History },
+               { id: 'returns', label: t.returns, icon: RotateCcw },
+               { id: 'dashboard-costume', label: t.dashboardCostume, icon: Wand2 },
+               { id: 'trash', label: 'Recycle Bin', icon: Trash2 }
              ].map((item) => (
                <button 
                  key={item.id} 
@@ -234,7 +240,9 @@ export default function App() {
             </button>
             <div>
               <h2 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] mb-0.5">{state.settings.shopName}</h2>
-              <h3 className="text-lg font-black dark:text-white uppercase tracking-tighter">{currentView.replace('-', ' ')}</h3>
+              <h3 className="text-lg font-black dark:text-white uppercase tracking-tighter">
+                {currentView === 'dashboard-costume' ? t.dashboardCostume : currentView.replace('-', ' ')}
+              </h3>
             </div>
           </div>
 
@@ -259,6 +267,7 @@ export default function App() {
                 case 'settings': return <Settings state={state} updateState={updateState} />;
                 case 'products': return <Products state={state} updateState={updateState} />;
                 case 'invoices': return <Invoices state={state} updateState={updateState} setCurrentView={setCurrentView} />;
+                case 'expenses': return <Expenses state={state} updateState={updateState} />;
                 case 'reports': return <Reports state={state} />;
                 case 'loans': return <Loans state={state} updateState={updateState} setCurrentView={setCurrentView} />;
                 case 'dashboard-costume': return <DashboardCostume state={state} setCurrentView={setCurrentView} />;
