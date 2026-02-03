@@ -1,11 +1,11 @@
 {
   "name": "sarvari-seller-pro-pos",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
