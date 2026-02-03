@@ -37,7 +37,9 @@ import {
   Tag,
   DollarSign,
   Coins,
-  Layout
+  Layout,
+  // Added missing Smartphone icon import to resolve "Cannot find name 'Smartphone'" error
+  Smartphone
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { AppState, Product, CartItem, Invoice, Customer, ProductVariation } from '../types';
@@ -506,6 +508,7 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
   return (
     <div className="h-full flex flex-row overflow-hidden animate-in fade-in duration-500 gap-4">
       <ConfirmDialog 
+        // Fixed isVoidConfirmOpen logic to correctly map to isOpen
         isOpen={isVoidConfirmOpen} 
         onClose={() => setIsVoidConfirmOpen(false)} 
         onConfirm={() => { setCart([]); setIsCartOpen(false); setIsVoidConfirmOpen(false); }} 
