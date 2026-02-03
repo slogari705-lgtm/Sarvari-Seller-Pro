@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -81,6 +82,27 @@
         .dark #fallback-loader {
             background: #020617;
         }
+
+        /* CRITICAL PRINT LOGIC */
+        @media print {
+            #root {
+                display: none !important;
+            }
+            body {
+                position: static !important;
+                height: auto !important;
+                overflow: visible !important;
+                background: white !important;
+            }
+            #print-holder {
+                display: block !important;
+                width: 100% !important;
+                visibility: visible !important;
+            }
+        }
+        #print-holder {
+            display: none;
+        }
     </style>
 <script type="importmap">
 {
@@ -111,7 +133,7 @@
         </div>
     </div>
     <div id="print-holder"></div>
-    <div id="pdf-render-container" style="position: absolute; left: -9999px; top: -9999px; width: 210mm;"></div>
+    <div id="pdf-render-container" style="position: absolute; left: -10000px; top: 0; width: 210mm; background: white;"></div>
     
     <script>
       if ('serviceWorker' in navigator) {

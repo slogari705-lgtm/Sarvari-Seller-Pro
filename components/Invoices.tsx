@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
@@ -96,7 +97,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     result.sort((a, b) => {
       let comparison = 0;
       if (sortKey === 'id') comparison = Number(a.id) - Number(b.id);
-      else if (sortKey === 'date') comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+      else if (sortKey === 'date') comparison = new Date(a.date).getTime() - new Date(a.date).getTime();
       else if (sortKey === 'total') comparison = a.total - b.total;
       else if (sortKey === 'status') comparison = a.status.localeCompare(b.status);
       return sortOrder === 'asc' ? comparison : -comparison;
@@ -162,7 +163,6 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     setIsCreating(false); setDraftItems([]); setDraftCustomerId('');
   };
 
-  // Fix: Handle opening the return dialog for an invoice
   const handleOpenReturn = (inv: Invoice) => {
     setReturningInvoice(inv);
     const initialQtys: Record<string, number> = {};
@@ -173,7 +173,6 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     setReturnQtys(initialQtys);
   };
 
-  // Fix: Process the return transaction and update inventory/ledger
   const handleProcessReturn = () => {
     if (!returningInvoice) return;
     let refundAmount = 0;
@@ -200,13 +199,14 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
 
     const isFullyReturned = updatedItems.every(it => (it.returnedQuantity || 0) >= it.quantity);
 
-    updateState('invoices', state.invoices.map(inv => inv.id === returningInvoice.id ? {
+    // Fix: Cast the object to Invoice to ensure status property matches literal union type
+    updateState('invoices', state.invoices.map(inv => inv.id === returningInvoice.id ? ({
       ...inv,
       items: updatedItems,
       paidAmount: Math.max(0, inv.paidAmount - refundAmount),
-      status: isFullyReturned ? 'returned' : 'partial',
+      status: (isFullyReturned ? 'returned' : 'partial') as Invoice['status'],
       returnHistory: [...(inv.returnHistory || []), newReturnEntry]
-    } : inv));
+    } as Invoice) : inv));
 
     const updatedProducts = state.products.map(p => {
       const returns = returnedItemsList.filter(ri => ri.productId === p.id);
@@ -238,26 +238,54 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     setTrashConfirm(null);
   };
 
-  const handlePrint = async (inv: Invoice, overrideLayout: PrintLayout = 'auto') => {
+  // Improved handlePrint with robust holder management
+  const handlePrint = (inv: Invoice, overrideLayout: PrintLayout = 'auto') => {
     const html = generatePrintHTML(state, inv, overrideLayout);
     const holder = document.getElementById('print-holder');
-    if (holder) { holder.innerHTML = html; window.print(); holder.innerHTML = ''; }
+    if (holder) { 
+      holder.innerHTML = html; 
+      // Small timeout ensures styles are applied before print dialog
+      setTimeout(() => {
+        window.print();
+        holder.innerHTML = ''; 
+      }, 50);
+    }
   };
 
+  // Improved handleDownloadPDF with better capture reliability
   const handleDownloadPDF = async (inv: Invoice) => {
     if (isDownloading) return;
     setIsDownloading(inv.id);
     try {
-      const html = generatePrintHTML(state, inv, printLayoutMode === 'auto' ? 'a4' : printLayoutMode);
+      const html = generatePrintHTML(state, inv, printLayoutMode === 'thermal' ? 'thermal' : 'a4');
       const container = document.getElementById('pdf-render-container');
       if (!container) return;
+      
       container.innerHTML = html;
+      // Critical: Wait for layout stabilization
       await new Promise(resolve => setTimeout(resolve, 800));
-      const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      
+      const canvas = await html2canvas(container, { 
+        scale: 2.5, 
+        useCORS: true, 
+        backgroundColor: '#ffffff',
+        width: printLayoutMode === 'thermal' ? 272 : 794, // Fixed widths for canvas
+        windowWidth: printLayoutMode === 'thermal' ? 272 : 794
+      });
+      
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const orientation = printLayoutMode === 'thermal' ? 'p' : 'p';
+      const format = printLayoutMode === 'thermal' ? [72, 150] : 'a4';
+      
+      const pdf = new jsPDF({ 
+        orientation: orientation as any, 
+        unit: 'mm', 
+        format: format as any 
+      });
+      
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`Invoice_#${inv.id}.pdf`);
     } finally { 
@@ -352,7 +380,6 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
                     <section className="space-y-4">
                        <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2"><User size={14}/> Client Assignment</label>
                        
-                       {/* IMPROVED SEARCHABLE SELECTION IN BUILDER */}
                        <div className="relative">
                           {selectedDraftCustomer ? (
                              <div className="p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl border border-indigo-200 flex items-center justify-between animate-in zoom-in-95 duration-200">
@@ -408,7 +435,6 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
         </div>
       )}
 
-      {/* Main Registry View (Unchanged) */}
       <div className="flex justify-between items-center"><div><h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">Invoices</h3><p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Registry history node</p></div><div className="flex gap-2"><button onClick={() => setIsCreating(true)} className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl flex items-center gap-2"><Plus size={18} /> Manual Invoice</button><button onClick={() => setCurrentView('terminal')} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-sm flex items-center gap-2 hover:bg-slate-200 transition-all"><History size={18} /> POS Terminal</button></div></div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[{ label: 'Revenue Pool', value: totals.total, icon: TrendingUp, color: 'text-indigo-600' },{ label: 'Net Profit', value: totals.profit, icon: FileCheck, color: 'text-emerald-500' },{ label: 'Receivables', value: totals.balance, icon: Scale, color: 'text-rose-500' },{ label: 'Archive Volume', value: filteredInvoices.length, icon: FileText, color: 'text-slate-600' }].map((stat, i) => (<div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border shadow-sm flex items-center gap-4 transition-all hover:shadow-lg"><div className={`${stat.color} p-3 rounded-2xl bg-slate-50 dark:bg-slate-800`}><stat.icon size={20}/></div><div className="min-w-0"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">{stat.label}</p><h4 className="text-lg font-black dark:text-white truncate">{i < 3 ? state.settings.currency : ''}{stat.value.toLocaleString()}</h4></div></div>))}</div>
       <div className="bg-white dark:bg-slate-900 rounded-[40px] border shadow-sm overflow-hidden flex flex-col"><div className="p-4 border-b flex flex-col md:flex-row gap-4 items-center"><div className="relative flex-1 w-full"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="text" placeholder="Search invoices by ID or customer..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl py-2.5 pl-12 pr-4 text-sm font-bold dark:text-white outline-none" /></div><select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-2 text-xs font-black uppercase outline-none cursor-pointer dark:text-white"><option value="all">All Status</option><option value="paid">Paid</option><option value="partial">Partial</option><option value="unpaid">Unpaid</option><option value="returned">Returned</option><option value="voided">Voided</option></select></div><div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b"><tr><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Document ID</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer Entity</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Temporal Log</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Value</th><th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th><th className="px-6 py-4 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{filteredInvoices.map((inv) => {const customer = state.customers.find(c => c.id === inv.customerId);return (<tr key={inv.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 group transition-all"><td className="px-6 py-4 font-black text-xs text-slate-500"><span className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-indigo-600">#INV-{inv.id.padStart(4, '0')}</span></td><td className="px-6 py-4 text-xs font-bold dark:text-slate-200">{customer?.name || 'Walk-in Account'}</td><td className="px-6 py-4 text-xs text-slate-400">{new Date(inv.date).toLocaleDateString()}</td><td className="px-6 py-4 font-black text-slate-900 dark:text-white text-right">{state.settings.currency}{inv.total.toLocaleString()}</td><td className="px-6 py-4 text-center">{getStatusBadge(inv.status)}</td><td className="px-6 py-4 text-right"><div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all"><button onClick={() => handleOpenReturn(inv)} className="p-2 text-slate-400 hover:text-amber-600 transition-all" title="Return Items"><RotateCcw size={18}/></button><button onClick={() => setPrintingInvoice(inv)} className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all" title="Document Control Center"><Maximize2 size={18}/></button><button onClick={() => setTrashConfirm(inv.id)} className="p-2 text-slate-300 hover:text-rose-600 transition-all"><Trash2 size={18}/></button></div></td></tr>);})}</tbody></table></div></div>
