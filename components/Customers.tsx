@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef } from 'react';
 import { 
   Users as UsersIcon, 
@@ -29,9 +28,18 @@ import {
   Smartphone,
   MapPin,
   Camera,
-  Briefcase
+  Briefcase,
+  History,
+  FileText,
+  TrendingUp,
+  Receipt,
+  Wallet,
+  ArrowDownRight,
+  ChevronRight,
+  Calculator,
+  Calendar
 } from 'lucide-react';
-import { AppState, Customer, View } from '../types';
+import { AppState, Customer, View, Invoice, LoanTransaction } from '../types';
 import { translations } from '../translations';
 import ConfirmDialog from './ConfirmDialog';
 import { jsPDF } from 'jspdf';
@@ -45,6 +53,7 @@ interface Props {
 
 type SortKey = 'name' | 'id' | 'spent' | 'debt';
 type SortOrder = 'asc' | 'desc';
+type ProfileTab = 'overview' | 'transactions' | 'loans';
 
 const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,22 +66,14 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   const [sortKey, setSortKey] = useState<SortKey>('spent');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [isExportingCard, setIsExportingCard] = useState(false);
+  const [activeProfileTab, setActiveProfileTab] = useState<ProfileTab>('overview');
   
+  // Quick Repayment State
+  const [isSettlingDebt, setIsSettlingDebt] = useState(false);
+  const [settlementAmount, setSettlementAmount] = useState<number | ''>('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [form, setForm] = useState<Partial<Customer>>({ 
-    name: '', phone: '', email: '', address: '', company: '', notes: '', photo: '',
-    gender: 'Male', occupation: ''
-  });
-
   const t = translations[state.settings.language || 'en'];
-
-  const getTier = (spent: number) => {
-    if (spent >= 5000) return { label: 'Platinum', color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-900/20', icon: Crown };
-    if (spent >= 2500) return { label: 'Gold', color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: Crown };
-    if (spent >= 1000) return { label: 'Silver', color: 'text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800/50', icon: Award };
-    return { label: 'Bronze', color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20', icon: Award };
-  };
 
   const activeCustomers = useMemo(() => state.customers.filter(c => !c.isDeleted), [state.customers]);
 
@@ -100,6 +101,13 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     return result;
   }, [activeCustomers, searchTerm, filterDebt, sortKey, sortOrder]);
 
+  const getTier = (spent: number) => {
+    if (spent >= 5000) return { label: 'Platinum', color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-900/20', icon: Crown };
+    if (spent >= 2500) return { label: 'Gold', color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: Crown };
+    if (spent >= 1000) return { label: 'Silver', color: 'text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800/50', icon: Award };
+    return { label: 'Bronze', color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20', icon: Award };
+  };
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -109,33 +117,21 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     }
   };
 
-  const handleSaveCustomer = () => {
-    if (!form.name || !form.phone) {
-      alert("Name and Phone are mandatory.");
-      return;
-    }
+  const [form, setForm] = useState<Partial<Customer>>({ 
+    name: '', phone: '', email: '', address: '', company: '', notes: '', photo: '',
+    gender: 'Male', occupation: ''
+  });
 
+  const handleSaveCustomer = () => {
+    if (!form.name || !form.phone) return alert("Required: Name & Phone");
     if (editingCustomer) {
       updateState('customers', state.customers.map(c => c.id === editingCustomer.id ? { ...c, ...form } as Customer : c));
     } else {
       const nextId = (state.customers.reduce((max, c) => Math.max(max, parseInt(c.id) || 0), 0) + 1).toString();
       const customer: Customer = { 
-        id: nextId, 
-        name: form.name || '', 
-        email: form.email || '', 
-        phone: form.phone || '', 
-        address: form.address || '', 
-        photo: form.photo || '',
-        totalSpent: 0, 
-        totalDebt: 0, 
-        lastVisit: 'New Member', 
-        joinedDate: new Date().toISOString(),
-        transactionCount: 0, 
-        loyaltyPoints: 0,
-        notes: form.notes || '', 
-        company: form.company || '', 
-        isArchived: false, 
-        isDeleted: false,
+        id: nextId, name: form.name || '', email: form.email || '', phone: form.phone || '', address: form.address || '', photo: form.photo || '',
+        totalSpent: 0, totalDebt: 0, lastVisit: 'New Member', joinedDate: new Date().toISOString(), transactionCount: 0, loyaltyPoints: 0,
+        notes: form.notes || '', company: form.company || '', isArchived: false, isDeleted: false,
       };
       updateState('customers', [...state.customers, customer]);
     }
@@ -146,6 +142,48 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     setIsAdding(false); 
     setEditingCustomer(null); 
     setForm({ name: '', phone: '', email: '', address: '', company: '', notes: '', photo: '' });
+  };
+
+  // Quick Debt Settlement
+  const handleQuickRepay = () => {
+    if (!viewingCustomer || !settlementAmount || Number(settlementAmount) <= 0) return;
+    const amount = Number(settlementAmount);
+    
+    // Create loan transaction
+    const newTrans: LoanTransaction = {
+      id: Math.random().toString(36).substr(2, 9),
+      customerId: viewingCustomer.id,
+      date: new Date().toISOString(),
+      amount: amount,
+      type: 'repayment',
+      note: "Quick settlement from profile view"
+    };
+
+    // Auto-settle invoices (oldest first)
+    let remaining = amount;
+    const updatedInvoices = state.invoices.map((inv: Invoice) => {
+      if (inv.customerId === viewingCustomer.id && inv.status !== 'paid' && !inv.isVoided) {
+        const balance = inv.total - inv.paidAmount;
+        const toPay = Math.min(remaining, balance);
+        remaining -= toPay;
+        const newPaid = inv.paidAmount + toPay;
+        return { ...inv, paidAmount: newPaid, status: newPaid >= inv.total ? 'paid' : 'partial' } as Invoice;
+      }
+      return inv;
+    });
+
+    const updatedCustomers = state.customers.map(c => 
+      c.id === viewingCustomer.id ? { ...c, totalDebt: Math.max(0, c.totalDebt - amount) } : c
+    );
+
+    updateState('invoices', updatedInvoices);
+    updateState('customers', updatedCustomers);
+    updateState('loanTransactions', [...state.loanTransactions, newTrans]);
+    
+    // Refresh viewing customer in state
+    setViewingCustomer(updatedCustomers.find(c => c.id === viewingCustomer.id) || null);
+    setIsSettlingDebt(false);
+    setSettlementAmount('');
   };
 
   const toggleSort = (key: SortKey) => {
@@ -172,22 +210,6 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     }
   };
 
-  const handlePrintCard = () => {
-    const element = document.getElementById('member-card-render');
-    const holder = document.getElementById('print-holder');
-    if (!element || !holder) return;
-
-    const clone = element.cloneNode(true) as HTMLElement;
-    clone.style.margin = '20mm auto';
-    clone.style.boxShadow = 'none';
-    clone.style.transform = 'none';
-    
-    holder.innerHTML = '';
-    holder.appendChild(clone);
-    window.print();
-    holder.innerHTML = '';
-  };
-
   const getPatternStyle = (p: string): string => {
     switch(p) {
       case 'mesh': return 'radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px)';
@@ -211,12 +233,43 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
         message="This customer record will be moved to the Trash bin." 
       />
 
+      {/* Settlement Modal */}
+      {isSettlingDebt && viewingCustomer && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+           <div className="bg-white dark:bg-slate-900 rounded-[48px] w-full max-w-md shadow-2xl p-10 border border-white/10 animate-in zoom-in-95">
+              <div className="flex flex-col items-center text-center space-y-6">
+                 <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-[32px] flex items-center justify-center shadow-lg"><Wallet size={36}/></div>
+                 <div><h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">Settle Debt</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Payment for {viewingCustomer.name}</p></div>
+                 <div className="w-full p-6 bg-rose-50 dark:bg-rose-900/10 rounded-[32px] border border-rose-100 dark:border-rose-900/30">
+                    <p className="text-[10px] font-black text-rose-500 uppercase mb-1">Total Outstanding</p>
+                    <p className="text-4xl font-black text-rose-600">{state.settings.currency}{viewingCustomer.totalDebt.toLocaleString()}</p>
+                 </div>
+                 <div className="w-full space-y-2">
+                    <label className="block text-[11px] font-black text-slate-400 uppercase text-left ml-4">Repayment Amount</label>
+                    <input 
+                      type="number" 
+                      value={settlementAmount} 
+                      onChange={e => setSettlementAmount(e.target.value === '' ? '' : Number(e.target.value))} 
+                      className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-emerald-500 rounded-[28px] py-5 px-8 font-black text-3xl text-center dark:text-white outline-none" 
+                      placeholder="0.00" 
+                      autoFocus 
+                    />
+                 </div>
+                 <div className="flex gap-3 w-full">
+                    <button onClick={() => setIsSettlingDebt(false)} className="flex-1 py-5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-[24px] font-black text-[10px] uppercase">Abort</button>
+                    <button onClick={handleQuickRepay} disabled={!settlementAmount} className="flex-[2] py-5 bg-emerald-600 text-white rounded-[24px] font-black text-[10px] uppercase shadow-lg active:scale-95 disabled:opacity-50">Confirm Payment</button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* Header Actions */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-6">
            <div className="w-16 h-16 bg-indigo-600 text-white rounded-[28px] flex items-center justify-center shadow-2xl shadow-indigo-100 dark:shadow-none"><UsersIcon size={32}/></div>
            <div>
-              <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">Customer Registry</h3>
+              <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">Customer CRM</h3>
               <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Authorized database managing {activeCustomers.length} identities</p>
            </div>
         </div>
@@ -225,12 +278,11 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
               <Scale size={16}/> Debtors Only
            </button>
            <button onClick={() => setIsAdding(true)} className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center gap-2 active:scale-95 transition-all">
-              <UserPlus size={18}/> New Profile
+              <UserPlus size={18}/> New Identity
            </button>
         </div>
       </div>
 
-      {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
          <div className="lg:col-span-8 space-y-4">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border shadow-sm">
@@ -246,7 +298,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                      <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b">
                         <tr>
                            <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer" onClick={() => toggleSort('name')}>Identity <ArrowUpDown size={10} className="inline ml-1"/></th>
-                           <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center cursor-pointer" onClick={() => toggleSort('spent')}>Total Spent <ArrowUpDown size={10} className="inline ml-1"/></th>
+                           <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center cursor-pointer" onClick={() => toggleSort('spent')}>Investment <ArrowUpDown size={10} className="inline ml-1"/></th>
                            <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right cursor-pointer" onClick={() => toggleSort('debt')}>Liability <ArrowUpDown size={10} className="inline ml-1"/></th>
                            <th className="px-8 py-5"></th>
                         </tr>
@@ -255,7 +307,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                         {filteredCustomers.map((c) => {
                            const tier = getTier(c.totalSpent);
                            return (
-                             <tr key={c.id} onClick={() => setViewingCustomer(c)} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all group cursor-pointer">
+                             <tr key={c.id} onClick={() => { setViewingCustomer(c); setActiveProfileTab('overview'); }} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all group cursor-pointer">
                                 <td className="px-8 py-4">
                                    <div className="flex items-center gap-4">
                                       <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center font-black text-xl text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all overflow-hidden border">
@@ -286,76 +338,136 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                         })}
                      </tbody>
                   </table>
-                  {filteredCustomers.length === 0 && (
-                     <div className="py-24 text-center flex flex-col items-center gap-4 opacity-20">
-                        <UsersIcon size={64}/>
-                        <p className="font-black text-[10px] uppercase tracking-widest">No matching identities found</p>
-                     </div>
-                  )}
                </div>
             </div>
          </div>
 
-         {/* Profile Detail Sidebar */}
+         {/* Enhanced Profile Detail Sidebar */}
          <div className="lg:col-span-4">
             {viewingCustomer ? (
-               <div className="bg-white dark:bg-slate-900 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden animate-in slide-in-from-right duration-300 flex flex-col min-h-[700px] sticky top-8">
-                  <div className="h-28 bg-indigo-600 relative overflow-hidden">
+               <div className="bg-white dark:bg-slate-900 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden animate-in slide-in-from-right duration-300 flex flex-col h-[800px] sticky top-8">
+                  <div className="h-32 bg-indigo-600 relative overflow-hidden shrink-0">
                      <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
                   </div>
-                  <header className="px-10 pb-6 text-center -mt-14 relative z-10">
-                     <div className="w-28 h-28 bg-white dark:bg-slate-800 rounded-[40px] flex items-center justify-center mx-auto shadow-2xl overflow-hidden border-4 border-white dark:border-slate-800">
-                        {viewingCustomer.photo ? <img src={viewingCustomer.photo} className="w-full h-full object-cover" /> : <User size={56} className="text-slate-200" />}
+                  <header className="px-10 pb-6 text-center -mt-16 relative z-10 shrink-0">
+                     <div className="w-32 h-32 bg-white dark:bg-slate-800 rounded-[40px] flex items-center justify-center mx-auto shadow-2xl overflow-hidden border-4 border-white dark:border-slate-800">
+                        {viewingCustomer.photo ? <img src={viewingCustomer.photo} className="w-full h-full object-cover" /> : <User size={64} className="text-slate-200" />}
                      </div>
-                     <h4 className="text-2xl font-black dark:text-white uppercase tracking-tighter mt-6">{viewingCustomer.name}</h4>
-                     <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] mt-2">MEMBER ID: #REG-{viewingCustomer.id.padStart(4, '0')}</p>
+                     <h4 className="text-2xl font-black dark:text-white uppercase tracking-tighter mt-6 leading-none">{viewingCustomer.name}</h4>
+                     <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] mt-3">ID: #REG-{viewingCustomer.id.padStart(4, '0')}</p>
                   </header>
 
-                  <div className="flex-1 p-10 space-y-8 overflow-y-auto custom-scrollbar">
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-slate-50 dark:bg-slate-950 p-6 rounded-[32px] text-center border">
-                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Spent</p>
-                           <h5 className="text-xl font-black dark:text-white">{state.settings.currency}{viewingCustomer.totalSpent.toLocaleString()}</h5>
-                        </div>
-                        <div className="bg-rose-50 dark:bg-rose-950/20 p-6 rounded-[32px] text-center border border-rose-100">
-                           <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Liabilty Pool</p>
-                           <h5 className="text-xl font-black text-rose-600">{state.settings.currency}{viewingCustomer.totalDebt.toLocaleString()}</h5>
-                        </div>
-                     </div>
-
-                     <button onClick={() => setViewingCard(viewingCustomer)} className="w-full py-5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-[32px] border-2 border-indigo-100 dark:border-indigo-800 flex items-center justify-center gap-3 font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all group">
-                        <CreditCard size={18}/> View Digital ID <Maximize2 size={12} className="opacity-0 group-hover:opacity-100"/>
-                     </button>
-
-                     <section className="space-y-4">
-                        <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-3">Operational Meta</h6>
-                        <div className="space-y-4">
-                           <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><Phone size={18}/></div>
-                              <div><p className="text-[8px] font-black text-slate-400 uppercase">Primary Node</p><span className="text-[13px] font-bold dark:text-slate-200">{viewingCustomer.phone}</span></div>
-                           </div>
-                           {viewingCustomer.address && (
-                              <div className="flex items-center gap-4">
-                                 <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><MapPin size={18}/></div>
-                                 <div className="min-w-0 flex-1"><p className="text-[8px] font-black text-slate-400 uppercase">Geographic Node</p><span className="text-[13px] font-bold dark:text-slate-200 truncate block">{viewingCustomer.address}</span></div>
-                              </div>
-                           )}
-                        </div>
-                     </section>
+                  {/* Tabs */}
+                  <div className="px-10 flex gap-6 border-b dark:border-slate-800 shrink-0">
+                     {[
+                       { id: 'overview', label: 'Meta', icon: User },
+                       { id: 'transactions', label: 'History', icon: Receipt },
+                       { id: 'loans', label: 'Loans', icon: Calculator }
+                     ].map(tab => (
+                       <button 
+                        key={tab.id} 
+                        onClick={() => setActiveProfileTab(tab.id as any)}
+                        className={`pb-4 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border-b-2 transition-all ${activeProfileTab === tab.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                       >
+                          <tab.icon size={14}/> {tab.label}
+                       </button>
+                     ))}
                   </div>
 
-                  <footer className="p-8 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 grid grid-cols-3 gap-3">
+                  <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
+                     {activeProfileTab === 'overview' && (
+                       <div className="space-y-8 animate-in fade-in">
+                          <div className="grid grid-cols-2 gap-4">
+                             <div className="bg-slate-50 dark:bg-slate-950 p-6 rounded-[32px] border">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Aggregate Sales</p>
+                                <h5 className="text-xl font-black dark:text-white">{state.settings.currency}{viewingCustomer.totalSpent.toLocaleString()}</h5>
+                             </div>
+                             <div className="bg-rose-50 dark:bg-rose-950/20 p-6 rounded-[32px] border border-rose-100">
+                                <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Exposure</p>
+                                <h5 className="text-xl font-black text-rose-600">{state.settings.currency}{viewingCustomer.totalDebt.toLocaleString()}</h5>
+                             </div>
+                          </div>
+
+                          {viewingCustomer.totalDebt > 0 && (
+                            <button onClick={() => setIsSettlingDebt(true)} className="w-full py-5 bg-emerald-600 text-white rounded-[28px] shadow-xl shadow-emerald-200 dark:shadow-none font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all">
+                               <CheckCircle2 size={18}/> Authorize Repayment
+                            </button>
+                          )}
+
+                          <button onClick={() => setViewingCard(viewingCustomer)} className="w-full py-5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-[28px] border-2 border-indigo-100 dark:border-indigo-800 flex items-center justify-center gap-3 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">
+                             <IdCard size={18}/> Digital Identity Badge
+                          </button>
+
+                          <section className="space-y-4">
+                             <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-3">Technical Data</h6>
+                             <div className="space-y-4">
+                                <div className="flex items-center gap-4"><div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><Phone size={18}/></div><div><p className="text-[8px] font-black text-slate-400 uppercase">Telecom</p><span className="text-[13px] font-bold dark:text-slate-200">{viewingCustomer.phone}</span></div></div>
+                                {viewingCustomer.address && (<div className="flex items-center gap-4"><div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><MapPin size={18}/></div><div className="min-w-0 flex-1"><p className="text-[8px] font-black text-slate-400 uppercase">Geographic Node</p><span className="text-[13px] font-bold dark:text-slate-200 truncate block">{viewingCustomer.address}</span></div></div>)}
+                                <div className="flex items-center gap-4"><div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><Calendar size={18}/></div><div><p className="text-[8px] font-black text-slate-400 uppercase">Enrollment Date</p><span className="text-[13px] font-bold dark:text-slate-200">{new Date(viewingCustomer.joinedDate).toLocaleDateString()}</span></div></div>
+                             </div>
+                          </section>
+                       </div>
+                     )}
+
+                     {activeProfileTab === 'transactions' && (
+                       <div className="space-y-4 animate-in slide-in-from-right duration-300">
+                          <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><History size={14}/> Registry Logs</h6>
+                          {state.invoices.filter(inv => inv.customerId === viewingCustomer.id).length > 0 ? (
+                            state.invoices.filter(inv => inv.customerId === viewingCustomer.id).map(inv => (
+                               <div key={inv.id} className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border flex items-center justify-between group hover:border-indigo-200 transition-all">
+                                  <div>
+                                     <p className="text-[10px] font-black text-indigo-600 uppercase">#INV-{inv.id.padStart(4, '0')}</p>
+                                     <p className="text-[11px] font-bold dark:text-slate-200 mt-1">{new Date(inv.date).toLocaleDateString()}</p>
+                                  </div>
+                                  <div className="text-right">
+                                     <p className="font-black text-sm dark:text-white">{state.settings.currency}{inv.total.toLocaleString()}</p>
+                                     <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{inv.status}</span>
+                                  </div>
+                               </div>
+                            ))
+                          ) : (
+                            <div className="py-20 text-center opacity-20"><Receipt size={48} className="mx-auto mb-2"/><p className="text-[10px] font-black uppercase">No Sales Logged</p></div>
+                          )}
+                       </div>
+                     )}
+
+                     {activeProfileTab === 'loans' && (
+                       <div className="space-y-4 animate-in slide-in-from-right duration-300">
+                          <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><TrendingUp size={14}/> Loan ledger</h6>
+                          {state.loanTransactions.filter(l => l.customerId === viewingCustomer.id).length > 0 ? (
+                            state.loanTransactions.filter(l => l.customerId === viewingCustomer.id).map(l => (
+                               <div key={l.id} className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border flex items-center gap-4">
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${l.type === 'debt' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                     {l.type === 'debt' ? <ArrowUpDown size={18}/> : <ArrowDownRight size={18}/>}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                     <div className="flex justify-between items-start">
+                                        <p className="font-black text-xs uppercase dark:text-white truncate">{l.type === 'debt' ? 'Liability Incurred' : 'Repayment Entry'}</p>
+                                        <p className={`font-black text-sm ${l.type === 'debt' ? 'text-rose-600' : 'text-emerald-600'}`}>{l.type === 'debt' ? '+' : '-'}{state.settings.currency}{l.amount.toLocaleString()}</p>
+                                     </div>
+                                     <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{new Date(l.date).toLocaleDateString()} • {l.note || 'Registry Entry'}</p>
+                                  </div>
+                               </div>
+                            ))
+                          ) : (
+                            <div className="py-20 text-center opacity-20"><Calculator size={48} className="mx-auto mb-2"/><p className="text-[10px] font-black uppercase">Balance Static</p></div>
+                          )}
+                       </div>
+                     )}
+                  </div>
+
+                  <footer className="p-8 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 grid grid-cols-3 gap-3 shrink-0">
                      <button onClick={() => { setEditingCustomer(viewingCustomer); setForm(viewingCustomer); setIsAdding(true); }} className="p-4 bg-white dark:bg-slate-800 text-slate-500 rounded-3xl border shadow-sm hover:text-indigo-600 transition-all flex items-center justify-center"><Edit size={20}/></button>
                      <button onClick={() => setTrashConfirm(viewingCustomer.id)} className="p-4 bg-white dark:bg-slate-800 text-slate-500 rounded-3xl border shadow-sm hover:text-rose-600 transition-all flex items-center justify-center"><Trash2 size={20}/></button>
                      <button onClick={() => setViewingCustomer(null)} className="p-4 bg-slate-900 text-white dark:bg-white dark:text-slate-900 rounded-3xl shadow-xl transition-all flex items-center justify-center"><X size={20}/></button>
                   </footer>
                </div>
             ) : (
-               <div className="bg-indigo-600 rounded-[56px] p-16 text-white shadow-2xl flex flex-col items-center justify-center text-center space-y-8 min-h-[700px] relative overflow-hidden group border-8 border-white/10">
+               <div className="bg-indigo-600 rounded-[56px] p-16 text-white shadow-2xl flex flex-col items-center justify-center text-center space-y-8 h-[800px] relative overflow-hidden group border-8 border-white/10 sticky top-8">
                   <div className="w-28 h-28 bg-white/20 rounded-[40px] flex items-center justify-center backdrop-blur-md shadow-inner animate-pulse border border-white/30"><UsersIcon size={56} /></div>
                   <div className="relative z-10">
-                     <h4 className="text-3xl font-black uppercase tracking-tighter">Target Identification</h4>
-                     <p className="text-[11px] font-bold opacity-70 uppercase tracking-[0.3em] mt-4 max-w-[240px] mx-auto leading-relaxed">Select a registry record to view detailed activity and metadata history</p>
+                     <h4 className="text-3xl font-black uppercase tracking-tighter">Target Selection</h4>
+                     <p className="text-[11px] font-bold opacity-70 uppercase tracking-[0.3em] mt-4 max-w-[240px] mx-auto leading-relaxed">Choose a profile from the ledger to view operational history and metadata</p>
                   </div>
                   <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-white/5 blur-[80px] rounded-full group-hover:scale-125 transition-transform duration-1000" />
                </div>
@@ -421,7 +533,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                                <div className="w-full h-full bg-slate-400/10 flex items-center justify-center">{viewingCard.name.charAt(0)}</div>
                              )}
                           </div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                              <h5 className="font-black text-2xl leading-none uppercase tracking-tight truncate max-w-[200px]">{viewingCard.name}</h5>
                              <p className="text-[10px] font-black opacity-60 mt-1.5 uppercase tracking-[0.2em]">{viewingCard.phone}</p>
                              {state.settings.cardDesign.showPoints && (
@@ -445,7 +557,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                  <button onClick={() => handleDownloadCard(viewingCard)} disabled={isExportingCard} className="flex-1 py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-3">
                     {isExportingCard ? <RefreshCw size={20} className="animate-spin" /> : <FileDown size={20}/>} Download Card
                  </button>
-                 <button onClick={handlePrintCard} className="flex-1 py-6 bg-white dark:bg-slate-800 text-slate-700 dark:text-white border-2 rounded-[32px] font-black text-xs uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-3">
+                 <button onClick={() => window.print()} className="flex-1 py-6 bg-white dark:bg-slate-800 text-slate-700 dark:text-white border-2 rounded-[32px] font-black text-xs uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-3">
                     <Printer size={20}/> Dispatch Print
                  </button>
                  <button onClick={() => setViewingCard(null)} className="flex-1 py-6 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-[32px] font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95">Dismiss</button>
@@ -475,7 +587,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                         <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-4">Portrait Source</label>
                         <div 
                           onClick={() => fileInputRef.current?.click()} 
-                          className="w-full aspect-square max-w-[280px] rounded-[48px] bg-slate-50 dark:bg-slate-950 border-4 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center cursor-pointer overflow-hidden group shadow-inner relative transition-all hover:border-indigo-400"
+                          className="w-full aspect-square max-w-[280px] rounded-[48px] bg-slate-50 dark:bg-slate-950 border-4 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center cursor-pointer overflow-hidden group shadow-inner relative transition-all hover:border-indigo-400"
                         >
                            {form.photo ? (
                              <img src={form.photo} className="w-full h-full object-cover p-2 rounded-[40px]" />
