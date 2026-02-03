@@ -987,7 +987,7 @@ const Settings: React.FC<Props> = ({ state, updateState }) => {
                              <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mt-6">
                                 <div>
                                    <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Software Cluster</p>
-                                   <p className="text-sm font-black text-indigo-400 uppercase">Sarvari POS v1.2.1</p>
+                                   <p className="text-sm font-black text-indigo-400 uppercase">Sarvari POS v1.2.2</p>
                                 </div>
                                 <div>
                                    <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Host Node</p>

@@ -406,9 +406,16 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                     <td className="px-8 py-6 text-right">
                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all" onClick={e => e.stopPropagation()}>
                           <button 
+                            onClick={() => handlePrintMemberCard(c)} 
+                            className="p-2 text-slate-400 hover:text-indigo-600 transition-all"
+                            title="Print ID Card"
+                          >
+                             <Printer size={20}/>
+                          </button>
+                          <button 
                             onClick={() => handleDownloadMemberCard(c)} 
                             className="p-2 text-slate-400 hover:text-indigo-600 transition-all"
-                            title="Export ID Card"
+                            title="Export ID PDF"
                           >
                              <IdCard size={20}/>
                           </button>
