@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef } from 'react';
 import { 
   Users as UsersIcon, 
@@ -9,11 +10,7 @@ import {
   Edit, 
   Scale,
   CheckCircle2,
-  DollarSign,
-  History,
   Award,
-  Calendar,
-  Wallet,
   Crown,
   UserPlus,
   Mail,
@@ -21,31 +18,20 @@ import {
   IdCard,
   User,
   ShieldCheck,
-  Save,
   Star,
   RefreshCw,
   ArrowUpDown,
-  Zap,
-  Clock,
-  Building2,
-  LayoutGrid,
   Printer,
   QrCode,
   ArrowRight,
-  PlusCircle,
-  Activity,
-  Download,
-  UserMinus,
-  MapPin,
-  Briefcase,
-  Smartphone,
-  Image as ImageIcon,
-  Camera,
   Maximize2,
-  ExternalLink,
-  CreditCard
+  CreditCard,
+  Smartphone,
+  MapPin,
+  Camera,
+  Briefcase
 } from 'lucide-react';
-import { AppState, Customer, View, CardDesign } from '../types';
+import { AppState, Customer, View } from '../types';
 import { translations } from '../translations';
 import ConfirmDialog from './ConfirmDialog';
 import { jsPDF } from 'jspdf';
@@ -124,7 +110,11 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   };
 
   const handleSaveCustomer = () => {
-    if (!form.name || !form.phone) return alert("Required: Name & Phone");
+    if (!form.name || !form.phone) {
+      alert("Name and Phone are mandatory.");
+      return;
+    }
+
     if (editingCustomer) {
       updateState('customers', state.customers.map(c => c.id === editingCustomer.id ? { ...c, ...form } as Customer : c));
     } else {
@@ -138,7 +128,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
         photo: form.photo || '',
         totalSpent: 0, 
         totalDebt: 0, 
-        lastVisit: 'Just Joined', 
+        lastVisit: 'New Member', 
         joinedDate: new Date().toISOString(),
         transactionCount: 0, 
         loyaltyPoints: 0,
@@ -176,7 +166,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
       pdf.addImage(imgData, 'PNG', 0, 0, 85, 55);
       pdf.save(`MEMBER_CARD_${customer.name.replace(/\s+/g, '_')}.pdf`);
     } catch (e) {
-      console.error("PDF Export failed:", e);
+      console.error("PDF Export Failed:", e);
     } finally {
       setIsExportingCard(false);
     }
@@ -226,7 +216,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
         <div className="flex items-center gap-6">
            <div className="w-16 h-16 bg-indigo-600 text-white rounded-[28px] flex items-center justify-center shadow-2xl shadow-indigo-100 dark:shadow-none"><UsersIcon size={32}/></div>
            <div>
-              <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">Client Registry</h3>
+              <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">Customer Registry</h3>
               <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Authorized database managing {activeCustomers.length} identities</p>
            </div>
         </div>
@@ -240,13 +230,13 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
         </div>
       </div>
 
-      {/* Main Layout */}
+      {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
          <div className="lg:col-span-8 space-y-4">
             <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border shadow-sm">
                <div className="relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input type="text" placeholder="Locate client by ID, Label or Telecom..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl py-3.5 pl-12 pr-6 outline-none font-bold text-sm dark:text-white" />
+                  <input type="text" placeholder="Locate client by ID, Name or Phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl py-3.5 pl-12 pr-6 outline-none font-bold text-sm dark:text-white" />
                </div>
             </div>
 
@@ -256,7 +246,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                      <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b">
                         <tr>
                            <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer" onClick={() => toggleSort('name')}>Identity <ArrowUpDown size={10} className="inline ml-1"/></th>
-                           <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center cursor-pointer" onClick={() => toggleSort('spent')}>Investment <ArrowUpDown size={10} className="inline ml-1"/></th>
+                           <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center cursor-pointer" onClick={() => toggleSort('spent')}>Total Spent <ArrowUpDown size={10} className="inline ml-1"/></th>
                            <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right cursor-pointer" onClick={() => toggleSort('debt')}>Liability <ArrowUpDown size={10} className="inline ml-1"/></th>
                            <th className="px-8 py-5"></th>
                         </tr>
@@ -272,7 +262,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                                          {c.photo ? <img src={c.photo} className="w-full h-full object-cover" /> : c.name.charAt(0)}
                                       </div>
                                       <div>
-                                         <p className="font-black text-sm dark:text-white uppercase tracking-tight truncate max-w-[150px]">{c.name}</p>
+                                         <p className="font-black text-sm dark:text-white uppercase truncate max-w-[150px]">{c.name}</p>
                                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{c.phone}</p>
                                       </div>
                                    </div>
@@ -286,7 +276,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                                 </td>
                                 <td className="px-8 py-4 text-right">
                                    <p className={`text-sm font-black ${c.totalDebt > 0 ? 'text-rose-600' : 'text-emerald-500'}`}>{state.settings.currency}{c.totalDebt.toLocaleString()}</p>
-                                   <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Liability Index</p>
+                                   <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Exposure Index</p>
                                 </td>
                                 <td className="px-8 py-4 text-right">
                                    <div className="p-2 text-slate-300 opacity-0 group-hover:opacity-100 transition-all"><ArrowRight size={20}/></div>
@@ -306,7 +296,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
             </div>
          </div>
 
-         {/* Selection Sidebar */}
+         {/* Profile Detail Sidebar */}
          <div className="lg:col-span-4">
             {viewingCustomer ? (
                <div className="bg-white dark:bg-slate-900 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden animate-in slide-in-from-right duration-300 flex flex-col min-h-[700px] sticky top-8">
@@ -324,30 +314,30 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                   <div className="flex-1 p-10 space-y-8 overflow-y-auto custom-scrollbar">
                      <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-50 dark:bg-slate-950 p-6 rounded-[32px] text-center border">
-                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Spent Pool</p>
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Spent</p>
                            <h5 className="text-xl font-black dark:text-white">{state.settings.currency}{viewingCustomer.totalSpent.toLocaleString()}</h5>
                         </div>
                         <div className="bg-rose-50 dark:bg-rose-950/20 p-6 rounded-[32px] text-center border border-rose-100">
-                           <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Exposure</p>
+                           <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Liabilty Pool</p>
                            <h5 className="text-xl font-black text-rose-600">{state.settings.currency}{viewingCustomer.totalDebt.toLocaleString()}</h5>
                         </div>
                      </div>
 
                      <button onClick={() => setViewingCard(viewingCustomer)} className="w-full py-5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-[32px] border-2 border-indigo-100 dark:border-indigo-800 flex items-center justify-center gap-3 font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all group">
-                        <CreditCard size={18}/> View Member Token <Maximize2 size={12} className="opacity-0 group-hover:opacity-100"/>
+                        <CreditCard size={18}/> View Digital ID <Maximize2 size={12} className="opacity-0 group-hover:opacity-100"/>
                      </button>
 
                      <section className="space-y-4">
-                        <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-3">Technical Profile</h6>
+                        <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-3">Operational Meta</h6>
                         <div className="space-y-4">
                            <div className="flex items-center gap-4">
                               <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><Phone size={18}/></div>
-                              <div><p className="text-[8px] font-black text-slate-400 uppercase">Telecom</p><span className="text-[13px] font-bold dark:text-slate-200">{viewingCustomer.phone}</span></div>
+                              <div><p className="text-[8px] font-black text-slate-400 uppercase">Primary Node</p><span className="text-[13px] font-bold dark:text-slate-200">{viewingCustomer.phone}</span></div>
                            </div>
-                           {viewingCustomer.email && (
+                           {viewingCustomer.address && (
                               <div className="flex items-center gap-4">
-                                 <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><Mail size={18}/></div>
-                                 <div><p className="text-[8px] font-black text-slate-400 uppercase">Registry Mail</p><span className="text-[13px] font-bold dark:text-slate-200">{viewingCustomer.email}</span></div>
+                                 <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><MapPin size={18}/></div>
+                                 <div className="min-w-0 flex-1"><p className="text-[8px] font-black text-slate-400 uppercase">Geographic Node</p><span className="text-[13px] font-bold dark:text-slate-200 truncate block">{viewingCustomer.address}</span></div>
                               </div>
                            )}
                         </div>
@@ -364,8 +354,8 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                <div className="bg-indigo-600 rounded-[56px] p-16 text-white shadow-2xl flex flex-col items-center justify-center text-center space-y-8 min-h-[700px] relative overflow-hidden group border-8 border-white/10">
                   <div className="w-28 h-28 bg-white/20 rounded-[40px] flex items-center justify-center backdrop-blur-md shadow-inner animate-pulse border border-white/30"><UsersIcon size={56} /></div>
                   <div className="relative z-10">
-                     <h4 className="text-3xl font-black uppercase tracking-tighter">Identity Target Required</h4>
-                     <p className="text-[11px] font-bold opacity-70 uppercase tracking-[0.3em] mt-4 max-w-[240px] mx-auto leading-relaxed">Select a registry record from the ledger to view operational history and metadata</p>
+                     <h4 className="text-3xl font-black uppercase tracking-tighter">Target Identification</h4>
+                     <p className="text-[11px] font-bold opacity-70 uppercase tracking-[0.3em] mt-4 max-w-[240px] mx-auto leading-relaxed">Select a registry record to view detailed activity and metadata history</p>
                   </div>
                   <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-white/5 blur-[80px] rounded-full group-hover:scale-125 transition-transform duration-1000" />
                </div>
@@ -373,7 +363,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
          </div>
       </div>
 
-      {/* Member Card Modal */}
+      {/* Member Card Studio Modal */}
       {viewingCard && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-2xl animate-in fade-in duration-300">
            <div className="bg-white dark:bg-slate-900 rounded-[64px] w-full max-w-2xl shadow-2xl overflow-hidden border border-white/10 flex flex-col animate-in zoom-in-95 duration-500">
@@ -382,7 +372,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                     <div className="w-16 h-16 bg-indigo-600 text-white rounded-[24px] flex items-center justify-center shadow-xl"><IdCard size={32}/></div>
                     <div>
                        <h3 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Member Token</h3>
-                       <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Proprietary Identity Badge</p>
+                       <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Official Proprietary ID</p>
                     </div>
                  </div>
                  <button onClick={() => setViewingCard(null)} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-3xl text-slate-400 hover:text-rose-500 transition-all"><X size={28}/></button>
@@ -415,11 +405,11 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                                 <div className="w-12 h-12 rounded-[18px] bg-white/20 backdrop-blur-md flex items-center justify-center font-black text-xl border border-white/30 shadow-lg">S</div>
                              )}
                              <h4 className="mt-5 font-black text-xl uppercase tracking-tighter leading-none">{state.settings.shopName}</h4>
-                             <p className="text-[9px] font-black opacity-60 uppercase tracking-[0.2em] mt-2">{state.settings.shopTagline || 'Authorized Partner Token'}</p>
+                             <p className="text-[9px] font-black opacity-60 uppercase tracking-[0.2em] mt-2">{state.settings.shopTagline || 'Authorized Partner'}</p>
                           </div>
                           <div className="text-right">
                              <div className="text-xl font-black opacity-80 tabular-nums font-mono">#REG-{viewingCard.id.padStart(4, '0')}</div>
-                             <div className="text-[8px] font-black opacity-40 uppercase mt-1 tracking-widest">Digital Registry ID</div>
+                             <div className="text-[8px] font-black opacity-40 uppercase mt-1 tracking-widest">Verified Digital ID</div>
                           </div>
                        </div>
                        
@@ -431,7 +421,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                                <div className="w-full h-full bg-slate-400/10 flex items-center justify-center">{viewingCard.name.charAt(0)}</div>
                              )}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                              <h5 className="font-black text-2xl leading-none uppercase tracking-tight truncate max-w-[200px]">{viewingCard.name}</h5>
                              <p className="text-[10px] font-black opacity-60 mt-1.5 uppercase tracking-[0.2em]">{viewingCard.phone}</p>
                              {state.settings.cardDesign.showPoints && (
@@ -453,10 +443,10 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
 
               <footer className="p-10 border-t bg-slate-50 dark:bg-slate-950 flex flex-col md:flex-row gap-4 shrink-0">
                  <button onClick={() => handleDownloadCard(viewingCard)} disabled={isExportingCard} className="flex-1 py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-widest shadow-2xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-3">
-                    {isExportingCard ? <RefreshCw size={20} className="animate-spin" /> : <FileDown size={20}/>} Download PDF
+                    {isExportingCard ? <RefreshCw size={20} className="animate-spin" /> : <FileDown size={20}/>} Download Card
                  </button>
                  <button onClick={handlePrintCard} className="flex-1 py-6 bg-white dark:bg-slate-800 text-slate-700 dark:text-white border-2 rounded-[32px] font-black text-xs uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-3">
-                    <Printer size={20}/> Physical Print
+                    <Printer size={20}/> Dispatch Print
                  </button>
                  <button onClick={() => setViewingCard(null)} className="flex-1 py-6 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-[32px] font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-95">Dismiss</button>
               </footer>
@@ -472,8 +462,8 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                   <div className="flex items-center gap-6">
                      <div className="w-16 h-16 bg-indigo-600 text-white rounded-[24px] flex items-center justify-center shadow-2xl"><UserPlus size={32}/></div>
                      <div>
-                        <h3 className="text-3xl font-black dark:text-white uppercase tracking-tighter">{editingCustomer ? 'Update Profile' : 'Enroll Identity'}</h3>
-                        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Registry node modification cycle</p>
+                        <h3 className="text-3xl font-black dark:text-white uppercase tracking-tighter">{editingCustomer ? 'Update Profile' : 'Identity Enrollment'}</h3>
+                        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Registry modification session</p>
                      </div>
                   </div>
                   <button onClick={resetAndClose} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-rose-500 transition-all active:scale-90"><X size={28}/></button>
@@ -482,6 +472,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                <div className="flex-1 overflow-y-auto p-12 custom-scrollbar space-y-12">
                   <div className="flex flex-col xl:flex-row gap-12">
                      <div className="xl:w-1/3 flex flex-col items-center">
+                        <label className="block text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-4">Portrait Source</label>
                         <div 
                           onClick={() => fileInputRef.current?.click()} 
                           className="w-full aspect-square max-w-[280px] rounded-[48px] bg-slate-50 dark:bg-slate-950 border-4 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center cursor-pointer overflow-hidden group shadow-inner relative transition-all hover:border-indigo-400"
@@ -491,9 +482,10 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                            ) : (
                              <div className="flex flex-col items-center text-slate-300">
                                <Camera size={64} strokeWidth={1} />
-                               <p className="text-[10px] font-black uppercase mt-4 tracking-widest text-center px-6">Upload Identity Portrait</p>
+                               <p className="text-[10px] font-black uppercase mt-4 tracking-widest text-center px-6">Upload Member Photo</p>
                              </div>
                            )}
+                           <div className="absolute inset-0 bg-indigo-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                            <input ref={fileInputRef} type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
                         </div>
                      </div>
@@ -501,10 +493,70 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                      <div className="xl:w-2/3 space-y-10">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                            <div className="md:col-span-2">
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-2">Full Legal Name</label>
-                              <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-3xl py-5 px-8 font-black text-xl dark:text-white outline-none shadow-sm" placeholder="Full Identity Label..." />
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-2">Legal Identity Name</label>
+                              <input 
+                                type="text" 
+                                value={form.name} 
+                                onChange={e => setForm({...form, name: e.target.value})} 
+                                className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-3xl py-5 px-8 font-black text-xl dark:text-white outline-none shadow-sm" 
+                                placeholder="Enter full name" 
+                              />
                            </div>
                            <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-2">Primary Telecom</label>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-2">Primary Node (Phone)</label>
                               <div className="relative">
-                                 <Phone className="absolute left-6 top-1/2 -translate-y-
+                                 <Phone className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+                                 <input 
+                                   type="text" 
+                                   value={form.phone} 
+                                   onChange={e => setForm({...form, phone: e.target.value})} 
+                                   className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-3xl py-5 pl-16 pr-8 font-bold dark:text-white outline-none shadow-sm" 
+                                   placeholder="07XX..." 
+                                 />
+                              </div>
+                           </div>
+                           <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-2">Electronic Mail</label>
+                              <div className="relative">
+                                 <Mail className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+                                 <input 
+                                   type="email" 
+                                   value={form.email} 
+                                   onChange={e => setForm({...form, email: e.target.value})} 
+                                   className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-3xl py-5 pl-16 pr-8 font-bold dark:text-white outline-none shadow-sm" 
+                                   placeholder="Email address" 
+                                 />
+                              </div>
+                           </div>
+                           <div className="md:col-span-2">
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-2">Geographic Node (Address)</label>
+                              <div className="relative">
+                                 <MapPin className="absolute left-6 top-6 text-slate-300" size={20} />
+                                 <textarea 
+                                   rows={2} 
+                                   value={form.address} 
+                                   onChange={e => setForm({...form, address: e.target.value})} 
+                                   className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-3xl py-5 pl-16 pr-8 font-bold dark:text-white outline-none shadow-sm resize-none" 
+                                   placeholder="Street, District, City" 
+                                 />
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+
+               <footer className="p-10 border-t bg-slate-50 dark:bg-slate-950 flex flex-col md:flex-row gap-4 shrink-0">
+                  <button onClick={resetAndClose} className="flex-1 py-7 bg-white dark:bg-slate-800 text-slate-500 rounded-[32px] font-black text-xs uppercase tracking-[0.2em] border shadow-sm">Discard Changes</button>
+                  <button onClick={handleSaveCustomer} className="flex-[2] py-7 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-4">
+                     <CheckCircle2 size={24}/> {editingCustomer ? 'Authorize Modification' : 'Complete Enrollment'}
+                  </button>
+               </footer>
+            </div>
+         </div>
+      )}
+    </div>
+  );
+};
+
+export default Customers;
