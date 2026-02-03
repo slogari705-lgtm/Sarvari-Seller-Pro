@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef } from 'react';
 import { 
   Users as UsersIcon, 
@@ -38,7 +39,8 @@ import {
   UserMinus,
   MapPin,
   Briefcase,
-  Smartphone
+  Smartphone,
+  Image as ImageIcon
 } from 'lucide-react';
 import { AppState, Customer, View, LoanTransaction, CardDesign } from '../types';
 import { translations } from '../translations';

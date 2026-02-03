@@ -150,6 +150,7 @@ export default function App() {
 
   const navItems = [
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
+    { id: 'dashboard-costume', label: t.dashboardCostume, icon: Wand2 },
     { id: 'terminal', label: t.terminal, icon: ShoppingCart },
     { id: 'products', label: t.products, icon: Package },
     { id: 'customers', label: t.customers, icon: Users },
@@ -209,7 +210,6 @@ export default function App() {
              {[
                { id: 'loans', label: t.loan, icon: History },
                { id: 'returns', label: t.returns, icon: RotateCcw },
-               { id: 'dashboard-costume', label: t.dashboardCostume, icon: Wand2 },
                { id: 'trash', label: 'Recycle Bin', icon: Trash2 }
              ].map((item) => (
                <button 

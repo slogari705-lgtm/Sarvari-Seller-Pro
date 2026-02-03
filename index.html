@@ -110,11 +110,14 @@
         }
         #pdf-render-container {
             position: absolute;
-            left: -9999px;
+            left: 0;
             top: 0;
-            width: 210mm;
+            width: 1000px;
             background: white;
             z-index: -1;
+            opacity: 0;
+            pointer-events: none;
+            overflow: visible;
         }
     </style>
 <script type="importmap">
@@ -152,7 +155,17 @@
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('PWA Operational'))
+            .then(reg => {
+                console.log('PWA Operational');
+                reg.onupdatefound = () => {
+                    const installingWorker = reg.installing;
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            window.location.reload();
+                        }
+                    };
+                };
+            })
             .catch(err => console.warn('Offline Mode Failed', err));
         });
       }

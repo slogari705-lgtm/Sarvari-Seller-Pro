@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sarvari-pos-v1.2.5';
+const CACHE_NAME = 'sarvari-pos-v1.3.0';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -37,6 +37,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // For navigation requests, try network first but fallback to cache
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => {
@@ -46,10 +49,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // General static assets strategy
   event.respondWith(
     caches.match(event.request).then((response) => {
       return response || fetch(event.request).then((networkResponse) => {
-        if (event.request.url.startsWith('http')) {
+        // Cache only same-origin and specific CDN requests
+        if (url.origin === location.origin || url.hostname.includes('fonts') || url.hostname.includes('cdn')) {
           return caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, networkResponse.clone());
             return networkResponse;
