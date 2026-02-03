@@ -48,9 +48,10 @@ import {
   ArrowRight,
   MinusCircle,
   PlusCircle,
-  Activity
+  Activity,
+  Download
 } from 'lucide-react';
-import { AppState, Customer, View, LoanTransaction } from '../types';
+import { AppState, Customer, View, LoanTransaction, CardDesign } from '../types';
 import { translations } from '../translations';
 import ConfirmDialog from './ConfirmDialog';
 import { jsPDF } from 'jspdf';
@@ -139,6 +140,105 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     }
   };
 
+  const generateMemberCardHTML = (customer: Customer, design: CardDesign) => {
+    const tier = getTier(customer.totalSpent);
+    const patternStyle = (() => {
+      switch(design.pattern) {
+        case 'mesh': return 'radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px)';
+        case 'dots': return 'radial-gradient(rgba(255,255,255,0.2) 2px, transparent 2px)';
+        case 'waves': return 'repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 2px, transparent 2px, transparent 4px)';
+        case 'circuit': return 'linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)';
+        default: return 'none';
+      }
+    })();
+
+    const background = design.theme === 'gradient' 
+      ? `linear-gradient(135deg, ${design.primaryColor}, ${design.secondaryColor})` 
+      : design.primaryColor;
+
+    return `
+      <div id="capture-member-card" style="width: 85mm; height: 55mm; background: ${background}; position: relative; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; border-radius: 4mm; color: ${design.textColor === 'light' ? '#ffffff' : '#0f172a'}; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; padding: 6mm;">
+        <div style="position: absolute; inset: 0; pointer-events: none; opacity: 0.2; background-image: ${patternStyle}; background-size: 10px 10px;"></div>
+        <div style="position: absolute; top: 0; right: 0; width: 50%; height: 100%; background: linear-gradient(to left, rgba(255,255,255,0.1), transparent); pointer-events: none;"></div>
+        
+        <div style="position: relative; z-index: 10; display: flex; justify-content: space-between; align-items: flex-start;">
+           <div>
+              ${design.showLogo && state.settings.shopLogo ? `<img src="${state.settings.shopLogo}" style="height: 8mm; margin-bottom: 2mm; display: block;" />` : ''}
+              <div style="font-weight: 900; font-size: 14px; text-transform: uppercase; letter-spacing: -0.5px;">${state.settings.shopName}</div>
+              <div style="font-size: 6px; font-weight: 800; opacity: 0.6; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 1mm;">${state.settings.shopTagline || 'OFFICIAL MEMBER'}</div>
+           </div>
+           <div style="text-align: right;">
+              <div style="font-size: 12px; font-weight: 900; font-family: monospace; opacity: 0.9;">#UID-${customer.id.padStart(4, '0')}</div>
+              <div style="font-size: 6px; font-weight: 900; text-transform: uppercase; opacity: 0.4; letter-spacing: 1px;">Customer Identity Node</div>
+           </div>
+        </div>
+
+        <div style="position: relative; z-index: 10; display: flex; align-items: center; gap: 4mm;">
+           <div style="width: 18mm; height: 18mm; background: rgba(255,255,255,0.2); border-radius: 4mm; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 900; border: 1px solid rgba(255,255,255,0.3); overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+              ${customer.photo ? `<img src="${customer.photo}" style="width: 100%; height: 100%; object-fit: cover;" />` : customer.name.charAt(0)}
+           </div>
+           <div style="flex: 1; min-width: 0;">
+              <div style="font-weight: 900; font-size: 16px; text-transform: uppercase; line-height: 1; margin-bottom: 1.5mm;">${customer.name}</div>
+              <div style="display: flex; align-items: center; gap: 2mm;">
+                 <div style="background: rgba(0,0,0,0.2); padding: 1mm 2mm; border-radius: 1.5mm; font-size: 7px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 1mm;">
+                    ${tier.label} STATUS
+                 </div>
+                 ${design.showPoints ? `<div style="font-size: 7px; font-weight: 900; opacity: 0.8; text-transform: uppercase;">${customer.loyaltyPoints || 0} PTS</div>` : ''}
+              </div>
+           </div>
+           ${design.showQr ? `<div style="width: 12mm; height: 12mm; background: #ffffff; border-radius: 2mm; padding: 1mm; box-sizing: border-box; opacity: 0.9; margin-left: auto;"><svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><rect x="7" y="7" width="3" height="3"/><rect x="14" y="7" width="3" height="3"/><rect x="7" y="14" width="3" height="3"/><rect x="14" y="14" width="3" height="3"/></svg></div>` : ''}
+        </div>
+
+        <div style="position: relative; z-index: 10; display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2mm;">
+           <div style="font-size: 6px; opacity: 0.5; font-weight: 700; text-transform: uppercase;">Valid thru Dec 2026 • Non-Transferable ID</div>
+           ${design.showJoinDate ? `<div style="font-size: 6px; font-weight: 900; text-transform: uppercase; opacity: 0.6;">Joined ${new Date(customer.joinedDate || Date.now()).getFullYear()}</div>` : ''}
+        </div>
+      </div>
+    `;
+  };
+
+  const handleDownloadMemberCard = async (c: Customer) => {
+    if (isExportingCard) return;
+    setIsExportingCard(true);
+    const container = document.getElementById('pdf-render-container');
+    if (!container) return setIsExportingCard(false);
+
+    try {
+      container.innerHTML = generateMemberCardHTML(c, state.settings.cardDesign);
+      const target = document.getElementById('capture-member-card');
+      if (!target) throw new Error("Capture target missing");
+
+      await new Promise(r => setTimeout(r, 600));
+      const canvas = await html2canvas(target, { scale: 4, useCORS: true, backgroundColor: null });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [85, 55] });
+      pdf.addImage(imgData, 'PNG', 0, 0, 85, 55);
+      pdf.save(`MEMBER_CARD_${c.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      container.innerHTML = '';
+      setIsExportingCard(false);
+    }
+  };
+
+  const handlePrintMemberCard = () => {
+    if (!viewingCustomer) return;
+    const holder = document.getElementById('print-holder');
+    if (!holder) return;
+
+    holder.innerHTML = `
+      <div style="width: 100%; height: 100vh; display: flex; items-center; justify-center; background: white; padding: 40px;">
+        <div style="transform: scale(1.5);">
+          ${generateMemberCardHTML(viewingCustomer, state.settings.cardDesign)}
+        </div>
+      </div>
+    `;
+
+    window.print();
+    holder.innerHTML = '';
+  };
+
   const handleSaveCustomer = () => {
     if (!newCustomer.name || !newCustomer.phone) return alert("Required: Name & Phone");
     if (editingCustomer) {
@@ -195,17 +295,6 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortOrder('desc'); }
-  };
-
-  const handleDownloadMemberCard = async (c: Customer) => {
-    if (isExportingCard) return;
-    setIsExportingCard(true);
-    const container = document.getElementById('pdf-render-container');
-    if (!container) return setIsExportingCard(false);
-    
-    // Assume generateMemberCardHTML is defined or similar logic exists
-    // For brevity in this update, we skip the raw HTML generation logic which is usually in printService
-    setIsExportingCard(false);
   };
 
   const handleRepaymentSubmit = () => {
@@ -394,6 +483,28 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                               </div>
                               <Scale className="absolute -bottom-6 -right-6 text-white/10 group-hover:scale-125 transition-transform duration-700" size={140} />
                            </div>
+
+                           {/* IDENTITY CARD MANAGEMENT MODULE */}
+                           <div className="bg-white dark:bg-slate-900 p-8 rounded-[48px] border shadow-sm space-y-6">
+                              <h5 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] flex items-center gap-2"><IdCard size={14}/> Identity Management</h5>
+                              <div className="space-y-3">
+                                 <button 
+                                   onClick={() => handleDownloadMemberCard(viewingCustomer)}
+                                   disabled={isExportingCard}
+                                   className="w-full py-4 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-[20px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all border border-transparent hover:border-indigo-100"
+                                 >
+                                    {isExportingCard ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />} Export Digital ID
+                                 </button>
+                                 <button 
+                                   onClick={handlePrintMemberCard}
+                                   className="w-full py-4 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-[20px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all border border-transparent hover:border-indigo-100"
+                                 >
+                                    <Printer size={14}/> Print Physical Identity
+                                 </button>
+                              </div>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase text-center leading-relaxed px-4">Utilizes global design architecture from system settings</p>
+                           </div>
+
                            <div className="bg-white dark:bg-slate-900 p-10 rounded-[48px] border shadow-sm flex flex-col justify-center relative overflow-hidden group">
                               <p className="text-[11px] font-black text-amber-500 uppercase tracking-widest mb-2">Loyalty Points</p>
                               <h5 className="text-4xl font-black dark:text-white">{viewingCustomer.loyaltyPoints || 0} <span className="text-sm font-bold opacity-40">CREDITS</span></h5>
@@ -572,7 +683,7 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
                         <div className="space-y-6">
                            <div>
                               <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Professional Domain</label>
-                              <input type="text" value={newCustomer.occupation} onChange={e => setNewCustomer({...newCustomer, occupation: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 rounded-[20px] py-4 px-6 font-bold dark:text-white outline-none shadow-inner border-2 border-transparent focus:border-emerald-500" placeholder="E.g. Systems Architect" />
+                              <input type="text" value={newCustomer.occupation} onChange={e => setNewCustomer({...newCustomer, occupation: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-[20px] py-4 px-6 font-bold dark:text-white outline-none shadow-inner border-2 border-transparent focus:border-emerald-500" placeholder="E.g. Systems Architect" />
                            </div>
                            <div>
                               <label className="block text-[11px] font-black text-slate-400 uppercase mb-2.5 ml-1">Affiliated Firm</label>
