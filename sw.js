@@ -1,4 +1,5 @@
-const CACHE_NAME = 'sarvari-pos-v1.3.0';
+
+const CACHE_NAME = 'sarvari-pos-v1.3.1';
 
 const ASSETS_TO_CACHE = [
   './',
