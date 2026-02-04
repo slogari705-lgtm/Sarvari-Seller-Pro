@@ -202,21 +202,45 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
     if (isExportingReceipt) return;
     setIsExportingReceipt(true);
     try {
-      const html = generatePrintHTML(state, inv, receiptPrintMode === 'thermal' ? 'thermal' : 'a4');
+      const layout = receiptPrintMode === 'thermal' ? 'thermal' : 'a4';
+      const html = generatePrintHTML(state, inv, layout);
       const container = document.getElementById('pdf-render-container');
       if (!container) return;
+      
+      // Ensure dimensions for capture
+      container.style.width = layout === 'thermal' ? '72mm' : '210mm';
       container.innerHTML = html;
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      
+      // Mandatory delay for font and style resolution
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const canvas = await html2canvas(container, { 
+        scale: 3, 
+        useCORS: true, 
+        backgroundColor: '#ffffff',
+        logging: false
+      });
+      
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdf = new jsPDF({ 
+        orientation: 'portrait', 
+        unit: 'mm', 
+        format: layout === 'thermal' ? [72, 200] : 'a4' 
+      });
+      
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save(`Invoice_#${inv.id}.pdf`);
-    } catch (e) { console.error(e); } finally {
+    } catch (e) { 
+      console.error("PDF generation failed:", e); 
+    } finally {
       const container = document.getElementById('pdf-render-container');
-      if (container) container.innerHTML = '';
+      if (container) {
+        container.innerHTML = '';
+        container.style.width = '210mm';
+      }
       setIsExportingReceipt(false);
     }
   };

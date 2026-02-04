@@ -9,14 +9,9 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
   const direction = isRTL ? 'rtl' : 'ltr';
   
   const activeTemplate = state.templates.find(t => t.id === shop.invoiceTemplate) || state.templates[0];
-  const brandColor = activeTemplate.brandColor || '#000000';
   const currency = shop.currency;
-  const exRate = inv.exchangeRate || shop.exchangeRate || 1;
-  const secondaryCurrency = shop.secondaryCurrency || 'USD';
 
   const effectiveLayout = layoutType === 'thermal' ? 'thermal' : activeTemplate.layout;
-  
-  // Padding invoice ID to 3 digits (e.g., 001)
   const invIdDisplay = `${shop.invoicePrefix || ''}${inv.id.padStart(3, '0')}`;
 
   let lastLoan = 0;
@@ -47,23 +42,34 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
   }
 
   const paymentSectionData = {
-    current: inv.total + (inv.discount || 0), // Invoice subtotal before discount
+    current: inv.total + (inv.discount || 0),
     discount: inv.discount || 0,
     receipt: inv.paidAmount,
     last: lastLoan,
     total: finalBalance
   };
 
-  // THERMAL / MOBILE OPTIMIZATION: Pure black & white, no grays, high density
+  // Styles shared for both print and capture
+  const thermalStyles = `
+    .thermal-doc {
+      width: 72mm;
+      margin: 0;
+      padding: 0;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      color: #000 !important;
+      background: #fff !important;
+      line-height: 1.1;
+    }
+    .thermal-doc * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+  `;
+
   if (effectiveLayout === 'thermal' || effectiveLayout === 'receipt') {
     return `
-      <div dir="${direction}" style="width: 72mm; margin: 0 auto; padding: 0; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; background: #fff; line-height: 1.1;">
-        <style>
-          @media print { body { background: #fff; margin: 0; padding: 0; } }
-          * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
-        </style>
+      <div dir="${direction}" class="thermal-doc">
+        <style>${thermalStyles}</style>
         <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 2mm; margin-bottom: 2mm; display: flex; flex-direction: column; align-items: center;">
-          ${shop.shopLogo ? `<img src="${shop.shopLogo}" style="height: 15mm; margin-bottom: 1.5mm; object-fit: contain; filter: grayscale(100%);" />` : ''}
+          ${shop.shopLogo ? `<img src="${shop.shopLogo}" style="height: 15mm; margin-bottom: 1.5mm; object-fit: contain;" />` : ''}
           <div style="font-size: 14px; font-weight: 900;">${shop.shopName.toUpperCase()}</div>
           <div style="font-size: 9px; font-weight: 700;">${shop.shopAddress || ''}</div>
           <div style="font-size: 9px; font-weight: 700;">${shop.shopPhone ? `TEL: ${shop.shopPhone}` : ''}</div>
@@ -115,11 +121,20 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
     `;
   }
 
-  // DESKTOP A4 OPTIMIZATION: "Greate" high-density layout for 20+ items
-  const commonStyles = `
-    @page { size: A4; margin: 0; }
-    body { margin: 0; background: #fff; }
-    .invoice-container { padding: 10mm; width: 210mm; height: 297mm; box-sizing: border-box; background: white; color: #000; font-family: 'Inter', sans-serif; display: flex; flex-direction: column; line-height: 1.2; position: relative; }
+  const a4Styles = `
+    .a4-container {
+      padding: 10mm;
+      width: 210mm;
+      min-height: 297mm;
+      box-sizing: border-box;
+      background: #fff !important;
+      color: #000 !important;
+      font-family: 'Inter', sans-serif;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+    .a4-container * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
     .header-centered { text-align: center; margin-bottom: 6mm; border-bottom: 4px solid #000; padding-bottom: 4mm; display: flex; flex-direction: column; align-items: center; }
     .logo-img { height: 25mm; margin-bottom: 3mm; object-fit: contain; }
     .shop-info h1 { margin: 0; font-size: 28px; font-weight: 900; text-transform: uppercase; color: #000; line-height: 1; }
@@ -129,22 +144,22 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
     .meta-item b { display: block; font-size: 10px; color: #000; text-transform: uppercase; margin-bottom: 1mm; font-weight: 900; }
     .meta-item span { font-size: 15px; font-weight: 900; color: #000; }
     .items-table { width: 100%; border-collapse: collapse; margin-bottom: 8mm; flex: 1; }
-    .items-table th { padding: 3mm; text-align: left; font-size: 11px; font-weight: 950; color: #fff; background: #000; text-transform: uppercase; border: 1px solid #000; }
+    .items-table th { padding: 3mm; text-align: left; font-size: 11px; font-weight: 950; color: #fff !important; background: #000 !important; text-transform: uppercase; border: 1px solid #000; }
     .items-table td { padding: 1.8mm 3mm; font-size: 12px; border: 1px solid #000; font-weight: 700; }
     .summary-section { width: 100%; display: flex; justify-content: flex-end; margin-top: 4mm; }
     .summary-table { width: 110mm; border-collapse: collapse; border: 3px solid #000; }
     .summary-table td { padding: 3mm 5mm; font-size: 12px; border-bottom: 1px solid #000; }
     .summary-table .label { font-weight: 950; color: #000; text-transform: uppercase; font-size: 11px; width: 55%; background: #fff; }
     .summary-table .value { text-align: right; font-weight: 900; color: #000; font-size: 14px; }
-    .summary-table .total-row { background: #000; color: #fff; border-bottom: none; }
-    .summary-table .total-row .label { background: #000; color: #fff; font-size: 14px; }
-    .summary-table .total-row .value { color: #fff; font-size: 28px; font-weight: 950; }
+    .summary-table .total-row { background: #000 !important; color: #fff !important; border-bottom: none; }
+    .summary-table .total-row .label { background: #000 !important; color: #fff !important; font-size: 14px; }
+    .summary-table .total-row .value { color: #fff !important; font-size: 28px; font-weight: 950; }
     .footer { margin-top: 10mm; padding-top: 5mm; border-top: 3px solid #000; text-align: center; font-size: 11px; color: #000; text-transform: uppercase; font-weight: 900; }
   `;
 
   return `
-    <div dir="${direction}" class="invoice-container">
-      <style>${commonStyles}</style>
+    <div dir="${direction}" class="a4-container">
+      <style>${a4Styles}</style>
       
       <div class="header-centered">
         ${shop.shopLogo ? `<img src="${shop.shopLogo}" class="logo-img" />` : ''}

@@ -306,7 +306,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
       setTimeout(() => {
         window.print();
         holder.innerHTML = ''; 
-      }, 150);
+      }, 250);
     }
   };
 
@@ -314,27 +314,29 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     if (isDownloading) return;
     setIsDownloading(inv.id);
     try {
-      const html = generatePrintHTML(state, inv, printLayoutMode === 'thermal' ? 'thermal' : 'a4');
+      const layout = printLayoutMode === 'thermal' ? 'thermal' : 'a4';
+      const html = generatePrintHTML(state, inv, layout);
       const container = document.getElementById('pdf-render-container');
       if (!container) return;
       
+      container.style.width = layout === 'thermal' ? '72mm' : '210mm';
       container.innerHTML = html;
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Delay for CSS synchronization
+      await new Promise(resolve => setTimeout(resolve, 1200));
       
       const canvas = await html2canvas(container, { 
         scale: 3, 
         useCORS: true, 
         backgroundColor: '#ffffff',
-        width: printLayoutMode === 'thermal' ? 272 : 794,
-        windowWidth: printLayoutMode === 'thermal' ? 272 : 794
+        logging: false
       });
       
       const imgData = canvas.toDataURL('image/png');
-      const orientation = printLayoutMode === 'thermal' ? 'p' : 'p';
-      const format = printLayoutMode === 'thermal' ? [72, 150] : 'a4';
+      const format = layout === 'thermal' ? [72, 200] : 'a4';
       
       const pdf = new jsPDF({ 
-        orientation: orientation as any, 
+        orientation: 'p', 
         unit: 'mm', 
         format: format as any 
       });
@@ -348,7 +350,10 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
       console.error("PDF Export Error:", err);
     } finally { 
       const container = document.getElementById('pdf-render-container');
-      if (container) container.innerHTML = ''; 
+      if (container) {
+        container.innerHTML = '';
+        container.style.width = '210mm';
+      }
       setIsDownloading(null); 
     }
   };
