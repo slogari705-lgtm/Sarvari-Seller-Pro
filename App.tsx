@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutDashboard, 
@@ -19,7 +20,9 @@ import {
   Receipt,
   BarChart3,
   History,
-  Trash2
+  Trash2,
+  Cpu,
+  Boxes
 } from 'lucide-react';
 import { AppState, View } from './types';
 import { translations } from './translations';
@@ -148,15 +151,21 @@ export default function App() {
 
   const updateState = <K extends keyof AppState>(key: K, value: AppState[K]) => setState(prev => ({ ...prev, [key]: value }));
 
-  const navItems = [
+  const coreNav = [
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
-    { id: 'dashboard-costume', label: t.dashboardCostume, icon: Wand2 },
     { id: 'terminal', label: t.terminal, icon: ShoppingCart },
-    { id: 'products', label: t.products, icon: Package },
+    { id: 'products', label: t.products, icon: Boxes },
     { id: 'customers', label: t.customers, icon: Users },
+  ];
+
+  const secondaryNav = [
     { id: 'invoices', label: t.invoices, icon: FileText },
     { id: 'expenses', label: t.expenses, icon: Receipt },
     { id: 'reports', label: t.reports, icon: BarChart3 },
+  ];
+
+  const workspaceNav = [
+    { id: 'dashboard-costume', label: t.dashboardCostume, icon: Wand2 },
     { id: 'settings', label: t.settings, icon: SettingsIcon },
   ];
 
@@ -193,24 +202,55 @@ export default function App() {
           <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden p-2 text-slate-400 hover:bg-slate-100 rounded-lg"><X size={20}/></button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
-          {navItems.map((item) => (
-            <button 
-              key={item.id} 
-              onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-            >
-              <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
-              {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
-            </button>
-          ))}
+        <nav className="flex-1 px-4 py-6 space-y-6 overflow-y-auto custom-scrollbar">
+          <div>
+            <p className={`px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-3 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Core Systems</p>
+            {coreNav.map((item) => (
+              <button 
+                key={item.id} 
+                onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
+                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              >
+                <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
+                {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            <p className={`px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-3 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Auditing</p>
+            {secondaryNav.map((item) => (
+              <button 
+                key={item.id} 
+                onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
+                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              >
+                <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
+                {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            <p className={`px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-3 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Workspace</p>
+            {workspaceNav.map((item) => (
+              <button 
+                key={item.id} 
+                onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
+                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              >
+                <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
+                {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
+              </button>
+            ))}
+          </div>
           
-          <div className="pt-4 mt-4 border-t border-slate-50 dark:border-slate-800">
-             <p className="px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-4">Operations</p>
+          <div className="pt-4 border-t border-slate-50 dark:border-slate-800">
+             <p className={`px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-4 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Advanced</p>
              {[
                { id: 'loans', label: t.loan, icon: History },
                { id: 'returns', label: t.returns, icon: RotateCcw },
-               { id: 'trash', label: 'Recycle Bin', icon: Trash2 }
+               { id: 'trash', label: 'Trash Bin', icon: Trash2 }
              ].map((item) => (
                <button 
                  key={item.id} 
@@ -249,8 +289,11 @@ export default function App() {
           <div className="flex items-center gap-3">
             <div className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-2xl border ${isOnline ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
               <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></div>
-              <span className="text-[10px] font-black uppercase tracking-widest">{isOnline ? 'Cloud' : 'Offline'}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">{isOnline ? 'Cloud Sync' : 'Offline Mode'}</span>
             </div>
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:flex w-11 h-11 bg-slate-50 dark:bg-slate-800 rounded-2xl items-center justify-center text-slate-400 hover:text-indigo-600 transition-all">
+              <Layout size={20} />
+            </button>
             <button onClick={() => setCurrentView('settings')} className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-90 transition-all">
               <UserIcon size={20} strokeWidth={3} />
             </button>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   TrendingUp, 
@@ -9,14 +10,15 @@ import {
   Sparkles,
   RefreshCw,
   PlusCircle,
-  Users,
   Smartphone,
   Share2,
   X,
   Download,
   SmartphoneNfc,
   Monitor,
-  Wand2
+  Wand2,
+  PieChart,
+  Wallet
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AppState, View } from '../types';
@@ -67,6 +69,10 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
   const totalExpenses = state.expenses.reduce((acc, exp) => acc + exp.amount, 0);
   const totalDebt = state.customers.reduce((acc, cust) => acc + (cust.totalDebt || 0), 0);
   const netProfit = totalInvoiceProfit - totalExpenses;
+  
+  // New calculations for extended widgets
+  const assetValue = useMemo(() => state.products.reduce((acc, p) => acc + (p.costPrice * p.stock), 0), [state.products]);
+  const grossMargin = useMemo(() => totalSales > 0 ? (totalInvoiceProfit / totalSales) * 100 : 0, [totalSales, totalInvoiceProfit]);
 
   const fetchInsights = async () => {
     if (!navigator.onLine) return;
@@ -83,6 +89,8 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
     { id: 'orders', label: t.orders, value: activeInvoices.length, icon: ShoppingBag, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
     { id: 'totalDebt', label: 'Client Debt', value: totalDebt, icon: TrendingDown, color: 'text-rose-600', bg: 'bg-rose-50 dark:bg-rose-900/20' },
     { id: 'netProfit', label: 'Net Profit', value: netProfit, icon: Activity, color: 'text-violet-600', bg: 'bg-violet-50 dark:bg-violet-500/10' },
+    { id: 'assetValue', label: 'Inventory Value', value: assetValue, icon: Wallet, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-500/10' },
+    { id: 'grossMargin', label: 'Gross Margin %', value: grossMargin, icon: PieChart, color: 'text-cyan-600', bg: 'bg-cyan-50 dark:bg-cyan-500/10' },
   ];
 
   const handleShare = async () => {
@@ -102,15 +110,15 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       {/* App Deployment Widget */}
-      <div className="bg-indigo-600 dark:bg-indigo-500 p-10 rounded-[56px] text-white shadow-2xl relative overflow-hidden group">
+      <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 dark:from-indigo-900 dark:to-slate-900 p-10 rounded-[56px] text-white shadow-2xl relative overflow-hidden group">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div className="space-y-4">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 bg-white/20 rounded-[24px] backdrop-blur-xl flex items-center justify-center shadow-inner"><SmartphoneNfc size={32} /></div>
-              <h3 className="text-3xl font-black uppercase tracking-tighter">Install Mobile App</h3>
+              <h3 className="text-3xl font-black uppercase tracking-tighter">Install Mobile Terminal</h3>
             </div>
             <p className="text-indigo-100 text-[12px] font-bold uppercase tracking-[0.1em] leading-relaxed max-w-lg opacity-90">
-              Turn this terminal into a standalone app on your phone. Works 100% offline once installed. Secure, fast, and professional.
+              Transform your browser into a native POS application. Works 100% offline with lightning-fast performance and advanced local security.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -118,7 +126,7 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
               onClick={() => setShowInstallGuide(true)}
               className="px-10 py-5 bg-white text-indigo-600 rounded-[32px] font-black text-xs uppercase tracking-widest shadow-2xl hover:scale-105 transition-all active:scale-95 flex items-center gap-3"
             >
-              <Download size={20} strokeWidth={3} /> Get App Now
+              <Download size={20} strokeWidth={3} /> Launch PWA
             </button>
             <button 
               onClick={handleShare}
@@ -137,7 +145,7 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
             Terminal Pulse <div className={`w-3 h-3 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] animate-pulse' : 'bg-rose-500'}`}></div>
           </h3>
           <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] mt-1">
-            Logged into local database
+            Offline Database Integrated • Zero Latency Mode
           </p>
         </div>
         
@@ -151,16 +159,21 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {stats.filter(s => visibleWidgets.includes(s.id)).map((stat, i) => (
-          <div key={i} className="bg-white dark:bg-slate-900 p-8 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm transition-all hover:shadow-xl group">
+          <div key={i} className="bg-white dark:bg-slate-900 p-8 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm transition-all hover:shadow-xl group relative overflow-hidden">
              <div className="flex items-center justify-between mb-6">
                 <div className={`${stat.bg} ${stat.color} p-4 rounded-2xl group-hover:scale-110 transition-transform`}><stat.icon size={28} strokeWidth={2.5} /></div>
              </div>
              <p className="text-slate-400 dark:text-slate-500 text-[10px] font-black uppercase tracking-widest truncate">{stat.label}</p>
              <h3 className="text-3xl font-black mt-2 dark:text-white tracking-tighter">
-                {stat.id !== 'orders' ? state.settings.currency : ''}{stat.value.toLocaleString()}
+                {stat.id !== 'orders' && stat.id !== 'grossMargin' ? state.settings.currency : ''}
+                {stat.value.toLocaleString(undefined, { maximumFractionDigits: stat.id === 'grossMargin' ? 1 : 0 })}
+                {stat.id === 'grossMargin' ? '%' : ''}
              </h3>
+             <div className="absolute top-0 right-0 p-2 opacity-5 group-hover:opacity-10 transition-opacity">
+                <stat.icon size={80} />
+             </div>
           </div>
         ))}
       </div>
@@ -172,8 +185,8 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
                  <div className="flex items-center gap-6">
                     <div className="w-16 h-16 bg-indigo-600 text-white rounded-3xl flex items-center justify-center shadow-2xl"><Smartphone size={32}/></div>
                     <div>
-                       <h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">App Deployment</h3>
-                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mobile Conversion Guide</p>
+                       <h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">Native Experience</h3>
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PWA Deployment Guide</p>
                     </div>
                  </div>
                  <button onClick={() => setShowInstallGuide(false)} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-rose-500 transition-all"><X size={28}/></button>
@@ -215,27 +228,27 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
                  <div className="bg-slate-900 p-8 rounded-[48px] text-white flex items-center gap-8 relative overflow-hidden">
                     <div className="p-4 bg-white/20 rounded-2xl backdrop-blur-md relative z-10"><Monitor size={32}/></div>
                     <div className="relative z-10">
-                       <p className="font-black uppercase text-sm tracking-tight">Need a Computer later?</p>
-                       <p className="text-[10px] font-bold uppercase opacity-80 mt-1">Just open the same link in Chrome on your PC and click the "Install" icon in the address bar.</p>
+                       <p className="font-black uppercase text-sm tracking-tight">Enterprise Desktop Integration</p>
+                       <p className="text-[10px] font-bold uppercase opacity-80 mt-1">Open this terminal in Chrome/Edge on your PC and click the "Install" icon in the address bar for the full native desktop suite.</p>
                     </div>
                  </div>
               </div>
               
               <footer className="p-10 border-t bg-slate-50 dark:bg-slate-950/20 shrink-0">
-                 <button onClick={() => setShowInstallGuide(false)} className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-2xl">Return to Dashboard</button>
+                 <button onClick={() => setShowInstallGuide(false)} className="w-full py-6 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-2xl">Return to Terminal</button>
               </footer>
            </div>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-10 rounded-[56px] border border-slate-100 dark:border-slate-800 shadow-sm">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-10 rounded-[56px] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
            <div className="flex items-center justify-between mb-10">
-              <h4 className="font-black text-sm uppercase tracking-[0.2em] dark:text-white flex items-center gap-3"><TrendingUp size={20} className="text-indigo-600" /> Revenue Stream</h4>
+              <h4 className="font-black text-sm uppercase tracking-[0.2em] dark:text-white flex items-center gap-3"><TrendingUp size={20} className="text-indigo-600" /> Fiscal Flow Analysis</h4>
            </div>
            <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={[]}>
+                <AreaChart data={state.invoices.slice(-10).map((inv, i) => ({ name: `T-${10-i}`, sales: inv.total }))}>
                   <defs><linearGradient id="cSales" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="name" hide />
@@ -257,11 +270,11 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
                  {isOnline && <button onClick={fetchInsights} disabled={loadingInsights} className="p-2.5 hover:bg-white/10 rounded-xl transition-all"><RefreshCw size={18} className={loadingInsights ? 'animate-spin' : ''} /></button>}
               </div>
               <div className="text-[12px] text-indigo-100/90 leading-relaxed font-bold bg-white/5 p-8 rounded-[36px] border border-white/10 italic">
-                 {loadingInsights ? "Analyzing ledger..." : insights || "Record sales to generate your intelligence report."}
+                 {loadingInsights ? "Crunching ledger data..." : insights || "The AI is waiting for more transaction data to provide a strategic business analysis."}
               </div>
            </div>
            <button onClick={() => setCurrentView('reports')} className="relative z-10 mt-10 w-full py-5 bg-white text-slate-900 rounded-[32px] font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all">
-              Full Analytics <ArrowRight size={18} strokeWidth={3} />
+              Enterprise Analytics <ArrowRight size={18} strokeWidth={3} />
            </button>
            <div className="absolute -bottom-10 -right-10 w-64 h-64 bg-indigo-500/10 blur-[80px] rounded-full pointer-events-none"></div>
         </div>
