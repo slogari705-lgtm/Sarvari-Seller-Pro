@@ -22,7 +22,6 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
 
   if (cust) {
     const invTime = new Date(inv.date).getTime();
-    // Calculate historical balance before this specific invoice
     const previousInvoices = state.invoices.filter(i => 
       i.customerId === cust.id && 
       !i.isVoided && 
@@ -45,7 +44,6 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
     finalBalance = lastLoan + (inv.total - inv.paidAmount);
   }
 
-  // Pre-calculated fields for the requested payment section
   const paymentSectionData = {
     term: inv.paymentTerm || (inv.status === 'paid' ? 'Immediate' : 'Credit'),
     transType: inv.paymentMethod.toUpperCase(),
@@ -54,105 +52,102 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
     discount: inv.discount || 0,
     receipt: inv.paidAmount,
     lastLoan: lastLoan,
-    combinedTotal: (inv.subtotal + (inv.tax || 0)) + lastLoan, // invoice total + last loan
     finalBalance: finalBalance
   };
 
   if (effectiveLayout === 'thermal' || effectiveLayout === 'receipt') {
     return `
-      <div dir="${direction}" style="width: 72mm; margin: 0; padding: 1mm 2mm; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #000; background: #fff; line-height: 1.2;">
-        <div style="text-align: center;">
-          <div style="font-size: 15px; font-weight: 900; margin-bottom: 2px;">${shop.shopName.toUpperCase()}</div>
-          <div style="font-size: 8px; line-height: 1.1;">
-            ${shop.shopAddress ? `<div>${shop.shopAddress}</div>` : ''}
-            ${shop.shopPhone ? `<div>TEL: ${shop.shopPhone}</div>` : ''}
-          </div>
+      <div dir="${direction}" style="width: 72mm; margin: 0 auto; padding: 0.5mm; font-family: 'Courier New', Courier, monospace; font-size: 10px; color: #000; background: #fff; line-height: 1.1;">
+        <div style="text-align: center; border-bottom: 1px solid #000; padding-bottom: 1mm; margin-bottom: 1mm;">
+          <div style="font-size: 14px; font-weight: 900;">${shop.shopName.toUpperCase()}</div>
+          <div style="font-size: 8px;">${shop.shopAddress || ''}</div>
+          <div style="font-size: 8px;">${shop.shopPhone ? `TEL: ${shop.shopPhone}` : ''}</div>
         </div>
         
-        <div style="border-top: 1px dashed #000; margin: 3px 0;"></div>
-        <div style="display: flex; justify-content: space-between;"><span style="font-weight: 900;">INV: #${invIdDisplay}</span><span>${new Date(inv.date).toLocaleDateString()}</span></div>
-        <div style="display: flex; justify-content: space-between;"><span>CLIENT:</span><span style="font-weight: 900;">${cust ? cust.name.toUpperCase() : 'WALK-IN'}</span></div>
-        <div style="border-top: 1px dashed #000; margin: 3px 0;"></div>
+        <div style="display: flex; justify-content: space-between; font-weight: 900; margin-bottom: 0.5mm;">
+          <span>INV: #${invIdDisplay}</span>
+          <span>${new Date(inv.date).toLocaleDateString()}</span>
+        </div>
+        <div style="margin-bottom: 1mm;">CLIENT: ${cust ? cust.name.toUpperCase() : 'WALK-IN'}</div>
         
-        <div style="margin-bottom: 5px;">
-          <table style="width: 100%; font-size: 9px; border-collapse: collapse;">
-            <thead>
-              <tr style="border-bottom: 1px solid #000;">
-                <th style="text-align: left;">ITEM</th>
-                <th style="text-align: center;">QTY</th>
-                <th style="text-align: right;">SUM</th>
+        <table style="width: 100%; font-size: 9px; border-collapse: collapse; border-bottom: 1px dashed #000;">
+          <thead>
+            <tr style="border-bottom: 1px solid #000;">
+              <th style="text-align: left; padding: 0.5mm 0;">ITEM</th>
+              <th style="text-align: center;">QTY</th>
+              <th style="text-align: right;">SUM</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${inv.items.map(it => `
+              <tr>
+                <td style="padding: 0.5mm 0;">${it.name.toUpperCase().substring(0, 18)}</td>
+                <td style="text-align: center;">${it.quantity}</td>
+                <td style="text-align: right;">${(it.price * it.quantity).toLocaleString()}</td>
               </tr>
-            </thead>
-            <tbody>
-              ${inv.items.map(it => `
-                <tr>
-                  <td style="padding: 1px 0;">${it.name.toUpperCase()}</td>
-                  <td style="text-align: center;">${it.quantity}</td>
-                  <td style="text-align: right;">${(it.price * it.quantity).toLocaleString()}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
+            `).join('')}
+          </tbody>
+        </table>
 
-        <div style="border-top: 1px dashed #000; margin: 3px 0;"></div>
-        
-        <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
-          <tr><td>Payment Term:</td><td style="text-align: right; font-weight: 700;">${paymentSectionData.term}</td></tr>
-          <tr><td>Trans Type:</td><td style="text-align: right;">${paymentSectionData.transType}</td></tr>
-          <tr><td>Currency:</td><td style="text-align: right;">${paymentSectionData.currency}</td></tr>
-          <tr style="border-top: 1px solid #eee;"><td>Invoice Total:</td><td style="text-align: right;">${currency}${paymentSectionData.invTotal.toLocaleString()}</td></tr>
-          <tr><td>Discount:</td><td style="text-align: right;">-${currency}${paymentSectionData.discount.toLocaleString()}</td></tr>
-          <tr><td>Receipt:</td><td style="text-align: right; font-weight: 700;">${currency}${paymentSectionData.receipt.toLocaleString()}</td></tr>
-          <tr><td>Last Loan:</td><td style="text-align: right;">${currency}${paymentSectionData.lastLoan.toLocaleString()}</td></tr>
-          <tr style="border-top: 1px double #000; font-weight: 900; font-size: 12px;"><td>TOTAL:</td><td style="text-align: right;">${currency}${paymentSectionData.combinedTotal.toLocaleString()}</td></tr>
-          <tr style="border-top: 1px solid #000; font-weight: 900; font-size: 13px;"><td>BALANCE:</td><td style="text-align: right;">${currency}${paymentSectionData.finalBalance.toLocaleString()}</td></tr>
+        <table style="width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 1mm;">
+          <tr><td style="padding: 0.2mm 0;">TERM:</td><td style="text-align: right; font-weight: 900;">${paymentSectionData.term.toUpperCase()}</td></tr>
+          <tr><td style="padding: 0.2mm 0;">TYPE:</td><td style="text-align: right;">${paymentSectionData.transType} [${paymentSectionData.currency}]</td></tr>
+          <tr style="border-top: 1px solid #eee;"><td>INV TOTAL:</td><td style="text-align: right;">${currency}${paymentSectionData.invTotal.toLocaleString()}</td></tr>
+          ${paymentSectionData.discount > 0 ? `<tr><td>DISCOUNT:</td><td style="text-align: right;">-${currency}${paymentSectionData.discount.toLocaleString()}</td></tr>` : ''}
+          <tr><td>RECEIPT:</td><td style="text-align: right; font-weight: 900;">${currency}${paymentSectionData.receipt.toLocaleString()}</td></tr>
+          <tr><td>LAST LOAN:</td><td style="text-align: right;">${currency}${paymentSectionData.lastLoan.toLocaleString()}</td></tr>
+          <tr style="border-top: 1px solid #000; font-weight: 900; font-size: 11px;">
+            <td style="padding-top: 1mm;">BALANCE:</td>
+            <td style="text-align: right; padding-top: 1mm;">${currency}${paymentSectionData.finalBalance.toLocaleString()}</td>
+          </tr>
           ${exRate !== 1 ? `
             <tr style="font-size: 8px; opacity: 0.8;">
-              <td>Ex Rate: 1 ${currency} = ${exRate} ${secondaryCurrency}</td>
-              <td style="text-align: right;">Bal: ${secondaryCurrency}${(paymentSectionData.finalBalance * exRate).toLocaleString()}</td>
+              <td>${secondaryCurrency} RATE: ${exRate}</td>
+              <td style="text-align: right;">${secondaryCurrency}${(paymentSectionData.finalBalance * exRate).toLocaleString()}</td>
             </tr>
           ` : ''}
         </table>
 
-        <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
-        <div style="text-align: center; font-size: 9px; font-weight: 900;">
-          ${activeTemplate.footerText || 'THANK YOU FOR YOUR BUSINESS'}
+        <div style="text-align: center; font-size: 8px; font-weight: 900; margin-top: 2mm; border-top: 1px dashed #000; padding-top: 1mm;">
+          ${activeTemplate.footerText || 'THANK YOU'}
         </div>
       </div>
     `;
   }
 
-  // A4 Layout
+  // A4 Layout - Densified
   const commonStyles = `
-    .invoice-container { padding: 15mm; width: 210mm; min-height: 297mm; box-sizing: border-box; background: white; color: #1e293b; font-family: 'Inter', sans-serif; position: relative; }
-    .brand-accent { height: 4px; width: 100%; background: ${brandColor}; margin-bottom: 10mm; }
-    .header { display: flex; justify-content: space-between; margin-bottom: 15mm; }
-    .shop-info h1 { margin: 0; font-size: 28px; font-weight: 900; text-transform: uppercase; color: #0f172a; }
-    .shop-info p { margin: 2px 0; font-size: 11px; color: #64748b; font-weight: 600; }
+    .invoice-container { padding: 10mm; width: 210mm; min-height: 297mm; box-sizing: border-box; background: white; color: #1e293b; font-family: 'Inter', sans-serif; }
+    .header { display: flex; justify-content: space-between; border-bottom: 2px solid ${brandColor}; padding-bottom: 5mm; margin-bottom: 5mm; }
+    .shop-info h1 { margin: 0; font-size: 22px; font-weight: 900; text-transform: uppercase; color: #0f172a; }
+    .shop-info p { margin: 1px 0; font-size: 10px; color: #64748b; font-weight: 600; }
     .doc-meta { text-align: right; }
-    .doc-meta h2 { margin: 0; font-size: 42px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; line-height: 1; }
-    .doc-meta p { margin: 5px 0; font-size: 14px; font-weight: 800; font-family: monospace; }
-    .items-table { width: 100%; border-collapse: collapse; margin-bottom: 15mm; }
-    .items-table th { padding: 5mm; text-align: left; font-size: 10px; font-weight: 900; color: #64748b; border-bottom: 2px solid #e2e8f0; text-transform: uppercase; }
-    .items-table td { padding: 5mm; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
-    .payment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; background: #f8fafc; padding: 10mm; border-radius: 12px; margin-top: 10mm; border: 1px solid #e2e8f0; }
-    .payment-item { display: flex; justify-content: space-between; padding: 2mm 0; border-bottom: 1px solid #e2e8f0; }
-    .payment-item:last-child { border: none; }
-    .label { font-size: 10px; font-weight: 900; color: #64748b; text-transform: uppercase; }
-    .value { font-size: 14px; font-weight: 800; color: #0f172a; }
-    .balance-box { grid-column: span 2; background: #0f172a; color: white; padding: 6mm; border-radius: 8px; margin-top: 4mm; display: flex; justify-content: space-between; align-items: center; }
+    .doc-meta h2 { margin: 0; font-size: 32px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; line-height: 1; }
+    .doc-meta p { margin: 2px 0; font-size: 12px; font-weight: 800; font-family: monospace; }
+    .items-table { width: 100%; border-collapse: collapse; margin-bottom: 5mm; }
+    .items-table th { padding: 3mm; text-align: left; font-size: 9px; font-weight: 900; color: #64748b; border-bottom: 1.5px solid #e2e8f0; text-transform: uppercase; }
+    .items-table td { padding: 3mm; font-size: 11px; border-bottom: 0.5px solid #f1f5f9; }
+    .summary-section { width: 100%; display: flex; justify-content: flex-end; }
+    .summary-table { width: 100mm; border-collapse: collapse; border: 1px solid #e2e8f0; }
+    .summary-table td { padding: 2.5mm 4mm; font-size: 11px; border-bottom: 0.5px solid #f1f5f9; }
+    .summary-table .label { font-weight: 900; color: #64748b; text-transform: uppercase; font-size: 9px; }
+    .summary-table .value { text-align: right; font-weight: 700; color: #0f172a; }
+    .summary-table .total-row { background: #f8fafc; border-top: 1.5px solid #0f172a; }
+    .summary-table .balance-row { background: #0f172a; color: white; border-top: 1px solid #0f172a; }
+    .summary-table .balance-row .label { color: #94a3b8; }
+    .summary-table .balance-row .value { color: white; font-size: 18px; font-weight: 900; }
+    .footer { margin-top: 10mm; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 5mm; font-size: 9px; color: #94a3b8; text-transform: uppercase; font-weight: 700; }
   `;
 
   return `
     <div dir="${direction}" class="invoice-container">
       <style>${commonStyles}</style>
-      <div class="brand-accent"></div>
       <div class="header">
         <div class="shop-info">
           <h1>${shop.shopName}</h1>
           <p>${shop.shopAddress || ''}</p>
           <p>TEL: ${shop.shopPhone || ''} | EMAIL: ${shop.shopEmail || ''}</p>
+          <p style="margin-top: 2mm; font-weight: 900; color: #0f172a;">BILL TO: ${cust ? cust.name.toUpperCase() : 'CASH SALE'}</p>
         </div>
         <div class="doc-meta">
           <h2>INVOICE</h2>
@@ -163,12 +158,17 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
 
       <table class="items-table">
         <thead>
-          <tr><th>Description</th><th style="text-align: center;">Qty</th><th style="text-align: right;">Rate</th><th style="text-align: right;">Total</th></tr>
+          <tr>
+            <th style="width: 50%;">Description</th>
+            <th style="text-align: center;">Qty</th>
+            <th style="text-align: right;">Rate</th>
+            <th style="text-align: right;">Total</th>
+          </tr>
         </thead>
         <tbody>
           ${inv.items.map(it => `
             <tr>
-              <td style="font-weight: 800;">${it.name.toUpperCase()}</td>
+              <td style="font-weight: 700;">${it.name.toUpperCase()}</td>
               <td style="text-align: center;">${it.quantity}</td>
               <td style="text-align: right;">${currency}${it.price.toLocaleString()}</td>
               <td style="text-align: right; font-weight: 900;">${currency}${(it.price * it.quantity).toLocaleString()}</td>
@@ -177,33 +177,45 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
         </tbody>
       </table>
 
-      <div class="payment-grid">
-        <div>
-          <div class="payment-item"><span class="label">Payment Term</span><span class="value">${paymentSectionData.term}</span></div>
-          <div class="payment-item"><span class="label">Transaction Type</span><span class="value">${paymentSectionData.transType}</span></div>
-          <div class="payment-item"><span class="label">Currency</span><span class="value">${paymentSectionData.currency}</span></div>
-          <div class="payment-item"><span class="label">Exchange Rate</span><span class="value">1 : ${exRate}</span></div>
-        </div>
-        <div>
-          <div class="payment-item"><span class="label">Invoice Total</span><span class="value">${currency}${paymentSectionData.invTotal.toLocaleString()}</span></div>
-          <div class="payment-item"><span class="label">Discount</span><span class="value" style="color: #e11d48;">-${currency}${paymentSectionData.discount.toLocaleString()}</span></div>
-          <div class="payment-item"><span class="label">Receipt (Paid)</span><span class="value">${currency}${paymentSectionData.receipt.toLocaleString()}</span></div>
-          <div class="payment-item"><span class="label">Last Loan (Debt)</span><span class="value">${currency}${paymentSectionData.lastLoan.toLocaleString()}</span></div>
-        </div>
-        <div class="balance-box">
-          <div>
-            <div class="label" style="color: #94a3b8; margin-bottom: 1mm;">Total Outstanding Liability</div>
-            <div style="font-size: 32px; font-weight: 900; letter-spacing: -1px;">${currency}${paymentSectionData.finalBalance.toLocaleString()}</div>
-          </div>
-          <div style="text-align: right;">
-            <div class="label" style="color: #94a3b8; margin-bottom: 1mm;">Converted (${secondaryCurrency})</div>
-            <div style="font-size: 24px; font-weight: 800; opacity: 0.9;">${secondaryCurrency}${(paymentSectionData.finalBalance * exRate).toLocaleString()}</div>
-          </div>
-        </div>
+      <div class="summary-section">
+        <table class="summary-table">
+          <tr>
+            <td class="label">Payment Term / Method</td>
+            <td class="value">${paymentSectionData.term.toUpperCase()} / ${paymentSectionData.transType}</td>
+          </tr>
+          <tr>
+            <td class="label">Currency Configuration</td>
+            <td class="value">${paymentSectionData.currency} ${exRate !== 1 ? `(Rate: 1 : ${exRate})` : ''}</td>
+          </tr>
+          <tr>
+            <td class="label">Invoice Subtotal</td>
+            <td class="value">${currency}${paymentSectionData.invTotal.toLocaleString()}</td>
+          </tr>
+          ${paymentSectionData.discount > 0 ? `
+          <tr>
+            <td class="label">Deducted Discount</td>
+            <td class="value" style="color: #e11d48;">-${currency}${paymentSectionData.discount.toLocaleString()}</td>
+          </tr>` : ''}
+          <tr>
+            <td class="label">Amount Received (Receipt)</td>
+            <td class="value" style="color: #059669;">${currency}${paymentSectionData.receipt.toLocaleString()}</td>
+          </tr>
+          <tr>
+            <td class="label">Last Ledger Loan (Debt)</td>
+            <td class="value">${currency}${paymentSectionData.lastLoan.toLocaleString()}</td>
+          </tr>
+          <tr class="balance-row">
+            <td class="label">Final Outstanding Balance</td>
+            <td class="value">
+              ${currency}${paymentSectionData.finalBalance.toLocaleString()}
+              ${exRate !== 1 ? `<div style="font-size: 10px; opacity: 0.7; font-weight: 400;">≈ ${secondaryCurrency}${(paymentSectionData.finalBalance * exRate).toLocaleString()}</div>` : ''}
+            </td>
+          </tr>
+        </table>
       </div>
 
-      <div style="margin-top: 15mm; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 10mm; font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 800;">
-        ${activeTemplate.footerText || 'This is a computer-generated document. No signature required.'}
+      <div class="footer">
+        ${activeTemplate.footerText || 'Authorized Document - No physical signature required'}
       </div>
     </div>
   `;
