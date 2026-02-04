@@ -195,7 +195,13 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
   const handlePrintReceipt = (inv: Invoice, layout: PrintLayout) => {
     const html = generatePrintHTML(state, inv, layout);
     const holder = document.getElementById('print-holder');
-    if (holder) { holder.innerHTML = html; window.print(); holder.innerHTML = ''; }
+    if (holder) { 
+      holder.innerHTML = html; 
+      setTimeout(() => {
+        window.print(); 
+        holder.innerHTML = ''; 
+      }, 100);
+    }
   };
 
   const handleDownloadReceiptPDF = async (inv: Invoice) => {
@@ -207,32 +213,34 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
       const container = document.getElementById('pdf-render-container');
       if (!container) return;
       
-      // Ensure dimensions for capture
-      container.style.width = layout === 'thermal' ? '72mm' : '210mm';
+      // Strict pixel-based width for capture consistency
+      const pixelWidth = layout === 'thermal' ? 350 : 1200; 
+      container.style.width = `${pixelWidth}px`;
       container.innerHTML = html;
       
-      // Mandatory delay for font and style resolution
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Delay for CSS synchronization & font loading
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
       const canvas = await html2canvas(container, { 
-        scale: 3, 
+        scale: 2, 
         useCORS: true, 
         backgroundColor: '#ffffff',
-        logging: false
+        logging: false,
+        windowWidth: pixelWidth
       });
       
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({ 
         orientation: 'portrait', 
         unit: 'mm', 
-        format: layout === 'thermal' ? [72, 200] : 'a4' 
+        format: layout === 'thermal' ? [72, 250] : 'a4' 
       });
       
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Invoice_#${inv.id}.pdf`);
+      pdf.save(`Sarvari_Receipt_#${inv.id}.pdf`);
     } catch (e) { 
       console.error("PDF generation failed:", e); 
     } finally {
@@ -426,10 +434,10 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
                        <div className="text-right"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Liability</p><h4 className="text-2xl font-black text-rose-500">{state.settings.currency}{(finishedInvoice.total - finishedInvoice.paidAmount + (selectedCustomer?.totalDebt || 0)).toLocaleString()}</h4></div>
                     </div>
                     <div className="space-y-4">
-                       <label className="block text-[11px] font-black text-indigo-600 uppercase tracking-[0.3em] ml-2">Dispatch Mode</label>
+                       <label className="block text-[11px] font-black text-indigo-600 uppercase tracking-[0.3em] ml-2">Dispatch Mode / Size Selection</label>
                        <div className="grid grid-cols-2 gap-4">
-                          <button onClick={() => setReceiptPrintMode('thermal')} className={`p-6 rounded-[32px] border-4 transition-all text-left flex items-center gap-4 ${receiptPrintMode === 'thermal' ? 'border-indigo-600 bg-white dark:bg-slate-700 shadow-lg' : 'bg-white dark:bg-slate-800 border-transparent opacity-60'}`}><Smartphone size={24} className={receiptPrintMode === 'thermal' ? 'text-indigo-600' : 'text-slate-400'} /><div><p className="font-black text-sm dark:text-white uppercase">Thermal POS</p><p className="text-[8px] font-bold text-slate-400 uppercase">72mm optimized</p></div></button>
-                          <button onClick={() => setReceiptPrintMode('a4')} className={`p-6 rounded-[32px] border-4 transition-all text-left flex items-center gap-4 ${receiptPrintMode === 'a4' ? 'border-indigo-600 bg-white dark:bg-slate-700 shadow-lg' : 'bg-white dark:bg-slate-800 border-transparent opacity-60'}`}><Layout size={24} className={receiptPrintMode === 'a4' ? 'text-indigo-600' : 'text-slate-400'} /><div><p className="font-black text-sm dark:text-white uppercase">Formal A4</p><p className="text-[8px] font-bold text-slate-400 uppercase">Standard Office</p></div></button>
+                          <button onClick={() => setReceiptPrintMode('thermal')} className={`p-6 rounded-[32px] border-4 transition-all text-left flex items-center gap-4 ${receiptPrintMode === 'thermal' ? 'border-indigo-600 bg-white dark:bg-slate-700 shadow-lg' : 'bg-white dark:bg-slate-800 border-transparent opacity-60'}`}><Smartphone size={24} className={receiptPrintMode === 'thermal' ? 'text-indigo-600' : 'text-slate-400'} /><div><p className="font-black text-sm dark:text-white uppercase">Thermal (72mm)</p><p className="text-[8px] font-bold text-slate-400 uppercase">POS Tape Optimized</p></div></button>
+                          <button onClick={() => setReceiptPrintMode('a4')} className={`p-6 rounded-[32px] border-4 transition-all text-left flex items-center gap-4 ${receiptPrintMode === 'a4' ? 'border-indigo-600 bg-white dark:bg-slate-700 shadow-lg' : 'bg-white dark:bg-slate-800 border-transparent opacity-60'}`}><Layout size={24} className={receiptPrintMode === 'a4' ? 'text-indigo-600' : 'text-slate-400'} /><div><p className="font-black text-sm dark:text-white uppercase">Full A4 (210mm)</p><p className="text-[8px] font-bold text-slate-400 uppercase">Professional Ledger</p></div></button>
                        </div>
                     </div>
                  </div>
