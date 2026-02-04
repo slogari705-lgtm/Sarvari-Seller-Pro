@@ -86,6 +86,23 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
   const taxAmount = subtotal * (state.settings.taxRate / 100);
   const total = Math.max(0, subtotal + taxAmount - discountValue);
 
+  // Automatic Payment Term Logic
+  useEffect(() => {
+    if (!isCheckoutOpen) return;
+    
+    if (paymentMethod !== 'cash') {
+      setPaymentTerm('Immediate');
+      return;
+    }
+
+    const received = cashReceived === '' ? total : Number(cashReceived);
+    if (received < total) {
+      setPaymentTerm('On Credit');
+    } else {
+      setPaymentTerm('Immediate');
+    }
+  }, [cashReceived, total, paymentMethod, isCheckoutOpen]);
+
   const changeDue = useMemo(() => {
     if (cashReceived === '' || paymentMethod !== 'cash') return 0;
     return Math.max(0, Number(cashReceived) - total);
@@ -345,7 +362,17 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
                  <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-6">
                        <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-2">Transaction Type</label><div className="grid grid-cols-3 gap-2">{[{ id: 'cash', icon: Banknote },{ id: 'card', icon: CreditCard },{ id: 'transfer', icon: RefreshCw }].map(method => (<button key={method.id} onClick={() => setPaymentMethod(method.id as any)} className={`p-4 rounded-2xl border-4 transition-all flex flex-col items-center gap-2 ${paymentMethod === method.id ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30' : 'border-slate-50 dark:border-slate-800 opacity-60 grayscale'}`}><method.icon size={20}/><span className="text-[8px] font-black uppercase">{method.id}</span></button>))}</div></div>
-                       <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-2">Payment Term</label><div className="grid grid-cols-2 gap-2">{['Immediate', 'On Credit'].map(term => (<button key={term} onClick={() => setPaymentTerm(term)} className={`p-4 rounded-2xl border-4 font-black text-[9px] uppercase transition-all ${paymentTerm === term ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-slate-50 dark:border-slate-800 text-slate-400'}`}>{term}</button>))}</div></div>
+                       <div>
+                         <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-2">Payment Term (System Managed)</label>
+                         <div className="grid grid-cols-2 gap-2">
+                           {['Immediate', 'On Credit'].map(term => (
+                             <div key={term} className={`p-4 rounded-2xl border-4 font-black text-[9px] uppercase transition-all flex items-center justify-center ${paymentTerm === term ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-slate-50 dark:border-slate-800 text-slate-300 grayscale'}`}>
+                               {term}
+                             </div>
+                           ))}
+                         </div>
+                         <p className="text-[8px] font-bold text-indigo-500 uppercase mt-2 ml-2 italic tracking-tighter">Term updates automatically based on amount received</p>
+                       </div>
                     </div>
 
                     <div className="p-8 bg-slate-900 rounded-[40px] text-white flex items-center justify-between relative overflow-hidden group">
