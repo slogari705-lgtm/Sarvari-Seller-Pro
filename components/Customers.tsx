@@ -38,10 +38,7 @@ import {
   ChevronRight,
   Calculator,
   Calendar,
-  LayoutGrid,
-  List,
-  ExternalLink,
-  Zap
+  ClipboardList
 } from 'lucide-react';
 import { AppState, Customer, View, Invoice, LoanTransaction } from '../types';
 import { translations } from '../translations';
@@ -57,13 +54,12 @@ interface Props {
 
 type SortKey = 'name' | 'id' | 'spent' | 'debt';
 type SortOrder = 'asc' | 'desc';
-type ViewMode = 'grid' | 'table';
+type ProfileTab = 'overview' | 'transactions' | 'loans';
 
 const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDebt, setFilterDebt] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const [viewingCard, setViewingCard] = useState<Customer | null>(null);
@@ -71,8 +67,9 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   const [sortKey, setSortKey] = useState<SortKey>('spent');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [isExportingCard, setIsExportingCard] = useState(false);
+  const [isExportingReport, setIsExportingReport] = useState(false);
+  const [activeProfileTab, setActiveProfileTab] = useState<ProfileTab>('overview');
   
-  // Quick Repayment State
   const [isSettlingDebt, setIsSettlingDebt] = useState(false);
   const [settlementAmount, setSettlementAmount] = useState<number | ''>('');
 
@@ -105,18 +102,17 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     return result;
   }, [activeCustomers, searchTerm, filterDebt, sortKey, sortOrder]);
 
-  const summaryStats = useMemo(() => ({
-    total: activeCustomers.length,
-    activeDebt: activeCustomers.reduce((acc, c) => acc + (c.totalDebt || 0), 0),
-    avgSpend: activeCustomers.length ? activeCustomers.reduce((acc, c) => acc + (c.totalSpent || 0), 0) / activeCustomers.length : 0
-  }), [activeCustomers]);
-
   const getTier = (spent: number) => {
-    if (spent >= 5000) return { label: 'Platinum', color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-900/20', icon: Crown, border: 'border-indigo-200' };
-    if (spent >= 2500) return { label: 'Gold', color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: Crown, border: 'border-amber-200' };
-    if (spent >= 1000) return { label: 'Silver', color: 'text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800/50', icon: Award, border: 'border-slate-200' };
-    return { label: 'Bronze', color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20', icon: Award, border: 'border-orange-200' };
+    if (spent >= 5000) return { label: 'Platinum', color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-900/20', icon: Crown };
+    if (spent >= 2500) return { label: 'Gold', color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: Crown };
+    if (spent >= 1000) return { label: 'Silver', color: 'text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800/50', icon: Award };
+    return { label: 'Bronze', color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20', icon: Award };
   };
+
+  const [form, setForm] = useState<Partial<Customer>>({ 
+    name: '', phone: '', email: '', address: '', company: '', notes: '', photo: '',
+    gender: 'Male', occupation: ''
+  });
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -126,11 +122,6 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
       reader.readAsDataURL(file);
     }
   };
-
-  const [form, setForm] = useState<Partial<Customer>>({ 
-    name: '', phone: '', email: '', address: '', company: '', notes: '', photo: '',
-    gender: 'Male', occupation: ''
-  });
 
   const handleSaveCustomer = () => {
     if (!form.name || !form.phone) return alert("Required: Name & Phone");
@@ -157,7 +148,6 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
   const handleQuickRepay = () => {
     if (!viewingCustomer || !settlementAmount || Number(settlementAmount) <= 0) return;
     const amount = Number(settlementAmount);
-    
     const newTrans: LoanTransaction = {
       id: Math.random().toString(36).substr(2, 9),
       customerId: viewingCustomer.id,
@@ -166,7 +156,6 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
       type: 'repayment',
       note: "Quick settlement from profile view"
     };
-
     let remaining = amount;
     const updatedInvoices = state.invoices.map((inv: Invoice) => {
       if (inv.customerId === viewingCustomer.id && inv.status !== 'paid' && !inv.isVoided) {
@@ -178,15 +167,12 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
       }
       return inv;
     });
-
     const updatedCustomers = state.customers.map(c => 
       c.id === viewingCustomer.id ? { ...c, totalDebt: Math.max(0, c.totalDebt - amount) } : c
     );
-
     updateState('invoices', updatedInvoices);
     updateState('customers', updatedCustomers);
     updateState('loanTransactions', [...state.loanTransactions, newTrans]);
-    
     setViewingCustomer(updatedCustomers.find(c => c.id === viewingCustomer.id) || null);
     setIsSettlingDebt(false);
     setSettlementAmount('');
@@ -202,17 +188,138 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
     setIsExportingCard(true);
     const element = document.getElementById('member-card-render');
     if (!element) return setIsExportingCard(false);
-
     try {
       const canvas = await html2canvas(element, { scale: 4, useCORS: true, backgroundColor: null });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [85, 55] });
       pdf.addImage(imgData, 'PNG', 0, 0, 85, 55);
       pdf.save(`MEMBER_CARD_${customer.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (e) { console.error(e); } finally { setIsExportingCard(false); }
+  };
+
+  const handleDownloadCustomerReport = async (customer: Customer) => {
+    if (isExportingReport) return;
+    setIsExportingReport(true);
+    const container = document.getElementById('pdf-render-container');
+    if (!container) return setIsExportingReport(false);
+
+    const customerInvoices = state.invoices.filter(inv => inv.customerId === customer.id && !inv.isVoided);
+    const customerLoans = state.loanTransactions.filter(l => l.customerId === customer.id);
+    const currency = state.settings.currency;
+
+    const reportHtml = `
+      <div style="width: 210mm; padding: 20mm; background: white; font-family: 'Inter', sans-serif; color: #1e293b; line-height: 1.5;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 4px solid #4f46e5; padding-bottom: 10mm; margin-bottom: 10mm;">
+          <div>
+            <h1 style="margin: 0; font-size: 32px; font-weight: 900; text-transform: uppercase; color: #0f172a;">Audit Report</h1>
+            <p style="margin: 4px 0 0; font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 2px;">Official Customer Transaction History</p>
+          </div>
+          <div style="text-align: right;">
+            <h2 style="margin: 0; font-size: 18px; font-weight: 900;">${state.settings.shopName.toUpperCase()}</h2>
+            <p style="margin: 2px 0; font-size: 10px; color: #64748b; font-weight: 600;">${state.settings.shopAddress || ''}</p>
+            <p style="margin: 2px 0; font-size: 10px; color: #64748b; font-weight: 600;">GENERATED: ${new Date().toLocaleString()}</p>
+          </div>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10mm; display: flex; gap: 15mm; margin-bottom: 10mm;">
+           <div style="width: 40mm; height: 40mm; background: #fff; border: 4px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-radius: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+              ${customer.photo ? `<img src="${customer.photo}" style="width: 100%; height: 100%; object-fit: cover;" />` : `<span style="font-size: 48px; font-weight: 900; color: #cbd5e1;">${customer.name.charAt(0)}</span>`}
+           </div>
+           <div style="flex: 1;">
+              <h3 style="margin: 0; font-size: 24px; font-weight: 900; color: #0f172a; text-transform: uppercase;">${customer.name}</h3>
+              <p style="margin: 4px 0 15px; font-size: 14px; color: #4f46e5; font-weight: 800; letter-spacing: 1px;">CLIENT ID: #REG-${customer.id.padStart(4, '0')}</p>
+              <div style="display: grid; grid-cols: 2; gap: 4px;">
+                 <p style="margin: 0; font-size: 11px; color: #64748b;"><b>TELECOM:</b> ${customer.phone}</p>
+                 <p style="margin: 0; font-size: 11px; color: #64748b;"><b>LOCATION:</b> ${customer.address || 'Not Registered'}</p>
+                 <p style="margin: 0; font-size: 11px; color: #64748b;"><b>ENROLLMENT:</b> ${new Date(customer.joinedDate).toLocaleDateString()}</p>
+              </div>
+           </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; margin-bottom: 12mm;">
+           <div style="background: #ffffff; border: 2px solid #e2e8f0; padding: 6mm; border-radius: 16px; text-align: center;">
+              <p style="margin: 0 0 4px; font-size: 9px; font-weight: 900; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Lifetime Investment</p>
+              <h4 style="margin: 0; font-size: 24px; font-weight: 900; color: #0f172a;">${currency}${customer.totalSpent.toLocaleString()}</h4>
+           </div>
+           <div style="background: #fff1f2; border: 2px solid #fecdd3; padding: 6mm; border-radius: 16px; text-align: center;">
+              <p style="margin: 0 0 4px; font-size: 9px; font-weight: 900; color: #e11d48; text-transform: uppercase; letter-spacing: 1px;">Current Liability</p>
+              <h4 style="margin: 0; font-size: 24px; font-weight: 900; color: #be123c;">${currency}${customer.totalDebt.toLocaleString()}</h4>
+           </div>
+           <div style="background: #eff6ff; border: 2px solid #dbeafe; padding: 6mm; border-radius: 16px; text-align: center;">
+              <p style="margin: 0 0 4px; font-size: 9px; font-weight: 900; color: #2563eb; text-transform: uppercase; letter-spacing: 1px;">Loyalty Credits</p>
+              <h4 style="margin: 0; font-size: 24px; font-weight: 900; color: #1e40af;">${customer.loyaltyPoints || 0} PTS</h4>
+           </div>
+        </div>
+
+        <h4 style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: #64748b; border-left: 4px solid #4f46e5; padding-left: 12px; margin-bottom: 6mm;">Transaction Registry (Past 20 Logs)</h4>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 12mm; font-size: 11px;">
+           <thead>
+              <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                 <th style="padding: 4mm; text-align: left; font-weight: 900;">DATE</th>
+                 <th style="padding: 4mm; text-align: left; font-weight: 900;">DOC ID</th>
+                 <th style="padding: 4mm; text-align: center; font-weight: 900;">STATUS</th>
+                 <th style="padding: 4mm; text-align: right; font-weight: 900;">TOTAL AMOUNT</th>
+              </tr>
+           </thead>
+           <tbody>
+              ${customerInvoices.slice(-20).map(inv => `
+                 <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 4mm;">${new Date(inv.date).toLocaleDateString()}</td>
+                    <td style="padding: 4mm; font-family: monospace; font-weight: 700;">#INV-${inv.id.padStart(4, '0')}</td>
+                    <td style="padding: 4mm; text-align: center; font-weight: 800; text-transform: uppercase;">${inv.status}</td>
+                    <td style="padding: 4mm; text-align: right; font-weight: 800;">${currency}${inv.total.toLocaleString()}</td>
+                 </tr>
+              `).join('')}
+              ${customerInvoices.length === 0 ? '<tr><td colspan="4" style="padding: 10mm; text-align: center; color: #cbd5e1; font-weight: 700;">No sales history logged for this entity.</td></tr>' : ''}
+           </tbody>
+        </table>
+
+        <h4 style="font-size: 12px; font-weight: 900; text-transform: uppercase; color: #64748b; border-left: 4px solid #be123c; padding-left: 12px; margin-bottom: 6mm;">Loan & Credit Adjustments</h4>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 10mm; font-size: 11px;">
+           <thead>
+              <tr style="background: #fdf2f2; border-bottom: 2px solid #fee2e2;">
+                 <th style="padding: 4mm; text-align: left; font-weight: 900;">DATE</th>
+                 <th style="padding: 4mm; text-align: left; font-weight: 900;">TRANSACTION TYPE</th>
+                 <th style="padding: 4mm; text-align: left; font-weight: 900;">NOTE/REFERENCE</th>
+                 <th style="padding: 4mm; text-align: right; font-weight: 900;">MAGNITUDE</th>
+              </tr>
+           </thead>
+           <tbody>
+              ${customerLoans.slice(-15).map(l => `
+                 <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 4mm;">${new Date(l.date).toLocaleDateString()}</td>
+                    <td style="padding: 4mm; font-weight: 800; text-transform: uppercase; color: ${l.type === 'debt' ? '#be123c' : '#059669'};">${l.type}</td>
+                    <td style="padding: 4mm; color: #64748b;">${l.note || 'System Registry Entry'}</td>
+                    <td style="padding: 4mm; text-align: right; font-weight: 800;">${l.type === 'debt' ? '+' : '-'}${currency}${l.amount.toLocaleString()}</td>
+                 </tr>
+              `).join('')}
+              ${customerLoans.length === 0 ? '<tr><td colspan="4" style="padding: 10mm; text-align: center; color: #cbd5e1; font-weight: 700;">No manual adjustments recorded.</td></tr>' : ''}
+           </tbody>
+        </table>
+
+        <div style="margin-top: auto; padding-top: 10mm; border-top: 1px solid #e2e8f0; text-align: center;">
+           <p style="margin: 0; font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">Sarvari Seller Pro POS • Verified Identity Audit • Confidential</p>
+        </div>
+      </div>
+    `;
+
+    container.innerHTML = reportHtml;
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    try {
+      const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`AUDIT_REPORT_${customer.name.replace(/\s+/g, '_')}.pdf`);
     } catch (e) {
-      console.error("PDF Export Failed:", e);
+      console.error(e);
     } finally {
-      setIsExportingCard(false);
+      container.innerHTML = '';
+      setIsExportingReport(false);
     }
   };
 
@@ -239,289 +346,251 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
         message="This customer record will be moved to the Trash bin." 
       />
 
-      {/* CXM Header & Stats */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        <div className="xl:col-span-2 bg-indigo-600 p-10 rounded-[56px] text-white shadow-2xl relative overflow-hidden group">
-           <div className="relative z-10 space-y-6">
-              <div className="flex items-center gap-5">
-                 <div className="w-14 h-14 bg-white/20 rounded-[22px] backdrop-blur-xl flex items-center justify-center border border-white/20"><UsersIcon size={32}/></div>
-                 <div>
-                    <h3 className="text-3xl font-black uppercase tracking-tighter">CRM Console</h3>
-                    <p className="text-indigo-100/70 text-[10px] font-bold uppercase tracking-[0.2em]">Authorized Management Hub</p>
-                 </div>
-              </div>
-              <div className="flex gap-10">
-                 <div><p className="text-[10px] font-black uppercase text-indigo-200 mb-1">Managed Identities</p><h4 className="text-4xl font-black">{summaryStats.total}</h4></div>
-                 <div className="w-px h-12 bg-white/20 my-auto" />
-                 <div><p className="text-[10px] font-black uppercase text-indigo-200 mb-1">Active Portfolio</p><h4 className="text-4xl font-black">{state.settings.currency}{summaryStats.activeDebt.toLocaleString()}</h4></div>
-              </div>
-           </div>
-           <UsersIcon size={240} className="absolute -bottom-12 -right-12 text-white/5 rotate-12 group-hover:rotate-0 transition-transform duration-700 pointer-events-none" />
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-           <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Risk Pulse</p>
-              <h4 className={`text-4xl font-black ${summaryStats.activeDebt > 5000 ? 'text-rose-600' : 'text-emerald-500'}`}>
-                 {summaryStats.activeDebt > 0 ? 'Elevated' : 'Stable'}
-              </h4>
-           </div>
-           <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-2xl flex items-center justify-center"><Scale size={24}/></div>
-              <div><p className="text-[10px] font-bold text-slate-400 uppercase">Exposure Index</p><span className="text-xs font-black dark:text-white">{state.settings.currency}{summaryStats.activeDebt.toLocaleString()} Net</span></div>
-           </div>
-        </div>
-
-        <div className="bg-slate-950 p-8 rounded-[48px] shadow-2xl text-white flex flex-col justify-between relative overflow-hidden group">
-           <div className="relative z-10">
-              <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-4">Quick Entry</p>
-              <button onClick={() => setIsAdding(true)} className="w-full py-5 bg-white text-slate-900 rounded-[28px] font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all">
-                 <UserPlus size={18} strokeWidth={3}/> New Identity
-              </button>
-           </div>
-           <Zap size={100} className="absolute -bottom-4 -right-4 text-white/5 rotate-45 group-hover:scale-110 transition-transform"/>
-        </div>
-      </div>
-
-      {/* Main Console Interface */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-         <div className="lg:col-span-8 space-y-4">
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-[40px] border shadow-sm flex flex-col md:flex-row items-center gap-4">
-               <div className="relative flex-1 w-full">
-                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                  <input type="text" placeholder="Locate identity by metadata (Name, ID, Phone)..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl py-4 pl-14 pr-6 outline-none font-bold text-sm dark:text-white" />
-               </div>
-               <div className="flex gap-2">
-                  <div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border dark:border-slate-700">
-                     <button onClick={() => setViewMode('grid')} className={`p-2.5 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}><LayoutGrid size={20}/></button>
-                     <button onClick={() => setViewMode('table')} className={`p-2.5 rounded-xl transition-all ${viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}><List size={20}/></button>
-                  </div>
-                  <button onClick={() => setFilterDebt(!filterDebt)} className={`px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border transition-all flex items-center gap-3 ${filterDebt ? 'bg-rose-600 border-rose-600 text-white shadow-xl' : 'bg-white dark:bg-slate-900 text-slate-400'}`}>
-                     <Scale size={16}/> Liability
-                  </button>
-               </div>
-            </div>
-
-            {viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in zoom-in-95 duration-300">
-                 {filteredCustomers.map(c => {
-                   const tier = getTier(c.totalSpent);
-                   return (
-                     <div key={c.id} onClick={() => setViewingCustomer(c)} className={`group bg-white dark:bg-slate-900 p-8 rounded-[48px] border-2 transition-all hover:shadow-2xl cursor-pointer relative overflow-hidden flex flex-col items-center text-center ${viewingCustomer?.id === c.id ? 'border-indigo-600 shadow-xl' : 'border-slate-50 dark:border-slate-800'}`}>
-                        <div className={`absolute top-6 right-6 p-2 rounded-xl ${tier.bg} ${tier.color} border ${tier.border}`}><tier.icon size={16}/></div>
-                        <div className="w-24 h-24 rounded-[32px] overflow-hidden bg-slate-50 dark:bg-slate-800 border-4 border-white dark:border-slate-800 shadow-xl mb-6 flex items-center justify-center shrink-0">
-                           {c.photo ? <img src={c.photo} className="w-full h-full object-cover" /> : <div className="text-3xl font-black text-indigo-600 uppercase">{c.name.charAt(0)}</div>}
-                        </div>
-                        <h5 className="text-xl font-black dark:text-white uppercase truncate w-full px-2 tracking-tight">{c.name}</h5>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 mb-6">{c.phone}</p>
-                        
-                        <div className="w-full grid grid-cols-2 gap-4 mt-auto">
-                           <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-3xl">
-                              <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Spent</p>
-                              <p className="text-sm font-black dark:text-white">{state.settings.currency}{c.totalSpent.toLocaleString()}</p>
-                           </div>
-                           <div className={`p-4 rounded-3xl ${c.totalDebt > 0 ? 'bg-rose-50 dark:bg-rose-900/20' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
-                              <p className={`text-[8px] font-black uppercase mb-1 ${c.totalDebt > 0 ? 'text-rose-400' : 'text-slate-400'}`}>Debt</p>
-                              <p className={`text-sm font-black ${c.totalDebt > 0 ? 'text-rose-600' : 'text-slate-500 dark:text-slate-400'}`}>{state.settings.currency}{c.totalDebt.toLocaleString()}</p>
-                           </div>
-                        </div>
-                     </div>
-                   );
-                 })}
-              </div>
-            ) : (
-              <div className="bg-white dark:bg-slate-900 rounded-[48px] border shadow-sm overflow-hidden animate-in slide-in-from-bottom-4">
-                 <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                       <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b">
-                          <tr>
-                             <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer" onClick={() => toggleSort('name')}>Identity Identity <ArrowUpDown size={12} className="inline ml-1"/></th>
-                             <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center cursor-pointer" onClick={() => toggleSort('spent')}>Investment <ArrowUpDown size={12} className="inline ml-1"/></th>
-                             <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right cursor-pointer" onClick={() => toggleSort('debt')}>Liability <ArrowUpDown size={12} className="inline ml-1"/></th>
-                             <th className="px-10 py-6"></th>
-                          </tr>
-                       </thead>
-                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {filteredCustomers.map((c) => {
-                             const tier = getTier(c.totalSpent);
-                             const isViewing = viewingCustomer?.id === c.id;
-                             return (
-                               <tr key={c.id} onClick={() => setViewingCustomer(c)} className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all group cursor-pointer ${isViewing ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''}`}>
-                                  <td className="px-10 py-5">
-                                     <div className="flex items-center gap-5">
-                                        <div className="w-14 h-14 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center font-black text-2xl text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all overflow-hidden border-2 border-white dark:border-slate-800 shadow-sm">
-                                           {c.photo ? <img src={c.photo} className="w-full h-full object-cover" /> : c.name.charAt(0)}
-                                        </div>
-                                        <div>
-                                           <p className="font-black text-base dark:text-white uppercase truncate max-w-[200px] tracking-tight">{c.name}</p>
-                                           <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{c.phone}</p>
-                                        </div>
-                                     </div>
-                                  </td>
-                                  <td className="px-10 py-5 text-center">
-                                     <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full ${tier.bg} ${tier.color} border ${tier.border} shadow-sm mb-1`}>
-                                        <tier.icon size={14}/>
-                                        <span className="text-[10px] font-black uppercase tracking-widest">{tier.label}</span>
-                                     </div>
-                                     <p className="text-[11px] font-black text-slate-700 dark:text-slate-400">{state.settings.currency}{c.totalSpent.toLocaleString()}</p>
-                                  </td>
-                                  <td className="px-10 py-5 text-right">
-                                     <p className={`text-lg font-black ${c.totalDebt > 0 ? 'text-rose-600' : 'text-emerald-500'}`}>{state.settings.currency}{c.totalDebt.toLocaleString()}</p>
-                                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Exposure Index</p>
-                                  </td>
-                                  <td className="px-10 py-5 text-right">
-                                     <div className={`p-3 rounded-xl transition-all ${isViewing ? 'bg-indigo-600 text-white' : 'bg-slate-50 dark:bg-slate-800 text-slate-300'}`}>
-                                        <ChevronRight size={20} strokeWidth={3} />
-                                     </div>
-                                  </td>
-                                </tr>
-                             )
-                          })}
-                       </tbody>
-                    </table>
-                 </div>
-              </div>
-            )}
-         </div>
-
-         {/* Enhanced CXM Sidebar Detail */}
-         <div className="lg:col-span-4">
-            {viewingCustomer ? (
-               <div className="bg-white dark:bg-slate-900 rounded-[56px] border border-slate-100 dark:border-slate-800 shadow-2xl overflow-hidden animate-in slide-in-from-right duration-500 flex flex-col h-[850px] sticky top-8">
-                  {/* Decorative Header */}
-                  <div className="h-40 bg-slate-950 relative overflow-hidden shrink-0">
-                     <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1.5px, transparent 1.5px)', backgroundSize: '24px 24px' }} />
-                     <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white dark:from-slate-900 to-transparent" />
-                  </div>
-
-                  {/* Profile Info Overlay */}
-                  <div className="px-10 -mt-20 relative z-10 shrink-0 text-center">
-                     <div className="w-36 h-36 bg-white dark:bg-slate-800 rounded-[48px] flex items-center justify-center mx-auto shadow-2xl overflow-hidden border-[6px] border-white dark:border-slate-900">
-                        {viewingCustomer.photo ? <img src={viewingCustomer.photo} className="w-full h-full object-cover" /> : <User size={70} className="text-slate-200" />}
-                     </div>
-                     <h4 className="text-3xl font-black dark:text-white uppercase tracking-tighter mt-6 leading-tight">{viewingCustomer.name}</h4>
-                     <div className="inline-flex items-center gap-2 px-5 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded-full border border-indigo-100 dark:border-indigo-800 mt-4">
-                        <Star size={14} fill="currentColor" className="text-indigo-600" />
-                        <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">LOYALTY MEMBER</span>
-                     </div>
-                  </div>
-
-                  <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-12">
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-slate-50 dark:bg-slate-950/50 p-6 rounded-[36px] border group hover:border-indigo-400 transition-all">
-                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Portfolio Balance</p>
-                           <h5 className="text-2xl font-black text-indigo-600">{state.settings.currency}{viewingCustomer.totalSpent.toLocaleString()}</h5>
-                        </div>
-                        <div className="bg-rose-50 dark:bg-rose-950/20 p-6 rounded-[36px] border border-rose-100 dark:border-rose-900/50 group hover:border-rose-400 transition-all">
-                           <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Open Exposure</p>
-                           <h5 className="text-2xl font-black text-rose-600">{state.settings.currency}{viewingCustomer.totalDebt.toLocaleString()}</h5>
-                        </div>
-                     </div>
-
-                     {viewingCustomer.totalDebt > 0 && (
-                       <button onClick={() => setIsSettlingDebt(true)} className="w-full py-6 bg-emerald-600 text-white rounded-[32px] shadow-xl shadow-emerald-200 dark:shadow-none font-black text-xs uppercase tracking-widest flex items-center justify-center gap-4 active:scale-95 transition-all">
-                          <CheckCircle2 size={24} strokeWidth={3}/> Execute Settlement
-                       </button>
-                     )}
-
-                     <div className="space-y-4">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-4">Registry Access</label>
-                        <div className="grid grid-cols-2 gap-3">
-                           <button onClick={() => setViewingCard(viewingCustomer)} className="py-5 bg-white dark:bg-slate-800 rounded-[28px] border border-slate-100 dark:border-slate-700 flex flex-col items-center gap-3 shadow-sm hover:border-indigo-500 transition-all">
-                              <IdCard size={24} className="text-indigo-600"/>
-                              <span className="text-[9px] font-black uppercase">Identity Token</span>
-                           </button>
-                           <a href={`tel:${viewingCustomer.phone}`} className="py-5 bg-white dark:bg-slate-800 rounded-[28px] border border-slate-100 dark:border-slate-700 flex flex-col items-center gap-3 shadow-sm hover:border-emerald-500 transition-all">
-                              <Phone size={24} className="text-emerald-600"/>
-                              <span className="text-[9px] font-black uppercase">Tele-Comm</span>
-                           </a>
-                        </div>
-                     </div>
-
-                     <section className="space-y-6">
-                        <div className="flex items-center justify-between border-b dark:border-slate-800 pb-4 px-4">
-                           <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-3"><History size={16}/> Unified activity</h6>
-                        </div>
-                        <div className="space-y-4">
-                           {state.invoices.filter(i => i.customerId === viewingCustomer.id).slice(0, 5).map(inv => (
-                             <div key={inv.id} className="p-6 bg-slate-50 dark:bg-slate-800/40 rounded-[32px] border border-transparent hover:border-indigo-100 dark:hover:border-indigo-900 transition-all flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                   <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-700 flex items-center justify-center text-indigo-500 shadow-sm"><Receipt size={20}/></div>
-                                   <div>
-                                      <p className="text-[11px] font-black dark:text-white">SALE TRANSACTION</p>
-                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">#INV-{inv.id.padStart(4, '0')}</p>
-                                   </div>
-                                </div>
-                                <div className="text-right">
-                                   <p className="text-sm font-black dark:text-white">{state.settings.currency}{inv.total.toLocaleString()}</p>
-                                   <p className="text-[9px] font-bold text-slate-400 uppercase">{new Date(inv.date).toLocaleDateString()}</p>
-                                </div>
-                             </div>
-                           ))}
-                           {state.invoices.filter(i => i.customerId === viewingCustomer.id).length === 0 && (
-                             <div className="py-20 text-center opacity-20"><History size={48} className="mx-auto mb-4"/><p className="text-[10px] font-black uppercase tracking-widest">No Activity Records</p></div>
-                           )}
-                        </div>
-                     </section>
-                  </div>
-
-                  <footer className="p-10 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 grid grid-cols-3 gap-4 shrink-0">
-                     <button onClick={() => { setEditingCustomer(viewingCustomer); setForm(viewingCustomer); setIsAdding(true); }} className="p-5 bg-white dark:bg-slate-800 text-slate-500 rounded-[28px] border shadow-sm hover:text-indigo-600 transition-all flex items-center justify-center active:scale-95"><Edit size={24}/></button>
-                     <button onClick={() => setTrashConfirm(viewingCustomer.id)} className="p-5 bg-white dark:bg-slate-800 text-slate-500 rounded-[28px] border shadow-sm hover:text-rose-600 transition-all flex items-center justify-center active:scale-95"><Trash2 size={24}/></button>
-                     <button onClick={() => setViewingCustomer(null)} className="p-5 bg-slate-900 text-white dark:bg-white dark:text-slate-900 rounded-[28px] shadow-2xl transition-all flex items-center justify-center active:scale-95"><X size={24}/></button>
-                  </footer>
-               </div>
-            ) : (
-               <div className="bg-indigo-600 rounded-[56px] p-20 text-white shadow-2xl flex flex-col items-center justify-center text-center space-y-10 h-[850px] relative overflow-hidden group border-[12px] border-white/10 sticky top-8 animate-pulse">
-                  <div className="w-36 h-36 bg-white/20 rounded-[56px] flex items-center justify-center backdrop-blur-md shadow-inner border border-white/30"><User size={70} /></div>
-                  <div className="relative z-10">
-                     <h4 className="text-4xl font-black uppercase tracking-tighter">Identity Terminal</h4>
-                     <p className="text-xs font-bold opacity-70 uppercase tracking-[0.3em] mt-6 max-w-[280px] mx-auto leading-loose">Select a customer profile from the console to initialize identity audit and access registry history.</p>
-                  </div>
-                  <div className="absolute -bottom-20 -right-20 w-96 h-96 bg-white/10 blur-[100px] rounded-full group-hover:scale-125 transition-transform duration-1000" />
-               </div>
-            )}
-         </div>
-      </div>
-
-      {/* Settlement Modal */}
       {isSettlingDebt && viewingCustomer && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl animate-in fade-in">
-           <div className="bg-white dark:bg-slate-900 rounded-[64px] w-full max-w-xl shadow-2xl p-16 border border-white/10 animate-in zoom-in-95 overflow-hidden relative">
-              <div className="flex flex-col items-center text-center space-y-10">
-                 <div className="w-24 h-24 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-[40px] flex items-center justify-center shadow-lg"><Wallet size={48}/></div>
-                 <div className="space-y-2">
-                    <h3 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Settlement Module</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Authorization for {viewingCustomer.name}</p>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+           <div className="bg-white dark:bg-slate-900 rounded-[48px] w-full max-w-md shadow-2xl p-10 border border-white/10 animate-in zoom-in-95">
+              <div className="flex flex-col items-center text-center space-y-6">
+                 <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-[32px] flex items-center justify-center shadow-lg"><Wallet size={36}/></div>
+                 <div><h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">Settle Debt</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Payment for {viewingCustomer.name}</p></div>
+                 <div className="w-full p-6 bg-rose-50 dark:bg-rose-900/10 rounded-[32px] border border-rose-100 dark:border-rose-900/30">
+                    <p className="text-[10px] font-black text-rose-500 uppercase mb-1">Total Outstanding</p>
+                    <p className="text-4xl font-black text-rose-600">{state.settings.currency}{viewingCustomer.totalDebt.toLocaleString()}</p>
                  </div>
-                 <div className="w-full p-10 bg-rose-50 dark:bg-rose-950/20 rounded-[48px] border-4 border-dashed border-rose-100 dark:border-rose-900/30 relative">
-                    <p className="text-[10px] font-black text-rose-500 uppercase mb-2 tracking-widest">Total Risk Exposure</p>
-                    <p className="text-6xl font-black text-rose-600 tracking-tighter">{state.settings.currency}{viewingCustomer.totalDebt.toLocaleString()}</p>
+                 <div className="w-full space-y-2">
+                    <label className="block text-[11px] font-black text-slate-400 uppercase text-left ml-4">Repayment Amount</label>
+                    <input 
+                      type="number" 
+                      value={settlementAmount} 
+                      onChange={e => setSettlementAmount(e.target.value === '' ? '' : Number(e.target.value))} 
+                      className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-emerald-500 rounded-[28px] py-5 px-8 font-black text-3xl text-center dark:text-white outline-none" 
+                      placeholder="0.00" 
+                      autoFocus 
+                    />
                  </div>
-                 <div className="w-full space-y-4">
-                    <label className="block text-[11px] font-black text-slate-400 uppercase text-left ml-6 tracking-widest">Inbound Remittance Magnitude</label>
-                    <div className="relative">
-                       <span className="absolute left-10 top-1/2 -translate-y-1/2 text-slate-300 font-black text-4xl">{state.settings.currency}</span>
-                       <input 
-                         type="number" 
-                         value={settlementAmount} 
-                         onChange={e => setSettlementAmount(e.target.value === '' ? '' : Number(e.target.value))} 
-                         className="w-full bg-slate-50 dark:bg-slate-800 border-4 border-transparent focus:border-emerald-500 rounded-[40px] py-8 pl-24 pr-10 font-black text-5xl dark:text-white outline-none shadow-inner" 
-                         placeholder="0.00" 
-                         autoFocus 
-                       />
-                    </div>
-                 </div>
-                 <div className="flex gap-4 w-full">
-                    <button onClick={() => setIsSettlingDebt(false)} className="flex-1 py-7 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-[32px] font-black text-xs uppercase tracking-widest">Abort Protocol</button>
-                    <button onClick={handleQuickRepay} disabled={!settlementAmount} className="flex-[2] py-7 bg-emerald-600 text-white rounded-[32px] font-black text-xs uppercase tracking-widest shadow-2xl active:scale-95 disabled:opacity-50">Execute Transaction</button>
+                 <div className="flex gap-3 w-full">
+                    <button onClick={() => setIsSettlingDebt(false)} className="flex-1 py-5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-[24px] font-black text-[10px] uppercase">Abort</button>
+                    <button onClick={handleQuickRepay} disabled={!settlementAmount} className="flex-[2] py-5 bg-emerald-600 text-white rounded-[24px] font-black text-[10px] uppercase shadow-lg active:scale-95 disabled:opacity-50">Confirm Payment</button>
                  </div>
               </div>
            </div>
         </div>
       )}
 
-      {/* Member Card Studio Modal (Already improved in previous steps, ensuring consistency) */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center gap-6">
+           <div className="w-16 h-16 bg-indigo-600 text-white rounded-[28px] flex items-center justify-center shadow-2xl shadow-indigo-100 dark:shadow-none"><UsersIcon size={32}/></div>
+           <div>
+              <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tighter uppercase">Customer CRM</h3>
+              <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Authorized database managing {activeCustomers.length} identities</p>
+           </div>
+        </div>
+        <div className="flex gap-2">
+           <button onClick={() => setFilterDebt(!filterDebt)} className={`px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border transition-all flex items-center gap-2 ${filterDebt ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-white dark:bg-slate-900 text-slate-400'}`}>
+              <Scale size={16}/> Debtors Only
+           </button>
+           <button onClick={() => setIsAdding(true)} className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center gap-2 active:scale-95 transition-all">
+              <UserPlus size={18}/> New Identity
+           </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+         <div className="lg:col-span-8 space-y-4">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border shadow-sm">
+               <div className="relative">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" placeholder="Locate client by ID, Name or Phone..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl py-3.5 pl-12 pr-6 outline-none font-bold text-sm dark:text-white" />
+               </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-[40px] border shadow-sm overflow-hidden">
+               <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                     <thead className="bg-slate-50/50 dark:bg-slate-800/50 border-b">
+                        <tr>
+                           <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer" onClick={() => toggleSort('name')}>Identity <ArrowUpDown size={10} className="inline ml-1"/></th>
+                           <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center cursor-pointer" onClick={() => toggleSort('spent')}>Investment <ArrowUpDown size={10} className="inline ml-1"/></th>
+                           <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right cursor-pointer" onClick={() => toggleSort('debt')}>Liability <ArrowUpDown size={10} className="inline ml-1"/></th>
+                           <th className="px-8 py-5"></th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {filteredCustomers.map((c) => {
+                           const tier = getTier(c.totalSpent);
+                           return (
+                             <tr key={c.id} onClick={() => { setViewingCustomer(c); setActiveProfileTab('overview'); }} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all group cursor-pointer">
+                                <td className="px-8 py-4">
+                                   <div className="flex items-center gap-4">
+                                      <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center font-black text-xl text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all overflow-hidden border">
+                                         {c.photo ? <img src={c.photo} className="w-full h-full object-cover" /> : c.name.charAt(0)}
+                                      </div>
+                                      <div>
+                                         <p className="font-black text-sm dark:text-white uppercase truncate max-w-[150px]">{c.name}</p>
+                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{c.phone}</p>
+                                      </div>
+                                   </div>
+                                </td>
+                                <td className="px-8 py-4 text-center">
+                                   <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full ${tier.bg} ${tier.color}`}>
+                                      <tier.icon size={12}/>
+                                      <span className="text-[9px] font-black uppercase tracking-widest">{tier.label}</span>
+                                   </div>
+                                   <p className="text-[10px] font-black mt-1 dark:text-slate-400">{state.settings.currency}{c.totalSpent.toLocaleString()}</p>
+                                </td>
+                                <td className="px-8 py-4 text-right">
+                                   <p className={`text-sm font-black ${c.totalDebt > 0 ? 'text-rose-600' : 'text-emerald-500'}`}>{state.settings.currency}{c.totalDebt.toLocaleString()}</p>
+                                   <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Exposure Index</p>
+                                </td>
+                                <td className="px-8 py-4 text-right">
+                                   <div className="p-2 text-slate-300 opacity-0 group-hover:opacity-100 transition-all"><ArrowRight size={20}/></div>
+                                </td>
+                             </tr>
+                           )
+                        })}
+                     </tbody>
+                  </table>
+               </div>
+            </div>
+         </div>
+
+         <div className="lg:col-span-4">
+            {viewingCustomer ? (
+               <div className="bg-white dark:bg-slate-900 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden animate-in slide-in-from-right duration-300 flex flex-col h-[800px] sticky top-8">
+                  <div className="h-32 bg-indigo-600 relative overflow-hidden shrink-0">
+                     <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+                  </div>
+                  <header className="px-10 pb-6 text-center -mt-16 relative z-10 shrink-0">
+                     <div className="w-32 h-32 bg-white dark:bg-slate-800 rounded-[40px] flex items-center justify-center mx-auto shadow-2xl overflow-hidden border-4 border-white dark:border-slate-800">
+                        {viewingCustomer.photo ? <img src={viewingCustomer.photo} className="w-full h-full object-cover" /> : <User size={64} className="text-slate-200" />}
+                     </div>
+                     <h4 className="text-2xl font-black dark:text-white uppercase tracking-tighter mt-6 leading-none">{viewingCustomer.name}</h4>
+                     <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] mt-3">ID: #REG-{viewingCustomer.id.padStart(4, '0')}</p>
+                  </header>
+
+                  <div className="px-10 flex gap-6 border-b dark:border-slate-800 shrink-0">
+                     {[
+                       { id: 'overview', label: 'Meta', icon: User },
+                       { id: 'transactions', label: 'History', icon: Receipt },
+                       { id: 'loans', label: 'Loans', icon: Calculator }
+                     ].map(tab => (
+                       <button 
+                        key={tab.id} 
+                        onClick={() => setActiveProfileTab(tab.id as any)}
+                        className={`pb-4 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border-b-2 transition-all ${activeProfileTab === tab.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                       >
+                          <tab.icon size={14}/> {tab.label}
+                       </button>
+                     ))}
+                  </div>
+
+                  <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
+                     {activeProfileTab === 'overview' && (
+                       <div className="space-y-8 animate-in fade-in">
+                          <div className="grid grid-cols-2 gap-4">
+                             <div className="bg-slate-50 dark:bg-slate-950 p-6 rounded-[32px] border">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Aggregate Sales</p>
+                                <h5 className="text-xl font-black dark:text-white">{state.settings.currency}{viewingCustomer.totalSpent.toLocaleString()}</h5>
+                             </div>
+                             <div className="bg-rose-50 dark:bg-rose-950/20 p-6 rounded-[32px] border border-rose-100">
+                                <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Exposure</p>
+                                <h5 className="text-xl font-black text-rose-600">{state.settings.currency}{viewingCustomer.totalDebt.toLocaleString()}</h5>
+                             </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-3">
+                             {viewingCustomer.totalDebt > 0 && (
+                               <button onClick={() => setIsSettlingDebt(true)} className="w-full py-5 bg-emerald-600 text-white rounded-[28px] shadow-xl shadow-emerald-200 dark:shadow-none font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all">
+                                  <CheckCircle2 size={18}/> Authorize Repayment
+                               </button>
+                             )}
+
+                             <button onClick={() => handleDownloadCustomerReport(viewingCustomer)} disabled={isExportingReport} className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-[28px] shadow-xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50">
+                                {isExportingReport ? <RefreshCw size={18} className="animate-spin"/> : <ClipboardList size={18}/>} 
+                                {isExportingReport ? 'Generating Audit...' : 'Generate Audit Report'}
+                             </button>
+
+                             <button onClick={() => setViewingCard(viewingCustomer)} className="w-full py-5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-[28px] border-2 border-indigo-100 dark:border-indigo-800 flex items-center justify-center gap-3 font-black text-[11px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">
+                                <IdCard size={18}/> Digital Identity Badge
+                             </button>
+                          </div>
+
+                          <section className="space-y-4">
+                             <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-3">Technical Data</h6>
+                             <div className="space-y-4">
+                                <div className="flex items-center gap-4"><div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><Phone size={18}/></div><div><p className="text-[8px] font-black text-slate-400 uppercase">Telecom</p><span className="text-[13px] font-bold dark:text-slate-200">{viewingCustomer.phone}</span></div></div>
+                                {viewingCustomer.address && (<div className="flex items-center gap-4"><div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><MapPin size={18}/></div><div className="min-w-0 flex-1"><p className="text-[8px] font-black text-slate-400 uppercase">Geographic Node</p><span className="text-[13px] font-bold dark:text-slate-200 truncate block">{viewingCustomer.address}</span></div></div>)}
+                                <div className="flex items-center gap-4"><div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center text-indigo-500 shadow-sm"><Calendar size={18}/></div><div><p className="text-[8px] font-black text-slate-400 uppercase">Enrollment Date</p><span className="text-[13px] font-bold dark:text-slate-200">{new Date(viewingCustomer.joinedDate).toLocaleDateString()}</span></div></div>
+                             </div>
+                          </section>
+                       </div>
+                     )}
+
+                     {activeProfileTab === 'transactions' && (
+                       <div className="space-y-4 animate-in slide-in-from-right duration-300">
+                          <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><History size={14}/> Registry Logs</h6>
+                          {state.invoices.filter(inv => inv.customerId === viewingCustomer.id).length > 0 ? (
+                            state.invoices.filter(inv => inv.customerId === viewingCustomer.id).map(inv => (
+                               <div key={inv.id} className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border flex items-center justify-between group hover:border-indigo-200 transition-all">
+                                  <div>
+                                     <p className="text-[10px] font-black text-indigo-600 uppercase">#INV-{inv.id.padStart(4, '0')}</p>
+                                     <p className="text-[11px] font-bold dark:text-slate-200 mt-1">{new Date(inv.date).toLocaleDateString()}</p>
+                                  </div>
+                                  <div className="text-right">
+                                     <p className="font-black text-sm dark:text-white">{state.settings.currency}{inv.total.toLocaleString()}</p>
+                                     <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{inv.status}</span>
+                                  </div>
+                               </div>
+                            ))
+                          ) : (
+                            <div className="py-20 text-center opacity-20"><Receipt size={48} className="mx-auto mb-2"/><p className="text-[10px] font-black uppercase">No Sales Logged</p></div>
+                          )}
+                       </div>
+                     )}
+
+                     {activeProfileTab === 'loans' && (
+                       <div className="space-y-4 animate-in slide-in-from-right duration-300">
+                          <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><TrendingUp size={14}/> Loan ledger</h6>
+                          {state.loanTransactions.filter(l => l.customerId === viewingCustomer.id).length > 0 ? (
+                            state.loanTransactions.filter(l => l.customerId === viewingCustomer.id).map(l => (
+                               <div key={l.id} className="p-5 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border flex items-center gap-4">
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${l.type === 'debt' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                     {l.type === 'debt' ? <ArrowUpDown size={18}/> : <ArrowDownRight size={18}/>}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                     <div className="flex justify-between items-start">
+                                        <p className="font-black text-xs uppercase dark:text-white truncate">{l.type === 'debt' ? 'Liability Incurred' : 'Repayment Entry'}</p>
+                                        <p className={`font-black text-sm ${l.type === 'debt' ? 'text-rose-600' : 'text-emerald-600'}`}>{l.type === 'debt' ? '+' : '-'}{state.settings.currency}{l.amount.toLocaleString()}</p>
+                                     </div>
+                                     <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{new Date(l.date).toLocaleDateString()} • {l.note || 'Registry Entry'}</p>
+                                  </div>
+                               </div>
+                            ))
+                          ) : (
+                            <div className="py-20 text-center opacity-20"><Calculator size={48} className="mx-auto mb-2"/><p className="text-[10px] font-black uppercase">Balance Static</p></div>
+                          )}
+                       </div>
+                     )}
+                  </div>
+
+                  <footer className="p-8 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 grid grid-cols-3 gap-3 shrink-0">
+                     <button onClick={() => { setEditingCustomer(viewingCustomer); setForm(viewingCustomer); setIsAdding(true); }} className="p-4 bg-white dark:bg-slate-800 text-slate-500 rounded-3xl border shadow-sm hover:text-indigo-600 transition-all flex items-center justify-center"><Edit size={20}/></button>
+                     <button onClick={() => setTrashConfirm(viewingCustomer.id)} className="p-4 bg-white dark:bg-slate-800 text-slate-500 rounded-3xl border shadow-sm hover:text-rose-600 transition-all flex items-center justify-center"><Trash2 size={20}/></button>
+                     <button onClick={() => setViewingCustomer(null)} className="p-4 bg-slate-900 text-white dark:bg-white dark:text-slate-900 rounded-3xl shadow-xl transition-all flex items-center justify-center"><X size={20}/></button>
+                  </footer>
+               </div>
+            ) : (
+               <div className="bg-indigo-600 rounded-[56px] p-16 text-white shadow-2xl flex flex-col items-center justify-center text-center space-y-8 h-[800px] relative overflow-hidden group border-8 border-white/10 sticky top-8">
+                  <div className="w-28 h-28 bg-white/20 rounded-[40px] flex items-center justify-center backdrop-blur-md shadow-inner animate-pulse border border-white/30"><UsersIcon size={56} /></div>
+                  <div className="relative z-10">
+                     <h4 className="text-3xl font-black uppercase tracking-tighter">Target Selection</h4>
+                     <p className="text-[11px] font-bold opacity-70 uppercase tracking-[0.3em] mt-4 max-w-[240px] mx-auto leading-relaxed">Choose a profile from the ledger to view operational history and metadata</p>
+                  </div>
+                  <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-white/5 blur-[80px] rounded-full group-hover:scale-125 transition-transform duration-1000" />
+               </div>
+            )}
+         </div>
+      </div>
+
       {viewingCard && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-2xl animate-in fade-in duration-300">
            <div className="bg-white dark:bg-slate-900 rounded-[64px] w-full max-w-2xl shadow-2xl overflow-hidden border border-white/10 flex flex-col animate-in zoom-in-95 duration-500">
@@ -612,7 +681,6 @@ const Customers: React.FC<Props> = ({ state, updateState, setCurrentView }) => {
         </div>
       )}
 
-      {/* Creation / Editing Modal */}
       {isAdding && (
          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">
             <div className="bg-white dark:bg-slate-900 rounded-[56px] w-full max-w-4xl max-h-[95vh] shadow-2xl overflow-hidden flex flex-col border border-white/10 animate-in zoom-in-95 duration-300">
