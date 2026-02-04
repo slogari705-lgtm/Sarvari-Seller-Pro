@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutDashboard, 
@@ -58,6 +57,8 @@ const INITIAL_STATE: AppState = {
     shopEmail: '', 
     shopWebsite: '', 
     currency: '$', 
+    secondaryCurrency: 'AFN',
+    exchangeRate: 85,
     taxRate: 0, 
     lowStockThreshold: 5, 
     invoiceTemplate: 'modern', 

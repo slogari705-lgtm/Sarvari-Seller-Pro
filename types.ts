@@ -101,6 +101,8 @@ export interface Invoice {
   profit: number; 
   status: 'paid' | 'partial' | 'unpaid' | 'voided' | 'returned'; 
   paymentMethod: 'cash' | 'card' | 'transfer';
+  paymentTerm?: string;
+  exchangeRate?: number;
   notes?: string;
   isVoided?: boolean; 
   isDeleted?: boolean;
@@ -182,6 +184,8 @@ export interface AppState {
     showSignatures: boolean;
     businessId?: string;
     currency: string;
+    secondaryCurrency?: string;
+    exchangeRate: number;
     taxRate: number;
     lowStockThreshold: number;
     invoiceTemplate: string; 
