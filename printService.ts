@@ -15,7 +15,9 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
   const secondaryCurrency = shop.secondaryCurrency || 'USD';
 
   const effectiveLayout = layoutType === 'thermal' ? 'thermal' : activeTemplate.layout;
-  const invIdDisplay = `${shop.invoicePrefix || ''}${inv.id.padStart(4, '0')}`;
+  
+  // Padding invoice ID to start from 001 as requested
+  const invIdDisplay = `${shop.invoicePrefix || ''}${inv.id.padStart(3, '0')}`;
 
   let lastLoan = 0;
   let finalBalance = 0;
@@ -58,17 +60,20 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
   if (effectiveLayout === 'thermal' || effectiveLayout === 'receipt') {
     return `
       <div dir="${direction}" style="width: 72mm; margin: 0 auto; padding: 0.5mm; font-family: 'Courier New', Courier, monospace; font-size: 10px; color: #000; background: #fff; line-height: 1.1;">
-        <div style="text-align: center; border-bottom: 1px solid #000; padding-bottom: 1mm; margin-bottom: 1mm;">
+        <div style="text-align: center; border-bottom: 1px solid #000; padding-bottom: 2mm; margin-bottom: 2mm; display: flex; flex-direction: column; align-items: center;">
+          ${shop.shopLogo ? `<img src="${shop.shopLogo}" style="height: 12mm; margin-bottom: 2mm; object-contain;" />` : ''}
           <div style="font-size: 14px; font-weight: 900;">${shop.shopName.toUpperCase()}</div>
           <div style="font-size: 8px;">${shop.shopAddress || ''}</div>
           <div style="font-size: 8px;">${shop.shopPhone ? `TEL: ${shop.shopPhone}` : ''}</div>
+          <div style="font-size: 18px; font-weight: 900; margin-top: 2mm; border: 1.5px solid #000; padding: 1mm 4mm; display: inline-block;">INVOICE</div>
         </div>
         
-        <div style="display: flex; justify-content: space-between; font-weight: 900; margin-bottom: 0.5mm;">
-          <span>INV: #${invIdDisplay}</span>
+        <div style="display: flex; justify-content: space-between; font-weight: 900; margin-bottom: 1mm;">
+          <span>NO: #${invIdDisplay}</span>
           <span>${new Date(inv.date).toLocaleDateString()}</span>
         </div>
-        <div style="margin-bottom: 1mm;">CLIENT: ${cust ? cust.name.toUpperCase() : 'WALK-IN'}</div>
+        <div style="margin-bottom: 0.5mm; font-weight: 900;">CLIENT: ${cust ? cust.name.toUpperCase() : 'WALK-IN'}</div>
+        ${cust ? `<div style="margin-bottom: 1mm; font-size: 9px;">TEL: ${cust.phone}</div>` : ''}
         
         <table style="width: 100%; font-size: 9px; border-collapse: collapse; border-bottom: 1px dashed #000;">
           <thead>
@@ -115,44 +120,58 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
     `;
   }
 
-  // A4 Layout - Densified
+  // A4 Layout - Logo centered at top middle
   const commonStyles = `
     .invoice-container { padding: 10mm; width: 210mm; min-height: 297mm; box-sizing: border-box; background: white; color: #1e293b; font-family: 'Inter', sans-serif; }
-    .header { display: flex; justify-content: space-between; border-bottom: 2px solid ${brandColor}; padding-bottom: 5mm; margin-bottom: 5mm; }
-    .shop-info h1 { margin: 0; font-size: 22px; font-weight: 900; text-transform: uppercase; color: #0f172a; }
+    .header-centered { text-align: center; margin-bottom: 8mm; border-bottom: 2px solid ${brandColor}; padding-bottom: 5mm; }
+    .logo-img { height: 25mm; margin-bottom: 4mm; display: block; margin-left: auto; margin-right: auto; }
+    .shop-info h1 { margin: 0; font-size: 24px; font-weight: 900; text-transform: uppercase; color: #0f172a; }
     .shop-info p { margin: 1px 0; font-size: 10px; color: #64748b; font-weight: 600; }
-    .doc-meta { text-align: right; }
-    .doc-meta h2 { margin: 0; font-size: 32px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; line-height: 1; }
-    .doc-meta p { margin: 2px 0; font-size: 12px; font-weight: 800; font-family: monospace; }
+    .invoice-title { font-size: 48px; font-weight: 900; color: ${brandColor}; text-transform: uppercase; margin: 4mm 0; line-height: 1; letter-spacing: -2px; }
+    .meta-grid { display: flex; justify-content: space-between; margin-bottom: 6mm; }
+    .meta-item b { display: block; font-size: 9px; color: #64748b; text-transform: uppercase; margin-bottom: 1mm; }
+    .meta-item span { font-size: 14px; font-weight: 800; color: #0f172a; }
     .items-table { width: 100%; border-collapse: collapse; margin-bottom: 5mm; }
     .items-table th { padding: 3mm; text-align: left; font-size: 9px; font-weight: 900; color: #64748b; border-bottom: 1.5px solid #e2e8f0; text-transform: uppercase; }
     .items-table td { padding: 3mm; font-size: 11px; border-bottom: 0.5px solid #f1f5f9; }
     .summary-section { width: 100%; display: flex; justify-content: flex-end; }
-    .summary-table { width: 100mm; border-collapse: collapse; border: 1px solid #e2e8f0; }
+    .summary-table { width: 110mm; border-collapse: collapse; border: 1px solid #e2e8f0; }
     .summary-table td { padding: 2.5mm 4mm; font-size: 11px; border-bottom: 0.5px solid #f1f5f9; }
     .summary-table .label { font-weight: 900; color: #64748b; text-transform: uppercase; font-size: 9px; }
     .summary-table .value { text-align: right; font-weight: 700; color: #0f172a; }
-    .summary-table .total-row { background: #f8fafc; border-top: 1.5px solid #0f172a; }
-    .summary-table .balance-row { background: #0f172a; color: white; border-top: 1px solid #0f172a; }
+    .summary-table .balance-row { background: #0f172a; color: white; }
     .summary-table .balance-row .label { color: #94a3b8; }
-    .summary-table .balance-row .value { color: white; font-size: 18px; font-weight: 900; }
-    .footer { margin-top: 10mm; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 5mm; font-size: 9px; color: #94a3b8; text-transform: uppercase; font-weight: 700; }
+    .summary-table .balance-row .value { color: white; font-size: 20px; font-weight: 900; }
+    .footer { margin-top: auto; padding-top: 10mm; border-top: 1px solid #f1f5f9; text-align: center; font-size: 9px; color: #94a3b8; text-transform: uppercase; font-weight: 700; }
   `;
 
   return `
-    <div dir="${direction}" class="invoice-container">
+    <div dir="${direction}" class="invoice-container" style="display: flex; flex-direction: column;">
       <style>${commonStyles}</style>
-      <div class="header">
+      
+      <div class="header-centered">
+        ${shop.shopLogo ? `<img src="${shop.shopLogo}" class="logo-img" />` : ''}
         <div class="shop-info">
           <h1>${shop.shopName}</h1>
           <p>${shop.shopAddress || ''}</p>
           <p>TEL: ${shop.shopPhone || ''} | EMAIL: ${shop.shopEmail || ''}</p>
-          <p style="margin-top: 2mm; font-weight: 900; color: #0f172a;">BILL TO: ${cust ? cust.name.toUpperCase() : 'CASH SALE'}</p>
         </div>
-        <div class="doc-meta">
-          <h2>INVOICE</h2>
-          <p>#${invIdDisplay}</p>
-          <p>${new Date(inv.date).toLocaleDateString()} ${new Date(inv.date).toLocaleTimeString()}</p>
+        <div class="invoice-title">INVOICE</div>
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-item">
+          <b>Document Reference</b>
+          <span>#${invIdDisplay}</span>
+        </div>
+        <div class="meta-item">
+          <b>Billing Date</b>
+          <span>${new Date(inv.date).toLocaleDateString()}</span>
+        </div>
+        <div class="meta-item" style="text-align: right;">
+          <b>Customer Identity</b>
+          <span style="display: block;">${cust ? cust.name.toUpperCase() : 'WALK-IN ACCOUNT'}</span>
+          ${cust ? `<span style="font-size: 11px; font-weight: 600; opacity: 0.7;">${cust.phone}</span>` : ''}
         </div>
       </div>
 
@@ -180,32 +199,32 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
       <div class="summary-section">
         <table class="summary-table">
           <tr>
-            <td class="label">Payment Term / Method</td>
+            <td class="label">Settlement Mode</td>
             <td class="value">${paymentSectionData.term.toUpperCase()} / ${paymentSectionData.transType}</td>
           </tr>
           <tr>
-            <td class="label">Currency Configuration</td>
-            <td class="value">${paymentSectionData.currency} ${exRate !== 1 ? `(Rate: 1 : ${exRate})` : ''}</td>
+            <td class="label">Currency / Rate</td>
+            <td class="value">${paymentSectionData.currency} ${exRate !== 1 ? `(1 : ${exRate})` : ''}</td>
           </tr>
           <tr>
-            <td class="label">Invoice Subtotal</td>
+            <td class="label">Subtotal</td>
             <td class="value">${currency}${paymentSectionData.invTotal.toLocaleString()}</td>
           </tr>
           ${paymentSectionData.discount > 0 ? `
           <tr>
-            <td class="label">Deducted Discount</td>
+            <td class="label">Discount</td>
             <td class="value" style="color: #e11d48;">-${currency}${paymentSectionData.discount.toLocaleString()}</td>
           </tr>` : ''}
           <tr>
-            <td class="label">Amount Received (Receipt)</td>
+            <td class="label">Amount Paid</td>
             <td class="value" style="color: #059669;">${currency}${paymentSectionData.receipt.toLocaleString()}</td>
           </tr>
           <tr>
-            <td class="label">Last Ledger Loan (Debt)</td>
+            <td class="label">Previous Liability</td>
             <td class="value">${currency}${paymentSectionData.lastLoan.toLocaleString()}</td>
           </tr>
           <tr class="balance-row">
-            <td class="label">Final Outstanding Balance</td>
+            <td class="label">Net Outstanding Balance</td>
             <td class="value">
               ${currency}${paymentSectionData.finalBalance.toLocaleString()}
               ${exRate !== 1 ? `<div style="font-size: 10px; opacity: 0.7; font-weight: 400;">≈ ${secondaryCurrency}${(paymentSectionData.finalBalance * exRate).toLocaleString()}</div>` : ''}
@@ -215,7 +234,7 @@ export const generatePrintHTML = (state: AppState, inv: Invoice, layoutType: Pri
       </div>
 
       <div class="footer">
-        ${activeTemplate.footerText || 'Authorized Document - No physical signature required'}
+        ${activeTemplate.footerText || 'This document is electronically verified. No physical signature is required.'}
       </div>
     </div>
   `;
