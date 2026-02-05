@@ -27,7 +27,11 @@ import {
   UserPlus,
   Hash,
   Contact,
-  CreditCard
+  CreditCard,
+  RefreshCw,
+  Sparkles,
+  // Fix: Added missing CheckCircle2 icon import from lucide-react
+  CheckCircle2
 } from 'lucide-react';
 import { AppState, Expense, Worker } from '../types';
 import { translations } from '../translations';
@@ -85,6 +89,11 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
   const [newWorker, setNewWorker] = useState<Partial<Worker>>({
     name: '', employeeId: '', phone: '', position: 'Staff', baseSalary: 0, photo: '', joinDate: new Date().toISOString().split('T')[0]
   });
+
+  const generateWorkerId = () => {
+    const random = Math.floor(1000 + Math.random() * 9000);
+    return `EMP-${random}`;
+  };
 
   const handleAddExpense = () => {
     if (!newExpense.description || !newExpense.amount) return;
@@ -230,12 +239,10 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
          <div className="flex gap-2">
             {activeTab === 'ledger' ? (
               <button onClick={() => setIsAddingExpense(true)} className="flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all">
-                {/* Fixed TypeScript error by using logExpense from translations */}
                 <Plus size={18} /> {t.logExpense}
               </button>
             ) : (
               <button onClick={() => setIsAddingWorker(true)} className="flex items-center gap-3 px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-700 transition-all">
-                {/* Updated to use translated text for add staff button consistency */}
                 <UserPlus size={18} /> {t.addStaff}
               </button>
             )}
@@ -244,7 +251,6 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
 
       {activeTab === 'ledger' ? (
         <div className="space-y-6">
-           {/* Analytics Pulse Grid */}
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-rose-600 p-6 rounded-[32px] text-white shadow-xl relative overflow-hidden group">
                  <p className="text-[10px] font-black text-rose-200 uppercase tracking-widest mb-1 opacity-80">Aggregate Outflow</p>
@@ -321,8 +327,22 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+           {/* Quick Add Worker Card */}
+           <button 
+             onClick={() => setIsAddingWorker(true)}
+             className="bg-white dark:bg-slate-900 rounded-[36px] border-4 border-dashed border-slate-100 dark:border-slate-800 p-8 flex flex-col items-center justify-center gap-4 group hover:border-emerald-500 hover:bg-emerald-50/10 transition-all duration-300 min-h-[300px]"
+           >
+              <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-[30px] flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                 <UserPlus size={40} />
+              </div>
+              <div className="text-center">
+                 <h4 className="text-xl font-black dark:text-white uppercase tracking-tighter">Enroll Staff</h4>
+                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Add new node to registry</p>
+              </div>
+           </button>
+
            {filteredWorkers.map((w) => (
-             <div key={w.id} className="bg-white dark:bg-slate-900 rounded-[36px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden hover:shadow-xl transition-all group">
+             <div key={w.id} className="bg-white dark:bg-slate-900 rounded-[36px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden hover:shadow-xl transition-all group relative">
                 <div className="p-8 pb-4 flex items-center gap-6">
                    <div className="w-20 h-24 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 shrink-0">
                       {w.photo ? <img src={w.photo} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><Users size={32}/></div>}
@@ -350,7 +370,9 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
                 </div>
                 <div className="p-6 flex items-center justify-between">
                    <div className="flex gap-2">
-                      <button onClick={() => handleDownloadWorkerID(w)} className="p-3 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm" title="ID Card"><IdCard size={18}/></button>
+                      <button onClick={() => handleDownloadWorkerID(w)} className="p-3 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center gap-2" title="ID Card">
+                        <IdCard size={18}/><span className="text-[9px] font-black uppercase hidden group-hover:block">View ID</span>
+                      </button>
                       <button className="p-3 bg-slate-50 dark:bg-slate-800 text-slate-400 rounded-xl hover:bg-slate-100 transition-all" title="Accounting History"><Clock size={18}/></button>
                    </div>
                    <button onClick={() => setTrashConfirm({id: w.id, type: 'worker'})} className="p-3 text-slate-300 hover:text-rose-600 transition-all"><Trash2 size={18}/></button>
@@ -358,9 +380,20 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
              </div>
            ))}
            {filteredWorkers.length === 0 && (
-              <div className="col-span-full py-20 text-center flex flex-col items-center justify-center gap-4 border-2 border-dashed border-slate-100 rounded-[40px]">
-                 <Users size={64} className="text-slate-100" />
-                 <p className="font-black text-xs uppercase tracking-widest text-slate-300">Staff registry is empty</p>
+              <div className="col-span-full py-20 text-center flex flex-col items-center justify-center gap-6 border-2 border-dashed border-slate-100 rounded-[40px] bg-slate-50/50">
+                 <div className="w-24 h-24 bg-white rounded-[40px] shadow-sm flex items-center justify-center text-slate-200">
+                    <Users size={64} strokeWidth={1} />
+                 </div>
+                 <div className="space-y-2">
+                    <p className="font-black text-sm uppercase tracking-widest text-slate-400">Staff registry is empty</p>
+                    <p className="text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">Start by adding your first team member</p>
+                 </div>
+                 <button 
+                   onClick={() => setIsAddingWorker(true)}
+                   className="px-10 py-5 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-widest shadow-xl flex items-center gap-3 active:scale-95 transition-all"
+                 >
+                    <UserPlus size={20} /> Authorize New Staff
+                 </button>
               </div>
            )}
         </div>
@@ -411,48 +444,71 @@ const Expenses: React.FC<Props> = ({ state, updateState }) => {
       )}
 
       {isAddingWorker && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
-            <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-xl shadow-2xl relative overflow-hidden flex flex-col animate-in zoom-in duration-300 max-h-[95vh]">
-               <header className="p-8 border-b flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                     <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shadow-sm"><UserPlus size={24}/></div>
-                     <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Recruit Staff Member</h3>
+         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">
+            <div className="bg-white dark:bg-slate-900 rounded-[56px] w-full max-w-2xl shadow-2xl relative overflow-hidden flex flex-col animate-in zoom-in duration-300 max-h-[95vh] border border-white/10">
+               <header className="p-10 border-b flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-5">
+                     <div className="w-16 h-16 bg-emerald-600 text-white rounded-[24px] flex items-center justify-center shadow-2xl"><UserPlus size={32}/></div>
+                     <div>
+                        <h3 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Recruit Staff Member</h3>
+                        <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] mt-1">Proprietary Identity Enrollment</p>
+                     </div>
                   </div>
-                  <button onClick={() => setIsAddingWorker(false)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-400 hover:text-rose-600 transition-all"><X size={24}/></button>
+                  <button onClick={() => setIsAddingWorker(false)} className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-rose-500 transition-all active:scale-90"><X size={28}/></button>
                </header>
-               <div className="flex-1 overflow-y-auto p-10 space-y-8 custom-scrollbar">
-                  <div className="flex flex-col items-center gap-4">
-                     <div onClick={() => workerFileRef.current?.click()} className="w-32 h-32 rounded-[32px] bg-slate-50 dark:bg-slate-800 border-4 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center cursor-pointer hover:border-emerald-500 transition-all overflow-hidden relative group">
-                        {newWorker.photo ? <img src={newWorker.photo} className="w-full h-full object-cover" /> : <div className="text-slate-300 text-center"><Camera size={32}/><p className="text-[8px] font-black uppercase mt-1">Upload Photo</p></div>}
+               <div className="flex-1 overflow-y-auto p-12 space-y-10 custom-scrollbar">
+                  <div className="flex flex-col items-center">
+                     <div 
+                        onClick={() => workerFileRef.current?.click()} 
+                        className="w-40 h-48 rounded-[40px] bg-slate-50 dark:bg-slate-950 border-4 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center cursor-pointer hover:border-emerald-500 transition-all overflow-hidden relative group shadow-inner"
+                     >
+                        {newWorker.photo ? <img src={newWorker.photo} className="w-full h-full object-cover p-2 rounded-[32px]" /> : <div className="text-slate-300 text-center"><Camera size={48} strokeWidth={1}/><p className="text-[9px] font-black uppercase mt-3 tracking-widest">Enroll Portrait</p></div>}
                         <input type="file" ref={workerFileRef} className="hidden" accept="image/*" onChange={handleWorkerPhoto} />
+                        <div className="absolute inset-0 bg-emerald-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                      </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-6">
-                     <div className="col-span-2">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Staff Legal Name</label>
-                        <input type="text" value={newWorker.name} onChange={e => setNewWorker({...newWorker, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 px-6 font-bold text-sm dark:text-white outline-none shadow-inner" placeholder="Enter full name" />
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                     <div className="col-span-full">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Legal Professional Name</label>
+                        <input type="text" value={newWorker.name} onChange={e => setNewWorker({...newWorker, name: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-3xl py-5 px-8 font-black text-xl dark:text-white outline-none shadow-sm" placeholder="Enter full identity name..." />
                      </div>
-                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Employment ID</label>
-                        <input type="text" value={newWorker.employeeId} onChange={e => setNewWorker({...newWorker, employeeId: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 px-6 font-black text-sm dark:text-white outline-none" placeholder="EMP-001" />
+                     
+                     <div className="col-span-full md:col-span-1">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Verified Employment UID</label>
+                        <div className="flex gap-2">
+                           <div className="relative flex-1">
+                              <Hash className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                              <input type="text" value={newWorker.employeeId} onChange={e => setNewWorker({...newWorker, employeeId: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-14 pr-6 font-black text-sm dark:text-white outline-none shadow-inner" placeholder="EMP-XXXX" />
+                           </div>
+                           <button onClick={() => setNewWorker({...newWorker, employeeId: generateWorkerId()})} className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl hover:text-indigo-600 hover:bg-white transition-all shadow-sm"><RefreshCw size={20}/></button>
+                        </div>
                      </div>
+                     
                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Phone</label>
-                        <input type="text" value={newWorker.phone} onChange={e => setNewWorker({...newWorker, phone: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 px-6 font-bold text-sm dark:text-white outline-none" placeholder="07XX..." />
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Identity Telecom (Phone)</label>
+                        <input type="text" value={newWorker.phone} onChange={e => setNewWorker({...newWorker, phone: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 px-6 font-bold text-sm dark:text-white outline-none" placeholder="07XX-XXX-XXX" />
                      </div>
+                     
                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Job Role</label>
-                        <input type="text" value={newWorker.position} onChange={e => setNewWorker({...newWorker, position: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 px-6 font-bold text-sm dark:text-white outline-none" placeholder="Sales Associate" />
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Job Designation / Rank</label>
+                        <input type="text" value={newWorker.position} onChange={e => setNewWorker({...newWorker, position: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 px-6 font-bold text-sm dark:text-white outline-none" placeholder="e.g. Sales Associate, Manager" />
                      </div>
+                     
                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Base Monthly Salary</label>
-                        <input type="number" value={newWorker.baseSalary || ''} onChange={e => setNewWorker({...newWorker, baseSalary: Number(e.target.value)})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 px-6 font-black text-sm dark:text-white outline-none" placeholder="0" />
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">Base Compensation (Salary)</label>
+                        <div className="relative">
+                           <DollarSign className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                           <input type="number" value={newWorker.baseSalary || ''} onChange={e => setNewWorker({...newWorker, baseSalary: Number(e.target.value)})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-14 pr-6 font-black text-lg dark:text-white outline-none" placeholder="0.00" />
+                        </div>
                      </div>
                   </div>
                </div>
-               <footer className="p-8 border-t flex gap-4">
-                  <button onClick={() => setIsAddingWorker(false)} className="flex-1 py-5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-3xl font-black text-[10px] uppercase tracking-widest">Discard</button>
-                  <button onClick={handleAddWorker} className="flex-[2] py-5 bg-emerald-600 text-white rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-xl">Confirm Enrollment</button>
+               <footer className="p-10 border-t bg-slate-50 dark:bg-slate-950 flex flex-col md:flex-row gap-4 shrink-0">
+                  <button onClick={() => setIsAddingWorker(false)} className="flex-1 py-7 bg-white dark:bg-slate-800 text-slate-500 rounded-[32px] font-black text-xs uppercase tracking-[0.2em] shadow-sm border border-slate-100 dark:border-slate-700">Discard Enrollment</button>
+                  <button onClick={handleAddWorker} className="flex-[2] py-7 bg-emerald-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-emerald-100 dark:shadow-none hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-4">
+                     <CheckCircle2 size={24}/> Finalize Staff Onboarding
+                  </button>
                </footer>
             </div>
          </div>
