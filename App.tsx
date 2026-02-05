@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutDashboard, 
@@ -21,10 +22,13 @@ import {
   History,
   Trash2,
   Cpu,
-  Boxes
+  Boxes,
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
-import { AppState, View } from './types';
+import { AppState, View, User } from './types';
 import { translations } from './translations';
+import { loadState, saveState, createSnapshot } from './db';
 import Dashboard from './components/Dashboard';
 import Products from './components/Products';
 import Customers from './components/Customers';
@@ -38,6 +42,7 @@ import DashboardCostume from './components/DashboardCostume';
 import Trash from './components/Trash';
 import LockScreen from './components/LockScreen';
 import Returns from './components/Returns';
+import Login from './components/Login';
 
 const INITIAL_STATE: AppState = {
   products: [],
@@ -45,11 +50,13 @@ const INITIAL_STATE: AppState = {
   workers: [],
   invoices: [],
   expenses: [],
+  users: [],
   templates: [{ id: 'modern', name: 'Standard Modern', layout: 'modern', brandColor: '#6366f1', showLogo: true }],
   loanTransactions: [],
   expenseCategories: ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Marketing', 'Maintenance', 'Other'],
   lastSync: new Date().toISOString(),
   lastLocalBackup: new Date().toISOString(),
+  currentUser: null,
   settings: { 
     shopName: 'Sarvari Seller Pro', 
     shopAddress: '', 
@@ -100,23 +107,50 @@ const INITIAL_STATE: AppState = {
 };
 
 export default function App() {
-  const [state, setState] = useState<AppState>(() => {
-    const saved = localStorage.getItem('sarvari_pos_data');
-    return saved ? { ...INITIAL_STATE, ...JSON.parse(saved) } : INITIAL_STATE;
-  });
-
+  const [state, setState] = useState<AppState>(INITIAL_STATE);
+  const [isLoading, setIsLoading] = useState(true);
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isAppLocked, setIsAppLocked] = useState(() => 
-    !!state.settings.security?.isLockEnabled && !!state.settings.security?.passcode
-  );
+  
+  // Persistent login state
+  const [isAppLocked, setIsAppLocked] = useState(false);
+
+  // Load from IndexedDB on start
+  useEffect(() => {
+    const init = async () => {
+      const saved = await loadState();
+      if (saved) {
+        setState({ ...INITIAL_STATE, ...saved });
+      }
+      setIsLoading(false);
+    };
+    init();
+  }, []);
 
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // Persistent Save Hook
+  useEffect(() => {
+    if (isLoading) return;
+    const saveToDb = async () => {
+      await saveState(stateRef.current);
+    };
+    saveToDb();
+  }, [state, isLoading]);
+
+  // Auto-Snapshot Backup System
+  useEffect(() => {
+    if (isLoading) return;
+    const backupInterval = setInterval(() => {
+      createSnapshot(stateRef.current, 'Automated Vault Snapshot');
+    }, 10 * 60 * 1000); // Every 10 minutes
+    return () => clearInterval(backupInterval);
+  }, [isLoading]);
 
   const t = translations[state.settings.language || 'en'];
   const isRTL = state.settings.language === 'ps' || state.settings.language === 'dr';
@@ -125,19 +159,6 @@ export default function App() {
     document.documentElement.classList.toggle('dark', state.settings.theme === 'dark');
     document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
   }, [state.settings.theme, isRTL]);
-
-  useEffect(() => {
-    const backupService = setInterval(() => {
-      if (stateRef.current.settings.autoLocalBackup) {
-        try {
-          localStorage.setItem('sarvari_pos_data', JSON.stringify(stateRef.current));
-        } catch (error) {
-          console.error("Storage Error:", error);
-        }
-      }
-    }, 5000);
-    return () => clearInterval(backupService);
-  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -151,6 +172,34 @@ export default function App() {
   }, []);
 
   const updateState = <K extends keyof AppState>(key: K, value: AppState[K]) => setState(prev => ({ ...prev, [key]: value }));
+
+  const handleLogin = (user: User) => {
+    const newState = { ...state, currentUser: user, users: state.users.some(u => u.id === user.id) ? state.users : [...state.users, user] };
+    setState(newState);
+  };
+
+  const handleLogout = () => {
+    setState(prev => ({ ...prev, currentUser: null }));
+  };
+
+  if (isLoading) return null;
+
+  if (!state.currentUser) {
+    return <Login state={state} onLogin={handleLogin} />;
+  }
+
+  if (isAppLocked && state.settings.security?.isLockEnabled && state.settings.security?.passcode) {
+    return (
+      <LockScreen 
+        correctPasscode={state.settings.security.passcode} 
+        securityQuestion={state.settings.security.securityQuestion}
+        securityAnswer={state.settings.security.securityAnswer}
+        highSecurityMode={state.settings.security.highSecurityMode}
+        onUnlock={() => setIsAppLocked(false)} 
+        shopName={state.settings.shopName} 
+      />
+    );
+  }
 
   const coreNav = [
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
@@ -169,19 +218,6 @@ export default function App() {
     { id: 'dashboard-costume', label: t.dashboardCostume, icon: Wand2 },
     { id: 'settings', label: t.settings, icon: SettingsIcon },
   ];
-
-  if (isAppLocked && state.settings.security?.isLockEnabled && state.settings.security?.passcode) {
-    return (
-      <LockScreen 
-        correctPasscode={state.settings.security.passcode} 
-        securityQuestion={state.settings.security.securityQuestion}
-        securityAnswer={state.settings.security.securityAnswer}
-        highSecurityMode={state.settings.security.highSecurityMode}
-        onUnlock={() => setIsAppLocked(false)} 
-        shopName={state.settings.shopName} 
-      />
-    );
-  }
 
   return (
     <div className={`flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden ${isRTL ? 'font-arabic' : ''}`}>
@@ -265,10 +301,14 @@ export default function App() {
           </div>
         </nav>
 
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800">
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
           <button onClick={() => updateState('settings', { ...state.settings, theme: state.settings.theme === 'dark' ? 'light' : 'dark' })} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
             {state.settings.theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">{state.settings.theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
+          </button>
+          <button onClick={handleLogout} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all">
+            <LogOut size={20} />
+            {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">Logout</span>}
           </button>
         </div>
       </aside>
@@ -281,9 +321,13 @@ export default function App() {
             </button>
             <div>
               <h2 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] mb-0.5">{state.settings.shopName}</h2>
-              <h3 className="text-lg font-black dark:text-white uppercase tracking-tighter">
-                {currentView === 'dashboard-costume' ? t.dashboardCostume : currentView.replace('-', ' ')}
-              </h3>
+              <div className="flex items-center gap-2">
+                 <h3 className="text-lg font-black dark:text-white uppercase tracking-tighter">
+                   {currentView === 'dashboard-costume' ? t.dashboardCostume : currentView.replace('-', ' ')}
+                 </h3>
+                 <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border">{state.currentUser.role}</span>
+              </div>
             </div>
           </div>
 
@@ -295,8 +339,8 @@ export default function App() {
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:flex w-11 h-11 bg-slate-50 dark:bg-slate-800 rounded-2xl items-center justify-center text-slate-400 hover:text-indigo-600 transition-all">
               <Layout size={20} />
             </button>
-            <button onClick={() => setCurrentView('settings')} className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-90 transition-all">
-              <UserIcon size={20} strokeWidth={3} />
+            <button onClick={() => setCurrentView('settings')} className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-90 transition-all border-4 border-white/10">
+               {state.currentUser.avatar ? <img src={state.currentUser.avatar} className="w-full h-full rounded-xl object-cover" /> : <UserIcon size={20} strokeWidth={3} />}
             </button>
           </div>
         </header>
