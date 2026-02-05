@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -26,9 +26,8 @@ import {
   LogOut,
   ShieldCheck
 } from 'lucide-react';
-import { AppState, View, User } from './types';
+import { AppState, View } from './types';
 import { translations } from './translations';
-import { loadState, saveState, createSnapshot } from './db';
 import Dashboard from './components/Dashboard';
 import Products from './components/Products';
 import Customers from './components/Customers';
@@ -42,21 +41,17 @@ import DashboardCostume from './components/DashboardCostume';
 import Trash from './components/Trash';
 import LockScreen from './components/LockScreen';
 import Returns from './components/Returns';
-import Login from './components/Login';
 
 const INITIAL_STATE: AppState = {
   products: [],
   customers: [],
   workers: [],
+  users: [],
   invoices: [],
   expenses: [],
-  users: [],
   templates: [{ id: 'modern', name: 'Standard Modern', layout: 'modern', brandColor: '#6366f1', showLogo: true }],
   loanTransactions: [],
   expenseCategories: ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Marketing', 'Maintenance', 'Other'],
-  lastSync: new Date().toISOString(),
-  lastLocalBackup: new Date().toISOString(),
-  currentUser: null,
   settings: { 
     shopName: 'Sarvari Seller Pro', 
     shopAddress: '', 
@@ -114,43 +109,29 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   
-  // Persistent login state
+  // Persistent lock state
   const [isAppLocked, setIsAppLocked] = useState(false);
 
-  // Load from IndexedDB on start
+  // Revert to LocalStorage loading
   useEffect(() => {
-    const init = async () => {
-      const saved = await loadState();
-      if (saved) {
-        setState({ ...INITIAL_STATE, ...saved });
+    const saved = localStorage.getItem('sarvari_pos_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setState({ ...INITIAL_STATE, ...parsed });
+      } catch (e) {
+        console.error("Storage corruption detected", e);
       }
-      setIsLoading(false);
-    };
-    init();
+    }
+    setIsLoading(false);
   }, []);
 
-  const stateRef = useRef(state);
+  // Revert to LocalStorage persistence
   useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
-  // Persistent Save Hook
-  useEffect(() => {
-    if (isLoading) return;
-    const saveToDb = async () => {
-      await saveState(stateRef.current);
-    };
-    saveToDb();
+    if (!isLoading) {
+      localStorage.setItem('sarvari_pos_state', JSON.stringify(state));
+    }
   }, [state, isLoading]);
-
-  // Auto-Snapshot Backup System
-  useEffect(() => {
-    if (isLoading) return;
-    const backupInterval = setInterval(() => {
-      createSnapshot(stateRef.current, 'Automated Vault Snapshot');
-    }, 10 * 60 * 1000); // Every 10 minutes
-    return () => clearInterval(backupInterval);
-  }, [isLoading]);
 
   const t = translations[state.settings.language || 'en'];
   const isRTL = state.settings.language === 'ps' || state.settings.language === 'dr';
@@ -173,20 +154,7 @@ export default function App() {
 
   const updateState = <K extends keyof AppState>(key: K, value: AppState[K]) => setState(prev => ({ ...prev, [key]: value }));
 
-  const handleLogin = (user: User) => {
-    const newState = { ...state, currentUser: user, users: state.users.some(u => u.id === user.id) ? state.users : [...state.users, user] };
-    setState(newState);
-  };
-
-  const handleLogout = () => {
-    setState(prev => ({ ...prev, currentUser: null }));
-  };
-
   if (isLoading) return null;
-
-  if (!state.currentUser) {
-    return <Login state={state} onLogin={handleLogin} />;
-  }
 
   if (isAppLocked && state.settings.security?.isLockEnabled && state.settings.security?.passcode) {
     return (
@@ -306,9 +274,9 @@ export default function App() {
             {state.settings.theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">{state.settings.theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
           </button>
-          <button onClick={handleLogout} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all">
-            <LogOut size={20} />
-            {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">Logout</span>}
+          <button onClick={() => setIsAppLocked(true)} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all">
+            <Lock size={20} />
+            {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">Lock Terminal</span>}
           </button>
         </div>
       </aside>
@@ -326,7 +294,7 @@ export default function App() {
                    {currentView === 'dashboard-costume' ? t.dashboardCostume : currentView.replace('-', ' ')}
                  </h3>
                  <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border">{state.currentUser.role}</span>
+                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border">Terminal Operator</span>
               </div>
             </div>
           </div>
@@ -334,13 +302,13 @@ export default function App() {
           <div className="flex items-center gap-3">
             <div className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-2xl border ${isOnline ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
               <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></div>
-              <span className="text-[10px] font-black uppercase tracking-widest">{isOnline ? 'Cloud Sync' : 'Offline Mode'}</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">{isOnline ? 'Cloud Enabled' : 'Offline Mode'}</span>
             </div>
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:flex w-11 h-11 bg-slate-50 dark:bg-slate-800 rounded-2xl items-center justify-center text-slate-400 hover:text-indigo-600 transition-all">
               <Layout size={20} />
             </button>
             <button onClick={() => setCurrentView('settings')} className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-90 transition-all border-4 border-white/10">
-               {state.currentUser.avatar ? <img src={state.currentUser.avatar} className="w-full h-full rounded-xl object-cover" /> : <UserIcon size={20} strokeWidth={3} />}
+               <UserIcon size={20} strokeWidth={3} />
             </button>
           </div>
         </header>
