@@ -58,6 +58,17 @@ export interface Customer {
   preferredPayment?: 'Cash' | 'Card' | 'Transfer';
 }
 
+export interface User {
+  id: string;
+  username: string;
+  passwordHash: string;
+  role: 'admin' | 'manager' | 'cashier';
+  name: string;
+  avatar?: string;
+  lastLogin?: string;
+  isActive: boolean;
+}
+
 export interface Worker {
   id: string;
   employeeId: string; 
@@ -93,6 +104,7 @@ export interface Invoice {
   id: string;
   date: string;
   customerId?: string;
+  processedBy?: string; // User ID
   items: CartItem[];
   subtotal: number;
   tax: number;
@@ -157,22 +169,6 @@ export interface CardDesign {
   glossy: boolean;
 }
 
-/**
- * Interface for application users (authenticated personnel)
- */
-export interface User {
-  id: string;
-  username: string;
-  passwordHash: string;
-  role: 'admin' | 'staff';
-  name: string;
-  isActive: boolean;
-  lastLogin: string;
-}
-
-/**
- * Interface for database snapshots used in IndexedDB backups
- */
 export interface DbSnapshot {
   id: string;
   timestamp: string;
@@ -184,12 +180,16 @@ export interface AppState {
   products: Product[];
   customers: Customer[];
   workers: Worker[];
-  users: User[];
   invoices: Invoice[];
   expenses: Expense[];
+  users: User[];
   templates: InvoiceTemplate[];
   loanTransactions: LoanTransaction[];
   expenseCategories: string[];
+  lastSync?: string;
+  lastLocalBackup?: string;
+  lastFileBackup?: string;
+  currentUser?: User | null;
   settings: {
     shopName: string;
     ownerName?: string;
@@ -235,4 +235,4 @@ export interface AppState {
   };
 }
 
-export type View = 'dashboard' | 'customers' | 'products' | 'terminal' | 'invoices' | 'expenses' | 'reports' | 'settings' | 'loans' | 'dashboard-costume' | 'trash' | 'returns';
+export type View = 'dashboard' | 'customers' | 'products' | 'terminal' | 'invoices' | 'expenses' | 'reports' | 'settings' | 'loans' | 'dashboard-costume' | 'trash' | 'returns' | 'users';
