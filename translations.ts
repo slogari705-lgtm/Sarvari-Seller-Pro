@@ -1,3 +1,4 @@
+
 export const translations = {
   en: {
     dashboard: 'Dashboard',
@@ -16,8 +17,7 @@ export const translations = {
     netProfit: 'Net Profit',
     search: 'Search...',
     aiInsights: 'AI Insights',
-    logExpense: 'Log Expense',
-    addStaff: 'Add Staff'
+    logExpense: 'Log Expense'
   },
   ps: {
     dashboard: 'ډشبورډ',
@@ -36,8 +36,7 @@ export const translations = {
     netProfit: 'خ خالص ګټه',
     search: 'پلټنه...',
     aiInsights: 'د هوښیار بصیرت',
-    logExpense: 'لګښت ثبتول',
-    addStaff: 'کارمند اضافه کول'
+    logExpense: 'لګښت ثبتول'
   },
   dr: {
     dashboard: 'داشبورد',
@@ -56,7 +55,6 @@ export const translations = {
     netProfit: 'سود خالص',
     search: 'جستجو...',
     aiInsights: 'بینش هوشمند',
-    logExpense: 'ثبت هزینه',
-    addStaff: 'افزودن کارمند'
+    logExpense: 'ثبت هزینه'
   }
 };

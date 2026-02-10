@@ -10,23 +10,19 @@ import {
   Moon,
   Sun,
   Lock,
-  User as UserIcon,
   RotateCcw,
   Layout,
-  Palette,
   Wand2,
-  Package,
   FileText,
   Receipt,
   BarChart3,
   History,
   Trash2,
-  Cpu,
   Boxes,
   LogOut,
-  ShieldCheck
+  User as UserIcon
 } from 'lucide-react';
-import { AppState, View, User } from './types';
+import { AppState, View } from './types';
 import { translations } from './translations';
 import { loadState, saveState, createSnapshot } from './db';
 import Dashboard from './components/Dashboard';
@@ -41,19 +37,18 @@ import Loans from './components/Loans';
 import Trash from './components/Trash';
 import LockScreen from './components/LockScreen';
 import Returns from './components/Returns';
-import Login from './components/Login';
+import DashboardCostume from './components/DashboardCostume';
 
 const INITIAL_STATE: AppState = {
+  // Initializing empty users array to prevent runtime errors in Login component
+  users: [],
   products: [],
   customers: [],
-  workers: [],
-  users: [],
   invoices: [],
   expenses: [],
   templates: [{ id: 'modern', name: 'Standard Modern', layout: 'modern', brandColor: '#6366f1', showLogo: true }],
   loanTransactions: [],
-  expenseCategories: ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Marketing', 'Maintenance', 'Other'],
-  currentUser: null,
+  expenseCategories: ['Rent', 'Utilities', 'Supplies', 'Marketing', 'Maintenance', 'Other'],
   settings: { 
     shopName: 'Sarvari Seller Pro', 
     shopAddress: '', 
@@ -169,25 +164,7 @@ export default function App() {
 
   const updateState = <K extends keyof AppState>(key: K, value: AppState[K]) => setState(prev => ({ ...prev, [key]: value }));
 
-  const handleLogin = (user: User) => {
-    const newState = { 
-      ...state, 
-      currentUser: user, 
-      users: state.users.some(u => u.id === user.id) ? state.users : [...state.users, user] 
-    };
-    setState(newState);
-  };
-
-  const handleLogout = () => {
-    setState(prev => ({ ...prev, currentUser: null }));
-  };
-
   if (isLoading) return null;
-
-  // Authentication Gate
-  if (!state.currentUser) {
-    return <Login state={state} onLogin={handleLogin} />;
-  }
 
   if (isAppLocked && state.settings.security?.isLockEnabled && state.settings.security?.passcode) {
     return (
@@ -204,6 +181,7 @@ export default function App() {
 
   const coreNav = [
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
+    { id: 'dashboard-costume', label: t.dashboardCostume, icon: Wand2 },
     { id: 'terminal', label: t.terminal, icon: ShoppingCart },
     { id: 'products', label: t.products, icon: Boxes },
     { id: 'customers', label: t.customers, icon: Users },
@@ -287,8 +265,7 @@ export default function App() {
              {[
                { id: 'loans', label: t.loan, icon: History },
                { id: 'returns', label: t.returns, icon: RotateCcw },
-               { id: 'trash', label: 'Trash Bin', icon: Trash2 },
-               { id: 'users', label: 'Users', icon: ShieldCheck }
+               { id: 'trash', label: 'Trash Bin', icon: Trash2 }
              ].map((item) => (
                <button 
                  key={item.id} 
@@ -307,10 +284,6 @@ export default function App() {
             {state.settings.theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">{state.settings.theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
           </button>
-          <button onClick={handleLogout} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-all">
-            <LogOut size={20} />
-            {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">Logout System</span>}
-          </button>
         </div>
       </aside>
 
@@ -327,7 +300,7 @@ export default function App() {
                    {currentView.replace('-', ' ')}
                  </h3>
                  <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border">{state.currentUser.role}</span>
+                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border">SHOP OWNER</span>
               </div>
             </div>
           </div>
@@ -341,7 +314,7 @@ export default function App() {
               <Layout size={20} />
             </button>
             <button onClick={() => setCurrentView('settings')} className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-90 transition-all border-4 border-white/10">
-               {state.currentUser.avatar ? <img src={state.currentUser.avatar} className="w-full h-full rounded-xl object-cover" /> : <UserIcon size={20} strokeWidth={3} />}
+               <UserIcon size={20} strokeWidth={3} />
             </button>
           </div>
         </header>
@@ -351,6 +324,7 @@ export default function App() {
             {(() => {
               switch (currentView) {
                 case 'dashboard': return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} />;
+                case 'dashboard-costume': return <DashboardCostume state={state} setCurrentView={setCurrentView} />;
                 case 'customers': return <Customers state={state} updateState={updateState} setCurrentView={setCurrentView} />;
                 case 'terminal': return <Terminal state={state} updateState={updateState} />;
                 case 'settings': return <Settings state={state} updateState={updateState} />;
@@ -361,7 +335,6 @@ export default function App() {
                 case 'loans': return <Loans state={state} updateState={updateState} setCurrentView={setCurrentView} />;
                 case 'trash': return <Trash state={state} updateState={updateState} />;
                 case 'returns': return <Returns state={state} setCurrentView={setCurrentView} />;
-                case 'users': return <Settings state={state} updateState={updateState} initialTab="users" />;
                 default: return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} />;
               }
             })()}

@@ -1,88 +1,27 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Store, 
   Database,
   Download,
-  UploadCloud,
-  Palette,
   Languages,
-  Moon,
-  Sun,
   Image as ImageIcon,
-  X,
-  Hash,
   ShieldCheck,
   Phone,
   Mail,
-  MapPin,
   Lock,
   IdCard,
-  Check,
-  Layout,
-  Receipt,
+  Brush,
   Gift,
   RefreshCw,
-  FileText,
-  Plus,
-  Trash2,
   CheckCircle2,
-  Sparkles,
-  Zap,
-  Fingerprint,
-  Monitor,
-  HardDrive,
-  ExternalLink,
-  ChevronRight,
-  Shield,
-  Clock,
-  Printer,
-  Bell,
-  Code,
-  Globe,
-  Settings as SettingsIcon,
-  HelpCircle,
-  Smartphone,
-  Eye,
-  Edit2,
   User,
-  Activity,
-  AlertTriangle,
-  CreditCard,
-  DollarSign,
-  Layers,
-  FileDown,
-  QrCode,
-  Brush,
-  Signature,
-  Star,
-  Calendar,
-  Percent,
-  Coins,
-  ArrowUpRight,
-  Award,
-  MessageSquare,
-  Cpu,
   Info,
-  Key,
-  ShieldAlert,
-  EyeOff,
-  Laptop,
-  Smartphone as MobileIcon,
-  AppWindow,
-  Terminal as TerminalIcon,
-  PackageCheck,
-  SmartphoneNfc,
-  CloudLightning,
-  Github,
-  History
+  History,
+  Settings as SettingsIcon
 } from 'lucide-react';
-import { AppState, Language, Theme, CardDesign, InvoiceTemplate, User as UserType, DbSnapshot } from '../types';
+import { AppState, DbSnapshot } from '../types';
 import { translations } from '../translations';
 import { getSnapshots } from '../db';
-import ConfirmDialog from './ConfirmDialog';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 
 interface Props {
   state: AppState;
@@ -90,23 +29,14 @@ interface Props {
   initialTab?: SettingsTab;
 }
 
-type SettingsTab = 'profile' | 'localization' | 'templates' | 'card' | 'loyalty' | 'security' | 'backup' | 'users' | 'about';
+type SettingsTab = 'profile' | 'localization' | 'templates' | 'card' | 'loyalty' | 'security' | 'backup' | 'about';
 
 const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [formData, setFormData] = useState(state.settings);
   const [showSaved, setShowSaved] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isExportingCard, setIsExportingCard] = useState(false);
   const [snapshots, setSnapshots] = useState<DbSnapshot[]>([]);
-  
-  // Security States
-  const [newPasscode, setNewPasscode] = useState('');
-  const [confirmPasscode, setConfirmPasscode] = useState('');
-  
-  // Template States
-  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<Partial<InvoiceTemplate> | null>(null);
   
   const logoInputRef = useRef<HTMLInputElement>(null);
   const t = translations[state.settings.language || 'en'];
@@ -131,7 +61,6 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
       updateState('customers', snapshot.data.customers);
       updateState('invoices', snapshot.data.invoices);
       updateState('expenses', snapshot.data.expenses);
-      updateState('users', snapshot.data.users);
       updateState('settings', snapshot.data.settings);
       alert("System State Synchronized.");
       window.location.reload();
@@ -163,30 +92,6 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
     linkElement.click();
     URL.revokeObjectURL(url);
     setTimeout(() => setIsExporting(false), 1000);
-  };
-
-  const handleSaveSecurity = () => {
-    if (newPasscode && newPasscode.length < 4) {
-      alert("PIN must be at least 4 digits.");
-      return;
-    }
-    if (newPasscode && newPasscode !== confirmPasscode) {
-      alert("PINs do not match.");
-      return;
-    }
-
-    const newSettings = {
-      ...formData,
-      security: {
-        ...formData.security,
-        passcode: newPasscode || formData.security.passcode,
-        isLockEnabled: !!(newPasscode || formData.security.passcode)
-      }
-    };
-    setFormData(newSettings);
-    handleSaveSettings(newSettings);
-    setNewPasscode('');
-    setConfirmPasscode('');
   };
 
   return (
@@ -225,7 +130,6 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
               {id: 'templates', icon: Brush, label: 'Invoice Designer', desc: 'Billing Preset Management'},
               {id: 'card', icon: IdCard, label: 'Member Card Studio', desc: 'Badge Aesthetic Orchestration'}, 
               {id: 'loyalty', icon: Gift, label: 'Reward Engine', desc: 'Algorithms & Tier Levels'},
-              {id: 'users', icon: ShieldCheck, label: 'User Registry', desc: 'Access Control List'}, 
               {id: 'security', icon: Lock, label: 'Security Vault', desc: 'Access Control'}, 
               {id: 'backup', icon: Database, label: 'Backup Console', desc: 'Snapshot Recovery'},
               {id: 'about', icon: Info, label: 'System & Developer', desc: 'Support & Credits'} 
@@ -291,38 +195,6 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
                              </div>
                           </div>
                        </div>
-                    </div>
-                 </div>
-               )}
-
-               {activeTab === 'users' && (
-                 <div className="space-y-10 animate-in slide-in-from-bottom-4">
-                    <div className="flex items-center justify-between">
-                       <h4 className="text-2xl font-black dark:text-white uppercase tracking-tighter">Authorized Personnel</h4>
-                       <button className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 active:scale-95"><Plus size={16}/> New User</button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                       {state.users.map(user => (
-                         <div key={user.id} className="p-6 bg-slate-50 dark:bg-slate-800/40 rounded-[32px] border border-transparent hover:border-indigo-200 transition-all group">
-                            <div className="flex items-center gap-4 mb-4">
-                               <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg shadow-lg">{user.name.charAt(0)}</div>
-                               <div className="min-w-0">
-                                  <p className="font-black text-sm dark:text-white uppercase truncate tracking-tight">{user.name}</p>
-                                  <p className="text-[9px] font-bold text-slate-400 uppercase">{user.role} • @{user.username}</p>
-                               </div>
-                            </div>
-                            <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
-                               <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${user.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200 text-slate-400'}`}>
-                                  {user.isActive ? 'Active' : 'Locked'}
-                               </span>
-                               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button className="p-2 text-slate-400 hover:text-indigo-600"><Edit2 size={14}/></button>
-                                  <button className="p-2 text-slate-400 hover:text-rose-600"><Trash2 size={14}/></button>
-                               </div>
-                            </div>
-                         </div>
-                       ))}
                     </div>
                  </div>
                )}
@@ -396,7 +268,6 @@ const SettingsTabIcon = ({ tab }: { tab: SettingsTab }) => {
       case 'security': return <Lock size={32} strokeWidth={2.5}/>;
       case 'backup': return <Database size={32} strokeWidth={2.5}/>;
       case 'loyalty': return <Gift size={32} strokeWidth={2.5}/>;
-      case 'users': return <ShieldCheck size={32} strokeWidth={2.5}/>;
       case 'about': return <Info size={32} strokeWidth={2.5}/>;
       default: return <SettingsIcon size={32} strokeWidth={2.5}/>;
    }

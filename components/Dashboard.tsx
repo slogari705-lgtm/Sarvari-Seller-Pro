@@ -22,7 +22,6 @@ import {
   Check,
   Save,
   ChevronRight,
-  // Added missing Scale icon import
   Scale
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -41,7 +40,6 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
-  const [isCostumeOpen, setIsCostumeOpen] = useState(false);
   
   const [visibleWidgets, setVisibleWidgets] = useState<string[]>(() => {
     const saved = localStorage.getItem('dashboard_costume');
@@ -105,81 +103,8 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
     }
   };
 
-  const widgetOptions = [
-    { id: 'totalSales', label: 'Gross Revenue', icon: TrendingUp, desc: 'Global income before costs.' },
-    { id: 'orders', label: 'Order Flow', icon: ShoppingBag, desc: 'Total transaction volume.' },
-    { id: 'totalDebt', label: 'Risk Portfolio', icon: Scale, desc: 'Outstanding receivables.' },
-    { id: 'netProfit', label: 'Net Earnings', icon: Activity, desc: 'Post-overhead profit.' },
-    { id: 'assetValue', label: 'Inventory Value', icon: Wallet, desc: 'Capital in current stock.' },
-    { id: 'grossMargin', label: 'Gross Margin %', icon: PieChart, desc: 'Profitability ratio.' },
-  ];
-
-  const toggleWidget = (id: string) => {
-    setVisibleWidgets(prev => 
-      prev.includes(id) ? prev.filter(w => w !== id) : [...prev, id]
-    );
-  };
-
-  const saveCostume = () => {
-    localStorage.setItem('dashboard_costume', JSON.stringify(visibleWidgets));
-    setIsCostumeOpen(false);
-  };
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10 relative">
-      {/* Sidebar-in-Sidebar Costume Drawer */}
-      {isCostumeOpen && (
-        <div className="fixed inset-0 z-[100] flex justify-end">
-           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsCostumeOpen(false)} />
-           <div className="relative w-full max-w-sm h-full bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-100 dark:border-slate-800 animate-in slide-in-from-right duration-300 flex flex-col">
-              <header className="p-8 border-b flex items-center justify-between shrink-0">
-                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white"><Wand2 size={24}/></div>
-                    <div>
-                       <h4 className="font-black text-lg dark:text-white uppercase tracking-tighter leading-none">Costume</h4>
-                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Workspace Design</p>
-                    </div>
-                 </div>
-                 <button onClick={() => setIsCostumeOpen(false)} className="p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-400 rounded-xl hover:text-rose-500 transition-all"><X size={20}/></button>
-              </header>
-
-              <div className="flex-1 overflow-y-auto p-8 space-y-4 custom-scrollbar">
-                 <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-6 px-2">Select Active Widgets</p>
-                 {widgetOptions.map((opt) => {
-                    const isActive = visibleWidgets.includes(opt.id);
-                    return (
-                      <button
-                        key={opt.id}
-                        onClick={() => toggleWidget(opt.id)}
-                        className={`w-full flex items-center gap-4 p-5 rounded-[32px] border-2 transition-all text-left ${
-                          isActive ? 'bg-indigo-50/50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 shadow-sm' : 'bg-white dark:bg-slate-900 border-transparent opacity-60'
-                        }`}
-                      >
-                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-all ${isActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                            <opt.icon size={24} />
-                         </div>
-                         <div className="flex-1 min-w-0">
-                            <h5 className={`font-black text-xs uppercase tracking-tight ${isActive ? 'text-indigo-900 dark:text-indigo-100' : 'text-slate-600 dark:text-slate-400'}`}>{opt.label}</h5>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest truncate">{opt.desc}</p>
-                         </div>
-                         <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 shrink-0 ${isActive ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-200 dark:border-slate-700 text-transparent'}`}>
-                            <Check size={12} strokeWidth={4} />
-                         </div>
-                      </button>
-                    );
-                 })}
-              </div>
-
-              <footer className="p-8 border-t bg-slate-50/50 dark:bg-slate-950/20 shrink-0">
-                 <button onClick={saveCostume} className="w-full py-5 bg-indigo-600 text-white rounded-[24px] font-black text-[11px] uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-3">
-                    <Save size={18}/> Apply Configuration
-                 </button>
-              </footer>
-           </div>
-        </div>
-      )}
-
-      {/* Main Dashboard UI */}
       <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 dark:from-indigo-900 dark:to-slate-900 p-10 rounded-[56px] text-white shadow-2xl relative overflow-hidden group">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div className="space-y-4">
@@ -223,7 +148,7 @@ const Dashboard: React.FC<Props> = ({ state, setCurrentView, sidebarOpen }) => {
            <button onClick={() => setCurrentView('terminal')} className="flex items-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-3xl font-black text-[11px] uppercase tracking-widest shadow-xl hover:bg-indigo-700 active:scale-95 transition-all">
              <PlusCircle size={18} /> New Transaction
            </button>
-           <button onClick={() => setIsCostumeOpen(true)} className="flex items-center gap-3 px-8 py-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-200 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all">
+           <button onClick={() => setCurrentView('dashboard-costume')} className="flex items-center gap-3 px-8 py-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-200 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all">
              <Wand2 size={18} /> Customize
            </button>
         </div>

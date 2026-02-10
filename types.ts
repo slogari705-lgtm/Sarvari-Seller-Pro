@@ -58,29 +58,6 @@ export interface Customer {
   preferredPayment?: 'Cash' | 'Card' | 'Transfer';
 }
 
-export interface User {
-  id: string;
-  username: string;
-  passwordHash: string;
-  role: 'admin' | 'manager' | 'cashier';
-  name: string;
-  avatar?: string;
-  lastLogin?: string;
-  isActive: boolean;
-}
-
-export interface Worker {
-  id: string;
-  employeeId: string; 
-  name: string;
-  phone: string;
-  position: string;
-  photo?: string;
-  joinDate: string;
-  baseSalary: number;
-  isDeleted?: boolean;
-}
-
 export interface CartItem extends Product {
   quantity: number;
   buyPrice: number;
@@ -104,7 +81,6 @@ export interface Invoice {
   id: string;
   date: string;
   customerId?: string;
-  processedBy?: string; // User ID
   items: CartItem[];
   subtotal: number;
   tax: number;
@@ -145,8 +121,21 @@ export interface Expense {
   category: string;
   amount: number;
   date: string;
-  workerId?: string; 
   isDeleted?: boolean;
+}
+
+/**
+ * Interface representing a system user for authentication.
+ * Added to fix the import error in Login.tsx.
+ */
+export interface User {
+  id: string;
+  username: string;
+  passwordHash: string;
+  role: 'admin' | 'staff';
+  name: string;
+  isActive: boolean;
+  lastLogin: string;
 }
 
 export type Language = 'en' | 'ps' | 'dr';
@@ -177,19 +166,18 @@ export interface DbSnapshot {
 }
 
 export interface AppState {
+  // Added users array to AppState to support authentication logic in Login.tsx
+  users: User[];
   products: Product[];
   customers: Customer[];
-  workers: Worker[];
   invoices: Invoice[];
   expenses: Expense[];
-  users: User[];
   templates: InvoiceTemplate[];
   loanTransactions: LoanTransaction[];
   expenseCategories: string[];
   lastSync?: string;
   lastLocalBackup?: string;
   lastFileBackup?: string;
-  currentUser?: User | null;
   settings: {
     shopName: string;
     ownerName?: string;
@@ -235,4 +223,4 @@ export interface AppState {
   };
 }
 
-export type View = 'dashboard' | 'customers' | 'products' | 'terminal' | 'invoices' | 'expenses' | 'reports' | 'settings' | 'loans' | 'dashboard-costume' | 'trash' | 'returns' | 'users';
+export type View = 'dashboard' | 'customers' | 'products' | 'terminal' | 'invoices' | 'expenses' | 'reports' | 'settings' | 'loans' | 'dashboard-costume' | 'trash' | 'returns';
