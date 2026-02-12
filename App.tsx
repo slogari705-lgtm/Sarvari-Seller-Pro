@@ -27,7 +27,8 @@ import {
   Cpu,
   ChevronDown,
   ChevronUp,
-  Circle
+  Circle,
+  Zap
 } from 'lucide-react';
 import { AppState, View } from './types';
 import { translations } from './translations';
@@ -261,7 +262,10 @@ export default function App() {
           {(sidebarOpen || mobileMenuOpen) && (
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg">S</div>
-              <span className="font-black text-xl tracking-tighter dark:text-white">Sarvari</span>
+              <div className="flex flex-col">
+                <span className="font-black text-lg tracking-tighter dark:text-white leading-none">Sarvari</span>
+                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Professional</span>
+              </div>
             </div>
           )}
           {!sidebarOpen && !mobileMenuOpen && (
@@ -275,13 +279,13 @@ export default function App() {
           <div className="space-y-1">
             <button 
               onClick={() => { setCurrentView('dashboard'); if(sidebarOpen) setIsDashboardSubOpen(!isDashboardSubOpen); }}
-              className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-all group ${currentView === 'dashboard' || currentView === 'dashboard-costume' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-all group ${currentView === 'dashboard' || currentView === 'dashboard-costume' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
             >
               <div className="flex items-center gap-4">
-                <LayoutDashboard size={20} />
+                <LayoutDashboard size={20} className={currentView === 'dashboard' ? 'scale-110' : ''} />
                 {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{t.dashboard}</span>}
               </div>
-              {(sidebarOpen || mobileMenuOpen) && (isDashboardSubOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+              {(sidebarOpen || mobileMenuOpen) && (isDashboardSubOpen ? <ChevronUp size={14} className="opacity-50" /> : <ChevronDown size={14} className="opacity-50" />)}
             </button>
             
             {isDashboardSubOpen && (sidebarOpen || mobileMenuOpen) && (
@@ -290,22 +294,23 @@ export default function App() {
                   onClick={() => setCurrentView('dashboard-costume')}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all ${currentView === 'dashboard-costume' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 font-black' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
                 >
-                  <Wand2 size={16} />
-                  <span className="text-[11px] uppercase tracking-widest">{t.dashboardCostume}</span>
+                  <Wand2 size={15} />
+                  <span className="text-[10px] uppercase tracking-widest">{t.dashboardCostume}</span>
+                  {currentView === 'dashboard-costume' && <div className="w-1 h-1 bg-indigo-600 rounded-full ml-auto animate-pulse" />}
                 </button>
               </div>
             )}
           </div>
 
           <div>
-            <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Terminal</p>
+            <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Operational</p>
             {coreNav.map((item) => (
               <button 
                 key={item.id} 
                 onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
                 className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
-                <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
+                <item.icon size={20} className={currentView === item.id ? 'text-white scale-110' : 'group-hover:scale-110 transition-transform'} /> 
                 {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
               </button>
             ))}
@@ -319,28 +324,28 @@ export default function App() {
                 onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
                 className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
-                <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
+                <item.icon size={20} className={currentView === item.id ? 'text-white scale-110' : 'group-hover:scale-110 transition-transform'} /> 
                 {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
               </button>
             ))}
           </div>
 
           <div>
-            <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Auditing</p>
+            <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Analytics</p>
             {auditingNav.map((item) => (
               <button 
                 key={item.id} 
                 onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
                 className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
-                <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
+                <item.icon size={20} className={currentView === item.id ? 'text-white scale-110' : 'group-hover:scale-110 transition-transform'} /> 
                 {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
               </button>
             ))}
           </div>
           
-          <div className="pt-4 border-t border-slate-50 dark:border-slate-800">
-             <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>System</p>
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+             <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>System Tools</p>
              {[
                { id: 'settings', label: t.settings, icon: SettingsIcon },
                { id: 'loans', label: t.loan, icon: History },
@@ -363,29 +368,32 @@ export default function App() {
              <button 
                onClick={handleSync}
                disabled={!isOnline || isSyncing}
-               className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${isOnline ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-100 text-slate-400'}`}
+               className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${isOnline ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}
              >
                 {isSyncing ? <RefreshCw className="animate-spin" size={20}/> : (isOnline ? <CloudUpload size={20}/> : <CloudOff size={20}/>)}
                 {(sidebarOpen || mobileMenuOpen) && (
                    <div className="flex flex-col items-start leading-none">
-                      <span className="font-black text-[9px] uppercase tracking-widest">{isSyncing ? 'Syncing...' : (isOnline ? 'Sync Vault' : 'Offline')}</span>
-                      <span className="text-[8px] font-bold opacity-70">{pendingSyncCount} Items</span>
+                      <span className="font-black text-[9px] uppercase tracking-widest">{isSyncing ? 'Processing' : (isOnline ? 'Push Updates' : 'Offline')}</span>
+                      <span className="text-[8px] font-bold opacity-70">{pendingSyncCount} Ledger Items</span>
                    </div>
                 )}
              </button>
           )}
 
-          {/* System Health Status */}
+          {/* System Health Status Widget */}
           {(sidebarOpen || mobileMenuOpen) && (
-            <div className="px-4 py-2 flex items-center gap-3">
-              <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{isOnline ? 'Connected' : 'Offline Node'}</span>
+            <div className="px-4 py-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-between group">
+              <div className="flex items-center gap-3">
+                 <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-rose-500 animate-pulse'}`} />
+                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{isOnline ? 'Linked' : 'Local Node'}</span>
+              </div>
+              <Zap size={10} className={`${isOnline ? 'text-amber-400' : 'text-slate-300'}`} />
             </div>
           )}
 
           <button onClick={() => updateState('settings', { ...state.settings, theme: state.settings.theme === 'dark' ? 'light' : 'dark' })} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-700 shadow-sm">
             {state.settings.theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-            {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">{state.settings.theme === 'dark' ? 'Light' : 'Dark'}</span>}
+            {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">{state.settings.theme === 'dark' ? 'Daylight' : 'Nocturnal'}</span>}
           </button>
         </div>
       </aside>
@@ -403,7 +411,7 @@ export default function App() {
                    {currentView.replace('-', ' ')}
                  </h3>
                  <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border">V1.3.2</span>
+                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border">BUILD 1.3.3</span>
               </div>
             </div>
           </div>
@@ -418,7 +426,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar bg-slate-50/30 dark:bg-slate-950/30">
           <div className="max-w-7xl mx-auto">
             {(() => {
               switch (currentView) {

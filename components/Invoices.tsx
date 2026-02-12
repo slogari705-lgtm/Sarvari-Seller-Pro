@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileText, 
@@ -26,7 +25,8 @@ import {
   Maximize2,
   UserMinus,
   Edit2,
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { AppState, Invoice, View, Product, CartItem, Customer, LoanTransaction } from '../types';
 import { translations } from '../translations';
@@ -51,6 +51,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [trashConfirm, setTrashConfirm] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
+  const [isPrintingLoading, setIsPrintingLoading] = useState(false);
   
   const [isCreating, setIsCreating] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
@@ -292,15 +293,33 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
     setTrashConfirm(null);
   };
 
-  const handlePrint = (inv: Invoice, overrideLayout: PrintLayout = 'auto') => {
+  const handlePrint = async (inv: Invoice, overrideLayout: PrintLayout = 'auto') => {
+    if (isPrintingLoading) return;
+    setIsPrintingLoading(true);
+    
+    // Set document title for mobile "Save as PDF" naming
+    const originalTitle = document.title;
+    document.title = `Sarvari_Invoice_#${inv.id}`;
+
     const html = generatePrintHTML(state, inv, overrideLayout);
     const holder = document.getElementById('print-holder');
+    
     if (holder) { 
       holder.innerHTML = html; 
+      
+      // Crucial Delay for mobile browser layout engine (especially iOS Safari)
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      window.print();
+      
+      // Cleanup
       setTimeout(() => {
-        window.print();
-        holder.innerHTML = ''; 
-      }, 250);
+        holder.innerHTML = '';
+        document.title = originalTitle;
+        setIsPrintingLoading(false);
+      }, 500);
+    } else {
+      setIsPrintingLoading(false);
     }
   };
 
@@ -451,6 +470,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
                   <div className="grid grid-cols-2 gap-4">
                     <button 
                       onClick={() => setPrintLayoutMode('thermal')} 
+                      disabled={isPrintingLoading}
                       className={`p-8 rounded-[40px] border-4 transition-all text-left flex flex-col gap-4 relative overflow-hidden group ${printLayoutMode === 'thermal' ? 'border-indigo-600 bg-white dark:bg-slate-800 shadow-xl' : 'bg-slate-50 dark:bg-slate-950 border-transparent opacity-60'}`}
                     >
                       <Smartphone size={32} className={printLayoutMode === 'thermal' ? 'text-indigo-600' : 'text-slate-400'} />
@@ -462,6 +482,7 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
                     </button>
                     <button 
                       onClick={() => setPrintLayoutMode('a4')} 
+                      disabled={isPrintingLoading}
                       className={`p-8 rounded-[40px] border-4 transition-all text-left flex flex-col gap-4 relative overflow-hidden group ${printLayoutMode === 'a4' ? 'border-indigo-600 bg-white dark:bg-slate-700 shadow-xl' : 'bg-slate-50 dark:bg-slate-950 border-transparent opacity-60'}`}
                     >
                       <Layout size={32} className={printLayoutMode === 'a4' ? 'text-indigo-600' : 'text-slate-400'} />
@@ -475,10 +496,19 @@ export default function Invoices({ state, updateState, setCurrentView }: Props) 
                 </div>
               </div>
               <footer className="p-12 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-col md:flex-row gap-4 shrink-0">
-                <button onClick={() => handlePrint(printingInvoice, printLayoutMode)} className="flex-1 py-7 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-4">
-                  <Printer size={24}/> physical dispatch
+                <button 
+                  onClick={() => handlePrint(printingInvoice, printLayoutMode)} 
+                  disabled={isPrintingLoading}
+                  className="flex-1 py-7 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-4 disabled:opacity-50"
+                >
+                  {isPrintingLoading ? <Loader2 size={24} className="animate-spin" /> : <Printer size={24}/>} 
+                  {isPrintingLoading ? 'Preparing Device...' : 'physical dispatch'}
                 </button>
-                <button onClick={() => handleDownloadPDF(printingInvoice)} disabled={!!isDownloading} className="flex-1 py-7 bg-white dark:bg-slate-800 text-slate-700 dark:text-white border-2 rounded-[32px] font-black text-xs uppercase tracking-[0.3em] hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-4">
+                <button 
+                  onClick={() => handleDownloadPDF(printingInvoice)} 
+                  disabled={!!isDownloading || isPrintingLoading} 
+                  className="flex-1 py-7 bg-white dark:bg-slate-800 text-slate-700 dark:text-white border-2 rounded-[32px] font-black text-xs uppercase tracking-[0.3em] hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-4 disabled:opacity-50"
+                >
                   {isDownloading === printingInvoice.id ? <RefreshCw className="animate-spin" size={24}/> : <FileDown size={24}/>} Save Digital PDF
                 </button>
               </footer>
