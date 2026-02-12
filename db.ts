@@ -78,7 +78,12 @@ export const createSnapshot = async (state: AppState, label: string): Promise<vo
     id: Math.random().toString(36).substr(2, 9),
     timestamp: new Date().toISOString(),
     data: JSON.parse(JSON.stringify(state)), // Deep clone
-    label
+    label,
+    stats: {
+      products: state.products.filter(p => !p.isDeleted).length,
+      customers: state.customers.filter(c => !c.isDeleted).length,
+      invoices: state.invoices.filter(i => !i.isDeleted).length
+    }
   };
   const tx = db.transaction(BACKUP_STORE, 'readwrite');
   const store = tx.objectStore(BACKUP_STORE);

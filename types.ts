@@ -159,6 +159,11 @@ export interface DbSnapshot {
   timestamp: string;
   data: AppState;
   label: string;
+  stats?: {
+    products: number;
+    customers: number;
+    invoices: number;
+  };
 }
 
 // Sync System Types

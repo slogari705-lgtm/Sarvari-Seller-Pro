@@ -40,12 +40,17 @@ import {
   AlertTriangle,
   FileCode,
   HardDrive,
-  // Added missing RotateCcw icon import
-  RotateCcw
+  RotateCcw,
+  Zap,
+  Activity,
+  Archive,
+  ArrowRightCircle,
+  FileSearch
 } from 'lucide-react';
 import { AppState, DbSnapshot, Language, Theme } from '../types';
 import { translations } from '../translations';
 import { getSnapshots, createSnapshot, saveState } from '../db';
+import ConfirmDialog from './ConfirmDialog';
 
 interface Props {
   state: AppState;
@@ -63,6 +68,7 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
   const [isImporting, setIsImporting] = useState(false);
   const [snapshots, setSnapshots] = useState<DbSnapshot[]>([]);
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [restoreConfirm, setRestoreConfirm] = useState<DbSnapshot | null>(null);
   
   const logoInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -71,9 +77,14 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
   useEffect(() => {
     setFormData(state.settings);
     if (activeTab === 'backup') {
-      getSnapshots().then(setSnapshots);
+      refreshSnapshots();
     }
   }, [state.settings, activeTab]);
+
+  const refreshSnapshots = async () => {
+    const list = await getSnapshots();
+    setSnapshots(list.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+  };
 
   const handleSaveSettings = (dataOverride?: any) => { 
     const finalData = dataOverride || formData;
@@ -83,15 +94,15 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
   };
 
   const handleRestoreSnapshot = (snapshot: DbSnapshot) => {
-    if (confirm(`CRITICAL PROTOCOL: Restore systems to snapshot from ${new Date(snapshot.timestamp).toLocaleString()}? Current data will be overwritten.`)) {
-      updateState('products', snapshot.data.products);
-      updateState('customers', snapshot.data.customers);
-      updateState('invoices', snapshot.data.invoices);
-      updateState('expenses', snapshot.data.expenses);
-      updateState('settings', snapshot.data.settings);
-      alert("System State Synchronized.");
-      window.location.reload();
-    }
+    updateState('products', snapshot.data.products);
+    updateState('customers', snapshot.data.customers);
+    updateState('invoices', snapshot.data.invoices);
+    updateState('expenses', snapshot.data.expenses);
+    updateState('settings', snapshot.data.settings);
+    updateState('loanTransactions', snapshot.data.loanTransactions || []);
+    setRestoreConfirm(null);
+    alert("System State Synchronized. Re-initialization successful.");
+    window.location.reload();
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,7 +123,7 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
     const dataStr = JSON.stringify(state, null, 2);
     const blob = new Blob([dataStr], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
-    const exportFileDefaultName = `sarvari_pos_archive_${new Date().toISOString().split('T')[0]}.sa`;
+    const exportFileDefaultName = `SARVARI_VAULT_${new Date().toISOString().replace(/[:.]/g, '-')}.sa`;
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', url);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -131,13 +142,11 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
         const importedContent = event.target?.result as string;
         const importedData = JSON.parse(importedContent) as AppState;
         
-        // Basic Validation
         if (!importedData.products || !importedData.invoices || !importedData.settings) {
           throw new Error("Invalid Archive Schema");
         }
 
         if (confirm("ARCHIVE VALIDATED. Overwrite current system nodes with this archive?")) {
-          // Replace all core states
           updateState('products', importedData.products);
           updateState('customers', importedData.customers);
           updateState('invoices', importedData.invoices);
@@ -159,7 +168,6 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
 
   const handleCloudSync = async () => {
     setIsCloudSyncing(true);
-    // Simulate remote node synchronization
     await new Promise(r => setTimeout(r, 2000));
     setFormData({
       ...formData,
@@ -172,8 +180,25 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
     setIsCloudSyncing(false);
   };
 
+  const handleManualCheckpoint = async () => {
+    setIsExporting(true);
+    await createSnapshot(state, 'Manual User Checkpoint');
+    await refreshSnapshots();
+    setIsExporting(false);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+      <ConfirmDialog 
+        isOpen={!!restoreConfirm}
+        onClose={() => setRestoreConfirm(null)}
+        onConfirm={() => restoreConfirm && handleRestoreSnapshot(restoreConfirm)}
+        title="Authorize Rollback?"
+        message={`This will overwrite current terminal data with the state from ${restoreConfirm ? new Date(restoreConfirm.timestamp).toLocaleString() : ''}. All unsaved changes will be lost.`}
+        confirmText="Confirm Rollback"
+        type="warning"
+      />
+
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
         <div className="flex items-center gap-6 relative z-10">
           <div className="w-16 h-16 bg-indigo-600 rounded-[24px] flex items-center justify-center text-white shadow-xl">
@@ -182,7 +207,7 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
           <div>
             <h3 className="text-3xl font-black uppercase tracking-tighter dark:text-white">{t.settings}</h3>
             <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] mt-1 flex items-center gap-2">
-               System Node Config <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" /> Active Session
+               Enterprise Registry <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" /> Local Node
             </p>
           </div>
         </div>
@@ -195,7 +220,7 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
              </div>
            )}
            <button onClick={handleExportData} disabled={isExporting} className="flex items-center gap-3 px-6 py-3.5 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95">
-             {isExporting ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />} Data Export (.sa)
+             {isExporting ? <RefreshCw size={14} className="animate-spin" /> : <Archive size={14} />} Data Export
            </button>
         </div>
       </div>
@@ -204,13 +229,13 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
          <aside className="lg:col-span-3 space-y-2">
             {[ 
               {id: 'profile', icon: User, label: t.shopProfile, desc: 'Identity & Contacts'}, 
-              {id: 'localization', icon: Languages, label: t.localization, desc: 'Language & Atmosphere'}, 
-              {id: 'templates', icon: Brush, label: t.invoiceSettings, desc: 'Receipts & Branding'},
-              {id: 'card', icon: IdCard, label: 'Membership Cards', desc: 'Loyalty Card Aesthetics'}, 
-              {id: 'loyalty', icon: Gift, label: t.loyaltySettings, desc: 'Points & Rewards'},
-              {id: 'security', icon: Lock, label: t.security, desc: 'Vault Access Keys'}, 
-              {id: 'backup', icon: Database, label: t.backup, desc: 'Snapshots & Recovery'},
-              {id: 'about', icon: Info, label: t.about, desc: 'System Integrity'} 
+              {id: 'localization', icon: Languages, label: t.localization, desc: 'Environment Config'}, 
+              {id: 'templates', icon: Brush, label: t.invoiceSettings, desc: 'Receipt Blueprint'},
+              {id: 'card', icon: IdCard, label: 'Identity Badge', desc: 'Membership Design'}, 
+              {id: 'loyalty', icon: Gift, label: t.loyaltySettings, desc: 'Credit Algorithm'},
+              {id: 'security', icon: Lock, label: t.security, desc: 'Encryption & Keys'}, 
+              {id: 'backup', icon: Database, label: t.backup, desc: 'Vault & Recovery'},
+              {id: 'about', icon: Info, label: t.about, desc: 'Core Integrity'} 
             ].map(tab => (
               <button 
                 key={tab.id} 
@@ -234,7 +259,7 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
                  <div className="space-y-10 animate-in slide-in-from-bottom-4">
                     <div className="flex flex-col xl:flex-row gap-12">
                        <div className="xl:w-1/3 flex flex-col items-center">
-                          <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-6 self-start px-2">Shop Branding</h4>
+                          <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-6 self-start px-2">Visual Branding</h4>
                           <div 
                             onClick={() => logoInputRef.current?.click()} 
                             className="w-full aspect-square max-w-[280px] rounded-[48px] bg-slate-50 dark:bg-slate-950 border-4 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center cursor-pointer overflow-hidden group shadow-inner relative transition-all hover:border-indigo-400"
@@ -244,7 +269,7 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
                              ) : (
                                <div className="flex flex-col items-center text-slate-300">
                                  <ImageIcon size={64} strokeWidth={1} />
-                                 <p className="text-[10px] font-black uppercase mt-4 tracking-widest text-center px-6">Upload Brand Symbol</p>
+                                 <p className="text-[10px] font-black uppercase mt-4 tracking-widest text-center px-6">Upload Symbol</p>
                                </div>
                              )}
                              <input ref={logoInputRef} type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} />
@@ -254,22 +279,22 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
                        <div className="xl:w-2/3 space-y-8">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                              <div className="md:col-span-2">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">Business Designation</label>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">Shop Designation</label>
                                 <input type="text" value={formData.shopName} onChange={e => setFormData({...formData, shopName: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-3xl py-4 px-8 font-black text-2xl dark:text-white outline-none" />
                              </div>
                              <div className="md:col-span-2">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">Tagline / Motto</label>
-                                <input type="text" value={formData.shopTagline || ''} onChange={e => setFormData({...formData, shopTagline: e.target.value})} placeholder="e.g. Quality Since 2025" className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-3xl py-4 px-8 font-bold text-sm dark:text-white outline-none" />
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">Motto</label>
+                                <input type="text" value={formData.shopTagline || ''} onChange={e => setFormData({...formData, shopTagline: e.target.value})} placeholder="e.g. Premium Retail Experience" className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-3xl py-4 px-8 font-bold text-sm dark:text-white outline-none" />
                              </div>
                              <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">Contact Phone</label>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">Telecom</label>
                                 <div className="relative">
                                    <Phone className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                                    <input type="text" value={formData.shopPhone || ''} onChange={e => setFormData({...formData, shopPhone: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-14 pr-6 font-bold dark:text-white outline-none" />
                                 </div>
                              </div>
                              <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">Email Node</label>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">Email</label>
                                 <div className="relative">
                                    <Mail className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                                    <input type="email" value={formData.shopEmail || ''} onChange={e => setFormData({...formData, shopEmail: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-4 pl-14 pr-6 font-bold dark:text-white outline-none" />
@@ -333,7 +358,7 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
                                    <input type="text" value={formData.currency} onChange={e => setFormData({...formData, currency: e.target.value})} className="w-full bg-white dark:bg-slate-800 rounded-xl py-3 px-4 font-black text-center text-xl dark:text-white outline-none" />
                                 </div>
                                 <div>
-                                   <label className="block text-[8px] font-black text-slate-400 uppercase mb-2 ml-1">Secondary (AFN)</label>
+                                   <label className="block text-[8px] font-black text-slate-400 uppercase mb-2 ml-1">Secondary</label>
                                    <input type="text" value={formData.secondaryCurrency || ''} onChange={e => setFormData({...formData, secondaryCurrency: e.target.value})} className="w-full bg-white dark:bg-slate-800 rounded-xl py-3 px-4 font-black text-center text-xl dark:text-white outline-none" />
                                 </div>
                              </div>
@@ -345,115 +370,112 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
 
                {activeTab === 'backup' && (
                  <div className="space-y-12 animate-in slide-in-from-bottom-4">
-                    {/* Cloud Backups Hub */}
-                    <section className="space-y-6">
-                       <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.2em] flex items-center gap-3"><CloudLightning size={18}/> Cloud Synchronization Hub</h4>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className={`p-8 rounded-[48px] border-4 transition-all relative overflow-hidden group ${formData.cloudBackup.provider === 'google-drive' ? 'border-indigo-600 bg-white dark:bg-slate-900 shadow-xl' : 'border-slate-50 dark:bg-slate-950 opacity-60'}`}>
-                             <div className="flex items-center justify-between mb-6">
-                                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg border">
-                                   <img src="https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" className="w-6" />
+                    {/* System Vault Health Monitor */}
+                    <div className="bg-indigo-600 rounded-[48px] p-10 text-white shadow-2xl relative overflow-hidden group">
+                       <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+                          <div className="space-y-4">
+                             <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 bg-white/20 rounded-3xl flex items-center justify-center backdrop-blur-md border border-white/30"><ShieldCheck size={32}/></div>
+                                <h4 className="text-3xl font-black uppercase tracking-tighter">Vault Integrity</h4>
+                             </div>
+                             <div className="flex flex-wrap gap-4">
+                                <div className="px-4 py-2 bg-white/10 rounded-full border border-white/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                                   <Activity size={12}/> Current Volume: {(state.products.length + state.customers.length + state.invoices.length)} Entities
                                 </div>
-                                <button onClick={() => setFormData({...formData, cloudBackup: {...formData.cloudBackup, provider: formData.cloudBackup.provider === 'google-drive' ? 'none' : 'google-drive'}})} className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${formData.cloudBackup.provider === 'google-drive' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                                   {formData.cloudBackup.provider === 'google-drive' ? 'Connected' : 'Connect Node'}
+                                <div className="px-4 py-2 bg-white/10 rounded-full border border-white/20 text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
+                                   <History size={12}/> Last Pulse: {snapshots[0] ? new Date(snapshots[0].timestamp).toLocaleTimeString() : 'Unknown'}
+                                </div>
+                             </div>
+                          </div>
+                          <button 
+                            onClick={handleManualCheckpoint}
+                            disabled={isExporting}
+                            className="px-10 py-5 bg-white text-indigo-600 rounded-[32px] font-black text-xs uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3 disabled:opacity-50"
+                          >
+                             {isExporting ? <RefreshCw size={20} className="animate-spin" /> : <Database size={20}/>} Create Checkpoint
+                          </button>
+                       </div>
+                       <Zap className="absolute -bottom-10 -right-10 text-white/5 group-hover:scale-125 transition-transform duration-1000" size={300} />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                       {/* Archive Controls */}
+                       <div className="space-y-6">
+                          <h5 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-3 px-2"><Archive size={16}/> Physical Archiving</h5>
+                          <div className="grid grid-cols-1 gap-4">
+                             <div className="bg-slate-50 dark:bg-slate-950 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 space-y-6 group hover:border-indigo-300 transition-all">
+                                <div className="flex items-center gap-4">
+                                   <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl text-indigo-600 shadow-sm"><Download size={20}/></div>
+                                   <div><p className="font-black text-sm dark:text-white uppercase tracking-tight">Generate Archive</p><p className="text-[9px] font-bold text-slate-400 uppercase">Export proprietary .SA vault</p></div>
+                                </div>
+                                <button onClick={handleExportData} className="w-full py-4 bg-white dark:bg-slate-900 border-2 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
+                                   Package Node Data
                                 </button>
                              </div>
-                             <h5 className="font-black text-lg dark:text-white uppercase leading-none">Google Drive Vault</h5>
-                             <p className="text-[10px] font-bold text-slate-400 uppercase mt-2">Remote secondary storage node</p>
-                             {formData.cloudBackup.provider === 'google-drive' && (
-                                <div className="mt-8 space-y-4 animate-in slide-in-from-bottom-2">
-                                   <div className="flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                      <span>Status: Verified Active</span>
-                                      <span className="text-emerald-500">Node Sync: {formData.cloudBackup.lastSync ? new Date(formData.cloudBackup.lastSync).toLocaleDateString() : 'Pending'}</span>
-                                   </div>
-                                   <button 
-                                     onClick={handleCloudSync}
-                                     disabled={isCloudSyncing}
-                                     className="w-full py-4 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-indigo-600 hover:text-white transition-all disabled:opacity-50"
-                                   >
-                                      {isCloudSyncing ? <RefreshCw size={14} className="animate-spin" /> : <CloudUpload size={14}/>} Force Cloud Upload
-                                   </button>
+
+                             <div className="bg-emerald-50/30 dark:bg-emerald-950/10 p-8 rounded-[40px] border border-emerald-100 dark:border-emerald-900/40 space-y-6 group hover:border-emerald-400 transition-all">
+                                <div className="flex items-center gap-4">
+                                   <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl text-emerald-600 shadow-sm"><Upload size={20}/></div>
+                                   <div><p className="font-black text-sm dark:text-white uppercase tracking-tight">Load Archive</p><p className="text-[9px] font-bold text-slate-400 uppercase">Restore from physical file</p></div>
                                 </div>
-                             )}
-                          </div>
-
-                          <div className="p-8 rounded-[48px] bg-slate-50 dark:bg-slate-950 border-4 border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-center group">
-                             <div className="w-16 h-16 bg-white dark:bg-slate-900 rounded-[32px] flex items-center justify-center text-slate-200 mb-4 group-hover:scale-110 transition-transform">
-                                <CloudLightning size={32} />
+                                <input ref={importInputRef} type="file" accept=".sa,application/json" onChange={handleImportData} className="hidden" />
+                                <button onClick={() => importInputRef.current?.click()} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg active:scale-95">
+                                   Import Vault Node
+                                </button>
                              </div>
-                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">More Cloud Nodes coming soon</p>
-                             <p className="text-[8px] font-bold text-slate-300 uppercase mt-1">Dropbox & AWS S3 Integration Protocol</p>
                           </div>
                        </div>
-                    </section>
 
-                    {/* Physical Archive Controls */}
-                    <section className="space-y-6">
-                       <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.2em] flex items-center gap-3"><FolderOpen size={18}/> Archive Restoration Engine</h4>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="bg-slate-50 dark:bg-slate-950 p-8 rounded-[48px] border border-slate-100 dark:border-slate-800">
-                             <div className="flex items-center gap-4 mb-6">
-                                <div className="p-3 bg-white dark:bg-slate-900 rounded-2xl text-indigo-600 shadow-sm"><FileCode size={20}/></div>
-                                <div><h5 className="font-black text-sm dark:text-white uppercase tracking-tight">Generate Archive</h5><p className="text-[9px] font-bold text-slate-400 uppercase">Proprietary .SA Encrypted File</p></div>
+                       {/* Recovery Point History */}
+                       <div className="space-y-6">
+                          <h5 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-3 px-2"><History size={16}/> Snapshot Rollbacks</h5>
+                          <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm flex flex-col max-h-[400px]">
+                             <div className="flex-1 overflow-y-auto custom-scrollbar divide-y dark:divide-slate-800">
+                                {snapshots.length > 0 ? snapshots.map(sn => (
+                                  <div key={sn.id} className="p-6 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors flex items-center justify-between group">
+                                     <div className="min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                           <p className="text-xs font-black dark:text-white uppercase truncate">{sn.label}</p>
+                                           <span className="text-[8px] font-black px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-slate-400 uppercase">ID: {sn.id}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3 text-[9px] font-bold text-slate-400 uppercase">
+                                           <span>{new Date(sn.timestamp).toLocaleString()}</span>
+                                           {sn.stats && (
+                                              <div className="flex items-center gap-2 text-indigo-500">
+                                                 <span className="w-1 h-1 rounded-full bg-slate-200" />
+                                                 <span>{sn.stats.products}P • {sn.stats.invoices}I</span>
+                                              </div>
+                                           )}
+                                        </div>
+                                     </div>
+                                     <button 
+                                       onClick={() => setRestoreConfirm(sn)}
+                                       className="p-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:bg-indigo-600 hover:text-white rounded-2xl transition-all opacity-0 group-hover:opacity-100"
+                                     >
+                                        <RotateCcw size={18}/>
+                                     </button>
+                                  </div>
+                                )) : (
+                                  <div className="py-20 text-center space-y-4 opacity-30">
+                                     <FileSearch size={48} className="mx-auto" />
+                                     <p className="text-[10px] font-black uppercase">No recovery points found</p>
+                                  </div>
+                                )}
                              </div>
-                             <button onClick={handleExportData} className="w-full py-5 bg-white dark:bg-slate-900 border-2 rounded-[28px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:border-indigo-500 transition-all active:scale-95">
-                                <Download size={16}/> Package & Export
-                             </button>
-                          </div>
-
-                          <div className="bg-emerald-50/30 dark:bg-emerald-950/10 p-8 rounded-[48px] border border-emerald-100 dark:border-emerald-900/50">
-                             <div className="flex items-center gap-4 mb-6">
-                                <div className="p-3 bg-white dark:bg-slate-900 rounded-2xl text-emerald-600 shadow-sm"><Upload size={20}/></div>
-                                <div><h5 className="font-black text-sm dark:text-white uppercase tracking-tight">Restore Archive</h5><p className="text-[9px] font-bold text-slate-400 uppercase">System Re-initialization</p></div>
-                             </div>
-                             <input ref={importInputRef} type="file" accept=".sa,application/json" onChange={handleImportData} className="hidden" />
-                             <button onClick={() => importInputRef.current?.click()} disabled={isImporting} className="w-full py-5 bg-emerald-600 text-white rounded-[28px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl hover:bg-emerald-700 transition-all active:scale-95 disabled:opacity-50">
-                                {isImporting ? <RefreshCw size={16} className="animate-spin" /> : <HardDrive size={16}/>} Load Archive Node
-                             </button>
                           </div>
                        </div>
-                    </section>
+                    </div>
 
-                    {/* Local Snapshots Gallery */}
-                    <section className="space-y-6">
-                       <div className="flex items-center justify-between px-2">
-                          <h5 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2"><History size={14}/> IndexedDB Snapshots</h5>
-                          <button onClick={() => { createSnapshot(state, 'Manual User Snapshot').then(() => getSnapshots().then(setSnapshots)); }} className="text-[9px] font-black text-emerald-600 uppercase hover:underline">Force Checkpoint</button>
+                    <div className="p-8 bg-rose-50 dark:bg-rose-900/10 rounded-[40px] border border-rose-100 dark:border-rose-900/30 flex items-center gap-8">
+                       <AlertTriangle size={32} className="text-rose-600 shrink-0 animate-pulse" />
+                       <div>
+                          <p className="text-[11px] font-black text-rose-700 dark:text-rose-400 uppercase tracking-widest mb-1">Critical Security Note</p>
+                          <p className="text-[10px] font-bold text-rose-600/80 uppercase leading-relaxed">Rollbacks and Archive Imports are destructive operations. They permanently replace your current local database nodes. Always generate a fresh export before performing a system re-initialization.</p>
                        </div>
-                       <div className="bg-slate-50 dark:bg-slate-950/50 rounded-[40px] border border-slate-100 dark:border-slate-800 overflow-hidden">
-                          {snapshots.length > 0 ? (
-                            <table className="w-full text-left">
-                               <thead className="bg-white/50 dark:bg-slate-900/50 border-b">
-                                  <tr>
-                                     <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase">Temporal Node</th>
-                                     <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase text-right">Recovery Protocol</th>
-                                  </tr>
-                               </thead>
-                               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                  {snapshots.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map(sn => (
-                                    <tr key={sn.id} className="hover:bg-indigo-50/50 dark:hover:bg-indigo-900/10 transition-colors">
-                                       <td className="px-8 py-5">
-                                          <p className="text-xs font-black dark:text-white">{new Date(sn.timestamp).toLocaleString()}</p>
-                                          <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">Snapshot UID: {sn.id} | {sn.label}</p>
-                                       </td>
-                                       <td className="px-8 py-5 text-right">
-                                          <button onClick={() => handleRestoreSnapshot(sn)} className="px-6 py-2.5 bg-white dark:bg-slate-800 border-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:border-indigo-500 hover:text-indigo-600 transition-all flex items-center gap-2 ml-auto shadow-sm">
-                                             <RotateCcw size={12}/> ROLLBACK
-                                          </button>
-                                       </td>
-                                    </tr>
-                                  ))}
-                               </tbody>
-                            </table>
-                          ) : (
-                            <div className="py-20 text-center opacity-30"><Database size={48} className="mx-auto mb-4"/><p className="text-[10px] font-black uppercase tracking-[0.3em]">Temporal Vault is empty</p></div>
-                          )}
-                       </div>
-                    </section>
+                    </div>
                  </div>
                )}
 
-               {/* Remaining sections remain the same ... */}
                {activeTab === 'templates' && (
                  <div className="space-y-12 animate-in slide-in-from-bottom-4">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
@@ -530,8 +552,8 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
                        <div className="w-20 h-20 bg-amber-400 text-white rounded-[32px] flex items-center justify-center mx-auto shadow-2xl animate-bounce">
                           <Gift size={36}/>
                        </div>
-                       <h4 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Reward Algorithms</h4>
-                       <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Automated Customer Loyalty Engine</p>
+                       <h4 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Reward Algorithm</h4>
+                       <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Automated Customer Engagement Engine</p>
                     </div>
 
                     <div className="bg-slate-50 dark:bg-slate-950 rounded-[48px] border border-slate-100 dark:border-slate-800 p-10 space-y-10">
@@ -559,7 +581,7 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
 
                        <div className="p-8 bg-amber-50 dark:bg-amber-900/10 rounded-[32px] border border-amber-200 dark:border-amber-900/30 flex items-center gap-6">
                           <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center text-amber-500 shadow-sm"><BadgePercent size={24}/></div>
-                          <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase leading-relaxed">System computes points automatically at settlement. Redemptions require authorized client identity.</p>
+                          <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase leading-relaxed">Loyalty credits are synchronized across all terminal nodes and compute at settlement.</p>
                        </div>
                     </div>
                  </div>
@@ -589,7 +611,7 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
                              <div className="p-3 bg-emerald-500 text-white rounded-xl shadow-lg"><ShieldCheck size={20}/></div>
                              <div>
                                 <p className="font-black text-xs uppercase tracking-widest dark:text-white">High Security Mode</p>
-                                <p className="text-[8px] text-slate-400 font-black uppercase mt-0.5">Biometric/Question Verification</p>
+                                <p className="text-[8px] text-slate-400 font-black uppercase mt-0.5">Dual-Factor Verification</p>
                              </div>
                           </div>
                           <button onClick={() => setFormData({...formData, security: {...formData.security, highSecurityMode: !formData.security.highSecurityMode}})} className={`w-14 h-8 rounded-full relative transition-all ${formData.security.highSecurityMode ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'}`}>
@@ -599,7 +621,7 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
 
                        <div className="p-8 bg-rose-50 dark:bg-rose-900/10 rounded-[32px] border border-rose-200 dark:border-rose-900/30 flex items-center gap-6">
                           <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center text-rose-600 shadow-sm"><ShieldAlert size={24}/></div>
-                          <p className="text-[10px] font-bold text-rose-700 dark:text-rose-300 uppercase leading-relaxed">Emergency System Reset PIN: 660167. Memorize this key; it bypasses all local encryption nodes.</p>
+                          <p className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase leading-relaxed">Emergency System Reset PIN: 660167. Memorize this key; it bypasses all local encryption nodes.</p>
                        </div>
                     </div>
                  </div>
@@ -611,20 +633,20 @@ const Settings: React.FC<Props> = ({ state, updateState, initialTab = 'profile' 
                        <div className="w-24 h-24 bg-indigo-600 rounded-[40px] mx-auto flex items-center justify-center text-white text-4xl font-black shadow-2xl shadow-indigo-500/20">S</div>
                        <div>
                           <h3 className="text-4xl font-black dark:text-white uppercase tracking-tighter">Sarvari Seller Pro</h3>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] mt-2">Enterprise Edition v1.3.2</p>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] mt-2">Enterprise Edition v1.3.3</p>
                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                        <div className="p-8 bg-slate-50 dark:bg-slate-950 rounded-[40px] border border-slate-100 dark:border-slate-800 text-center">
                           <Terminal size={32} className="mx-auto text-indigo-600 mb-4" />
-                          <p className="font-black text-sm dark:text-white uppercase">Offline Engine</p>
+                          <p className="font-black text-sm dark:text-white uppercase">Offline Node</p>
                           <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Local Identity Vault</p>
                        </div>
                        <div className="p-8 bg-slate-50 dark:bg-slate-950 rounded-[40px] border border-slate-100 dark:border-slate-800 text-center">
                           <RefreshCw size={32} className="mx-auto text-emerald-500 mb-4" />
-                          <p className="font-black text-sm dark:text-white uppercase">Real-time Sync</p>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Cross-Terminal State</p>
+                          <p className="font-black text-sm dark:text-white uppercase">Cross-Platform</p>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Real-time Pulse</p>
                        </div>
                     </div>
 
