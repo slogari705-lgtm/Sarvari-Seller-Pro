@@ -23,7 +23,11 @@ import {
   User as UserIcon,
   CloudUpload,
   CloudOff,
-  RefreshCw
+  RefreshCw,
+  Cpu,
+  ChevronDown,
+  ChevronUp,
+  Circle
 } from 'lucide-react';
 import { AppState, View } from './types';
 import { translations } from './translations';
@@ -119,6 +123,7 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   
   const [isAppLocked, setIsAppLocked] = useState(false);
+  const [isDashboardSubOpen, setIsDashboardSubOpen] = useState(true);
 
   // Load from IndexedDB on start
   useEffect(() => {
@@ -137,13 +142,11 @@ export default function App() {
     };
     init();
 
-    // Capture PWA Install Prompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
@@ -151,9 +154,7 @@ export default function App() {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-    }
+    if (outcome === 'accepted') setDeferredPrompt(null);
   };
 
   useEffect(() => {
@@ -161,23 +162,16 @@ export default function App() {
       const queue = await getSyncQueue();
       setPendingSyncCount(queue.length);
     };
-
     window.addEventListener('sarvari-sync-complete', refreshSyncCount);
     
     const handleMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'TRIGGER_SYNC') {
-        handleSync();
-      }
+      if (event.data && event.data.type === 'TRIGGER_SYNC') handleSync();
     };
-    if (navigator.serviceWorker) {
-      navigator.serviceWorker.addEventListener('message', handleMessage);
-    }
+    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', handleMessage);
 
     return () => {
       window.removeEventListener('sarvari-sync-complete', refreshSyncCount);
-      if (navigator.serviceWorker) {
-        navigator.serviceWorker.removeEventListener('message', handleMessage);
-      }
+      if (navigator.serviceWorker) navigator.serviceWorker.removeEventListener('message', handleMessage);
     };
   }, []);
 
@@ -189,21 +183,16 @@ export default function App() {
   };
 
   const stateRef = useRef(state);
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  useEffect(() => { stateRef.current = state; }, [state]);
 
   useEffect(() => {
     if (isLoading) return;
-    const saveToDb = async () => {
-      await saveState(stateRef.current);
-    };
+    const saveToDb = async () => { await saveState(stateRef.current); };
     saveToDb();
   }, [state, isLoading]);
 
   useEffect(() => {
     if (isLoading) return;
-    // Enhanced Snapshot Logic: Every 15 mins for Local Reliability
     const backupInterval = setInterval(() => {
       createSnapshot(stateRef.current, 'Automated Vault Pulse');
     }, 15 * 60 * 1000); 
@@ -219,10 +208,7 @@ export default function App() {
   }, [state.settings.theme, isRTL]);
 
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      handleSync();
-    };
+    const handleOnline = () => { setIsOnline(true); handleSync(); };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -250,21 +236,18 @@ export default function App() {
   }
 
   const coreNav = [
-    { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
-    { id: 'dashboard-costume', label: t.dashboardCostume, icon: Wand2 },
     { id: 'terminal', label: t.terminal, icon: ShoppingCart },
+  ];
+
+  const inventoryNav = [
     { id: 'products', label: t.products, icon: Boxes },
     { id: 'customers', label: t.customers, icon: Users },
   ];
 
-  const secondaryNav = [
+  const auditingNav = [
     { id: 'invoices', label: t.invoices, icon: FileText },
     { id: 'expenses', label: t.expenses, icon: Receipt },
     { id: 'reports', label: t.reports, icon: BarChart3 },
-  ];
-
-  const workspaceNav = [
-    { id: 'settings', label: t.settings, icon: SettingsIcon },
   ];
 
   return (
@@ -287,14 +270,40 @@ export default function App() {
           <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden p-2 text-slate-400 hover:bg-slate-100 rounded-lg"><X size={20}/></button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-6 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 px-3 py-6 space-y-4 overflow-y-auto custom-scrollbar">
+          {/* Dashboard Contextual Sidebar Section */}
+          <div className="space-y-1">
+            <button 
+              onClick={() => { setCurrentView('dashboard'); if(sidebarOpen) setIsDashboardSubOpen(!isDashboardSubOpen); }}
+              className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-all group ${currentView === 'dashboard' || currentView === 'dashboard-costume' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+            >
+              <div className="flex items-center gap-4">
+                <LayoutDashboard size={20} />
+                {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{t.dashboard}</span>}
+              </div>
+              {(sidebarOpen || mobileMenuOpen) && (isDashboardSubOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
+            </button>
+            
+            {isDashboardSubOpen && (sidebarOpen || mobileMenuOpen) && (
+              <div className="ml-9 space-y-1 mt-1 animate-in slide-in-from-top-2 duration-200">
+                <button 
+                  onClick={() => setCurrentView('dashboard-costume')}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all ${currentView === 'dashboard-costume' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 font-black' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                >
+                  <Wand2 size={16} />
+                  <span className="text-[11px] uppercase tracking-widest">{t.dashboardCostume}</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <div>
-            <p className={`px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-3 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Core Systems</p>
+            <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Terminal</p>
             {coreNav.map((item) => (
               <button 
                 key={item.id} 
                 onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
-                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
                 <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
                 {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
@@ -303,12 +312,12 @@ export default function App() {
           </div>
 
           <div>
-            <p className={`px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-3 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Auditing</p>
-            {secondaryNav.map((item) => (
+            <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Inventory</p>
+            {inventoryNav.map((item) => (
               <button 
                 key={item.id} 
                 onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
-                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
                 <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
                 {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
@@ -317,12 +326,12 @@ export default function App() {
           </div>
 
           <div>
-            <p className={`px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-3 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Workspace</p>
-            {workspaceNav.map((item) => (
+            <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Auditing</p>
+            {auditingNav.map((item) => (
               <button 
                 key={item.id} 
                 onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
-                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
               >
                 <item.icon size={20} className={currentView === item.id ? 'text-white' : 'group-hover:scale-110 transition-transform'} /> 
                 {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
@@ -331,25 +340,25 @@ export default function App() {
           </div>
           
           <div className="pt-4 border-t border-slate-50 dark:border-slate-800">
-             <p className={`px-4 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-4 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Advanced</p>
+             <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>System</p>
              {[
+               { id: 'settings', label: t.settings, icon: SettingsIcon },
                { id: 'loans', label: t.loan, icon: History },
-               { id: 'returns', label: t.returns, icon: RotateCcw },
-               { id: 'trash', label: 'Trash Bin', icon: Trash2 }
+               { id: 'trash', label: 'Trash', icon: Trash2 }
              ].map((item) => (
                <button 
                  key={item.id} 
                  onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
-                 className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${currentView === item.id ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-slate-400 hover:text-indigo-500'}`}
+                 className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl transition-all ${currentView === item.id ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 font-black' : 'text-slate-400 hover:text-indigo-500'}`}
                >
                  <item.icon size={18} />
-                 {(sidebarOpen || mobileMenuOpen) && <span className="font-bold text-[12px] uppercase">{item.label}</span>}
+                 {(sidebarOpen || mobileMenuOpen) && <span className="font-bold text-[11px] uppercase tracking-widest">{item.label}</span>}
                </button>
              ))}
           </div>
         </nav>
 
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2 bg-slate-50/50 dark:bg-slate-900/50 backdrop-blur-md">
           {pendingSyncCount > 0 && (
              <button 
                onClick={handleSync}
@@ -359,21 +368,30 @@ export default function App() {
                 {isSyncing ? <RefreshCw className="animate-spin" size={20}/> : (isOnline ? <CloudUpload size={20}/> : <CloudOff size={20}/>)}
                 {(sidebarOpen || mobileMenuOpen) && (
                    <div className="flex flex-col items-start leading-none">
-                      <span className="font-black text-[9px] uppercase tracking-widest">{isSyncing ? 'Syncing...' : (isOnline ? 'Cloud Sync' : 'Offline')}</span>
-                      <span className="text-[8px] font-bold opacity-70">{pendingSyncCount} Pending Items</span>
+                      <span className="font-black text-[9px] uppercase tracking-widest">{isSyncing ? 'Syncing...' : (isOnline ? 'Sync Vault' : 'Offline')}</span>
+                      <span className="text-[8px] font-bold opacity-70">{pendingSyncCount} Items</span>
                    </div>
                 )}
              </button>
           )}
-          <button onClick={() => updateState('settings', { ...state.settings, theme: state.settings.theme === 'dark' ? 'light' : 'dark' })} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+
+          {/* System Health Status */}
+          {(sidebarOpen || mobileMenuOpen) && (
+            <div className="px-4 py-2 flex items-center gap-3">
+              <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{isOnline ? 'Connected' : 'Offline Node'}</span>
+            </div>
+          )}
+
+          <button onClick={() => updateState('settings', { ...state.settings, theme: state.settings.theme === 'dark' ? 'light' : 'dark' })} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-700 shadow-sm">
             {state.settings.theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-            {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">{state.settings.theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
+            {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">{state.settings.theme === 'dark' ? 'Light' : 'Dark'}</span>}
           </button>
         </div>
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        <header className="h-20 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0 z-40">
+        <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0 z-40">
           <div className="flex items-center gap-4">
             <button onClick={() => setMobileMenuOpen(true)} className="lg:hidden p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-200 rounded-2xl">
               <Menu size={24}/>
@@ -385,16 +403,12 @@ export default function App() {
                    {currentView.replace('-', ' ')}
                  </h3>
                  <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border">SHOP OWNER</span>
+                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border">V1.3.2</span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-2xl border ${isOnline ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
-              <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></div>
-              <span className="text-[10px] font-black uppercase tracking-widest">{isOnline ? 'Vault Synced' : 'Offline Engine'}</span>
-            </div>
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:flex w-11 h-11 bg-slate-50 dark:bg-slate-800 rounded-2xl items-center justify-center text-slate-400 hover:text-indigo-600 transition-all">
               <Layout size={20} />
             </button>
