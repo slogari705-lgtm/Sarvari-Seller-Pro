@@ -41,7 +41,12 @@ import {
   Clock,
   Filter,
   RotateCcw,
-  Zap
+  Zap,
+  CreditCard,
+  UserCheck,
+  CheckCircle2,
+  // Fix: Added missing RefreshCw icon import
+  RefreshCw
 } from 'lucide-react';
 import { AppState } from '../types';
 import { translations } from '../translations';
@@ -61,36 +66,35 @@ const Reports: React.FC<Props> = ({ state }) => {
   
   const t = translations[state.settings.language || 'en'];
 
-  const getFilterTimestamps = () => {
-    const start = reportStartDate ? new Date(`${reportStartDate}T${reportStartTime}`).getTime() : 0;
-    const end = reportEndDate ? new Date(`${reportEndDate}T${reportEndTime}`).getTime() : Infinity;
-    return { start, end };
-  };
+  const { start, end } = useMemo(() => {
+    const s = reportStartDate ? new Date(`${reportStartDate}T${reportStartTime}`).getTime() : 0;
+    const e = reportEndDate ? new Date(`${reportEndDate}T${reportEndTime}`).getTime() : Infinity;
+    return { start: s, end: e };
+  }, [reportStartDate, reportStartTime, reportEndDate, reportEndTime]);
 
-  const { start, end } = getFilterTimestamps();
   const isLifetime = !reportStartDate && !reportEndDate;
 
   const activeInvoices = useMemo(() => {
     return state.invoices.filter(i => {
       const time = new Date(i.date).getTime();
-      return !i.isVoided && time >= start && time <= end;
+      return !i.isVoided && !i.isDeleted && time >= start && time <= end;
     });
   }, [state.invoices, start, end]);
 
   const filteredExpenses = useMemo(() => {
     return state.expenses.filter(e => {
       const time = new Date(e.date).getTime();
-      return time >= start && time <= end;
+      return !e.isDeleted && time >= start && time <= end;
     });
   }, [state.expenses, start, end]);
 
+  // Financial Computations
   const totalSales = activeInvoices.reduce((acc, inv) => acc + inv.total, 0);
   const totalInvoiceProfit = activeInvoices.reduce((acc, inv) => acc + (inv.profit || 0), 0);
   const totalExpenses = filteredExpenses.reduce((acc, exp) => acc + exp.amount, 0);
   const netProfit = totalInvoiceProfit - totalExpenses;
-  
-  const totalInventoryValue = state.products.reduce((acc, p) => acc + ((p.costPrice || 0) * p.stock), 0);
-  const totalReceivables = state.customers.reduce((acc, c) => acc + (c.totalDebt || 0), 0);
+  const totalInventoryValue = state.products.filter(p => !p.isDeleted).reduce((acc, p) => acc + ((p.costPrice || 0) * p.stock), 0);
+  const totalReceivables = state.customers.filter(c => !c.isDeleted).reduce((acc, c) => acc + (c.totalDebt || 0), 0);
 
   const healthScore = useMemo(() => {
     if (totalSales === 0) return 0;
@@ -103,51 +107,52 @@ const Reports: React.FC<Props> = ({ state }) => {
   const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#475569'];
 
   const chartData = useMemo(() => {
-    if (isLifetime) {
-      const today = new Date();
-      const data = [];
-      for (let i = 11; i >= 0; i--) {
-        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        const monthName = d.toLocaleString('default', { month: 'short' });
-        const invoicesInMonth = state.invoices.filter(inv => {
-          const invDate = new Date(inv.date);
-          return !inv.isVoided && invDate.getMonth() === d.getMonth() && invDate.getFullYear() === d.getFullYear();
-        });
-        const sales = invoicesInMonth.reduce((sum, inv) => sum + inv.total, 0);
-        const expenses = state.expenses.filter(exp => {
-          const expDate = new Date(exp.date);
-          return expDate.getMonth() === d.getMonth() && expDate.getFullYear() === d.getFullYear();
-        }).reduce((sum, exp) => sum + exp.amount, 0);
-        data.push({ name: monthName, sales, expenses });
-      }
-      return data;
-    } else {
-      const dayMap: Record<string, {name: string, sales: number, expenses: number}> = {};
-      activeInvoices.forEach(inv => {
-        const d = new Date(inv.date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
-        if (!dayMap[d]) dayMap[d] = { name: d, sales: 0, expenses: 0 };
-        dayMap[d].sales += inv.total;
-      });
-      filteredExpenses.forEach(exp => {
-        const d = new Date(exp.date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
-        if (!dayMap[d]) dayMap[d] = { name: d, sales: 0, expenses: 0 };
-        dayMap[d].expenses += exp.amount;
-      });
-      return Object.values(dayMap).sort((a,b) => new Date(a.name).getTime() - new Date(b.name).getTime()).slice(-15);
-    }
-  }, [activeInvoices, filteredExpenses, isLifetime, state.invoices, state.expenses]);
+    const dayMap: Record<string, {name: string, sales: number, expenses: number}> = {};
+    activeInvoices.forEach(inv => {
+      const d = new Date(inv.date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+      if (!dayMap[d]) dayMap[d] = { name: d, sales: 0, expenses: 0 };
+      dayMap[d].sales += inv.total;
+    });
+    filteredExpenses.forEach(exp => {
+      const d = new Date(exp.date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+      if (!dayMap[d]) dayMap[d] = { name: d, sales: 0, expenses: 0 };
+      dayMap[d].expenses += exp.amount;
+    });
+    return Object.values(dayMap).sort((a,b) => new Date(a.name).getTime() - new Date(b.name).getTime()).slice(-15);
+  }, [activeInvoices, filteredExpenses]);
 
-  const topCategories = useMemo(() => {
-    const cats: Record<string, { revenue: number, volume: number }> = {};
+  const paymentData = useMemo(() => {
+    const methods: Record<string, number> = { cash: 0, card: 0, transfer: 0 };
+    activeInvoices.forEach(inv => {
+      methods[inv.paymentMethod] = (methods[inv.paymentMethod] || 0) + inv.total;
+    });
+    return Object.entries(methods).map(([name, value]) => ({ name: name.toUpperCase(), value }));
+  }, [activeInvoices]);
+
+  const topProducts = useMemo(() => {
+    const prods: Record<string, { name: string, revenue: number, qty: number }> = {};
     activeInvoices.forEach(inv => {
       inv.items.forEach(it => {
-        if (!cats[it.category]) cats[it.category] = { revenue: 0, volume: 0 };
-        cats[it.category].revenue += it.price * it.quantity;
-        cats[it.category].volume += it.quantity;
+        if (!prods[it.id]) prods[it.id] = { name: it.name, revenue: 0, qty: 0 };
+        prods[it.id].revenue += it.buyPrice * it.quantity;
+        prods[it.id].qty += it.quantity;
       });
     });
-    return Object.entries(cats).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    return Object.values(prods).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
   }, [activeInvoices]);
+
+  const topCustomers = useMemo(() => {
+    const custs: Record<string, { name: string, total: number, visits: number }> = {};
+    activeInvoices.forEach(inv => {
+      if (!inv.customerId) return;
+      const c = state.customers.find(customer => customer.id === inv.customerId);
+      if (!c) return;
+      if (!custs[c.id]) custs[c.id] = { name: c.name, total: 0, visits: 0 };
+      custs[c.id].total += inv.total;
+      custs[c.id].visits += 1;
+    });
+    return Object.values(custs).sort((a, b) => b.total - a.total).slice(0, 5);
+  }, [activeInvoices, state.customers]);
 
   const handleDownloadReportPDF = async () => {
     if (isDownloading) return;
@@ -155,7 +160,6 @@ const Reports: React.FC<Props> = ({ state }) => {
     const element = document.getElementById('report-container');
     if (!element) return setIsDownloading(false);
     
-    // Hide filter header for clean PDF
     const filters = document.getElementById('report-filters-header');
     if (filters) filters.style.display = 'none';
 
@@ -163,35 +167,16 @@ const Reports: React.FC<Props> = ({ state }) => {
       const canvas = await html2canvas(element, { 
         scale: 2, 
         useCORS: true, 
-        logging: false, 
-        backgroundColor: state.settings.theme === 'dark' ? '#020617' : '#ffffff' 
+        backgroundColor: '#ffffff'
       });
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
-      const imgWidth = pdfWidth;
       const imgHeight = (canvas.height * pdfWidth) / canvas.width;
       
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      // First Page
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
-
-      // Subsequent Pages
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pdfHeight;
-      }
-
-      pdf.save(`Sarvari_POS_Report_${isLifetime ? 'Lifetime' : 'Filtered'}_${Date.now()}.pdf`);
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
+      pdf.save(`SARVARI_AUDIT_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) { 
       console.error("PDF Generation Failed:", error); 
     } finally { 
@@ -200,120 +185,200 @@ const Reports: React.FC<Props> = ({ state }) => {
     }
   };
 
-  const clearFilters = () => {
-    setReportStartDate(''); setReportEndDate('');
-    setReportStartTime('00:00'); setReportEndTime('23:59');
-  };
-
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-500 max-w-full p-1 no-scrollbar">
-      <div id="report-filters-header" className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col xl:flex-row items-center gap-6">
-        <div className="flex-1 w-full space-y-4">
+      {/* Dynamic Filter Header */}
+      <div id="report-filters-header" className="bg-white dark:bg-slate-900 p-8 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col xl:flex-row items-center gap-8">
+        <div className="flex-1 w-full space-y-6">
           <div className="flex items-center justify-between">
-             <h4 className="font-black text-[11px] uppercase tracking-[0.2em] text-indigo-600 flex items-center gap-2"><Filter size={14}/> Query Parameters</h4>
+             <h4 className="font-black text-[11px] uppercase tracking-[0.3em] text-indigo-600 flex items-center gap-3"><Filter size={16}/> Temporal Audit Controls</h4>
              {!isLifetime && (
-               <button onClick={clearFilters} className="flex items-center gap-1 text-[10px] font-black text-rose-500 uppercase hover:underline"><RotateCcw size={12}/> Reset to Lifetime</button>
+               <button onClick={() => { setReportStartDate(''); setReportEndDate(''); }} className="flex items-center gap-2 text-[10px] font-black text-rose-500 uppercase hover:underline"><RotateCcw size={14}/> Clear Range</button>
              )}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Start Date</label>
-                <div className="relative"><Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 rounded-2xl py-3 pl-10 pr-4 font-bold text-xs outline-none focus:ring-2 ring-indigo-500/20 dark:text-white" /></div>
+                <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Start Cycle</label>
+                <div className="relative"><Calendar className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-3.5 pl-14 pr-6 font-bold text-xs dark:text-white outline-none" /></div>
              </div>
              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase ml-1">Start Time</label>
-                <div className="relative"><Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="time" value={reportStartTime} onChange={e => setReportStartTime(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 rounded-2xl py-3 pl-10 pr-4 font-bold text-xs outline-none focus:ring-2 ring-indigo-500/20 dark:text-white" /></div>
+                <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Pulse Time</label>
+                <div className="relative"><Clock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input type="time" value={reportStartTime} onChange={e => setReportStartTime(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-3.5 pl-14 pr-6 font-bold text-xs dark:text-white outline-none" /></div>
              </div>
              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase ml-1">End Date</label>
-                <div className="relative"><Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 rounded-2xl py-3 pl-10 pr-4 font-bold text-xs outline-none focus:ring-2 ring-indigo-500/20 dark:text-white" /></div>
+                <label className="text-[9px] font-black text-slate-400 uppercase ml-2">End Cycle</label>
+                <div className="relative"><Calendar className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-3.5 pl-14 pr-6 font-bold text-xs dark:text-white outline-none" /></div>
              </div>
              <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-400 uppercase ml-1">End Time</label>
-                <div className="relative"><Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={14}/><input type="time" value={reportEndTime} onChange={e => setReportEndTime(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 rounded-2xl py-3 pl-10 pr-4 font-bold text-xs outline-none focus:ring-2 ring-indigo-500/20 dark:text-white" /></div>
+                <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Termination</label>
+                <div className="relative"><Clock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input type="time" value={reportEndTime} onChange={e => setReportEndTime(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-2xl py-3.5 pl-14 pr-6 font-bold text-xs dark:text-white outline-none" /></div>
              </div>
           </div>
         </div>
-        <div className="w-full xl:w-auto flex flex-col items-center justify-center p-6 bg-indigo-50 dark:bg-indigo-900/10 rounded-[32px] border border-indigo-100 dark:border-indigo-900/30">
-           <p className="text-[9px] font-black text-indigo-600 uppercase mb-2 tracking-widest">Active Scope</p>
-           <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter text-center">{isLifetime ? <div className="flex items-center gap-2"><Zap size={18} className="text-amber-500 fill-amber-500"/> Lifetime Data</div> : <span className="text-slate-700 dark:text-slate-200">Custom Pulse</span>}</h3>
+        <div className="w-full xl:w-72 flex flex-col items-center justify-center p-8 bg-indigo-600 rounded-[40px] text-white shadow-2xl relative overflow-hidden group">
+           <Zap className="absolute -top-4 -right-4 text-white/10" size={120} />
+           <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-3 relative z-10 opacity-80 text-indigo-100">Live Context</p>
+           <h3 className="text-2xl font-black uppercase tracking-tighter text-center relative z-10">{isLifetime ? 'Lifetime Audit' : 'Custom Pulse'}</h3>
         </div>
       </div>
 
-      <div id="report-container" className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center gap-6">
-             <div className="w-16 h-16 bg-indigo-600 rounded-[24px] flex items-center justify-center text-white shadow-xl shrink-0"><Activity size={32} strokeWidth={2.5} /></div>
+      <div id="report-container" className="space-y-8 p-1">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-10 rounded-[56px] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+          <div className="flex items-center gap-8 relative z-10">
+             <div className="w-20 h-20 bg-indigo-600 rounded-[32px] flex items-center justify-center text-white shadow-2xl shadow-indigo-200 dark:shadow-none shrink-0"><Activity size={40} strokeWidth={3} /></div>
              <div>
-               <h3 className="text-3xl font-black uppercase tracking-tighter dark:text-white">Business Intelligence</h3>
-               <div className="flex items-center gap-2 mt-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isLifetime ? 'Full History Cumulative Audit' : `Audit From ${reportStartDate} to ${reportEndDate || 'Present'}`}</span><div className="h-2 w-2 bg-emerald-500 rounded-full animate-pulse"></div></div>
+               <h3 className="text-4xl font-black uppercase tracking-tighter dark:text-white">Audit Hub</h3>
+               <div className="flex items-center gap-3 mt-2">
+                 <div className="px-4 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-full border border-emerald-100 dark:border-emerald-800 text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div> Local Node Verified</div>
+                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{isLifetime ? 'Global Cumulative Data' : `Window: ${reportStartDate} → ${reportEndDate || 'Now'}`}</span>
+               </div>
              </div>
           </div>
-          <div className="flex items-center gap-4">
-             <div className="text-right hidden xl:block">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Fiscal Integrity Score</p>
-                <div className="flex items-center gap-3 justify-end"><span className={`text-2xl font-black ${healthScore > 70 ? 'text-emerald-500' : healthScore > 40 ? 'text-amber-500' : 'text-rose-500'}`}>{healthScore}%</span><ShieldCheck size={24} className={healthScore > 70 ? 'text-emerald-500' : healthScore > 40 ? 'text-amber-500' : 'text-rose-500'} /></div>
+          <div className="flex items-center gap-4 relative z-10">
+             <div className="text-right hidden xl:block mr-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Health Matrix</p>
+                <div className="flex items-center gap-3 justify-end"><span className={`text-3xl font-black ${healthScore > 70 ? 'text-emerald-500' : healthScore > 40 ? 'text-amber-500' : 'text-rose-500'}`}>{healthScore}%</span><ShieldCheck size={28} className={healthScore > 70 ? 'text-emerald-500' : healthScore > 40 ? 'text-amber-500' : 'text-rose-500'} /></div>
              </div>
-             <button onClick={handleDownloadReportPDF} disabled={isDownloading} className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all flex items-center gap-3 active:scale-95 disabled:opacity-50">{isDownloading ? <Clock size={16} className="animate-spin" /> : <FileDown size={18} />} Export Summary</button>
+             <button onClick={handleDownloadReportPDF} disabled={isDownloading} className="px-10 py-5 bg-slate-950 dark:bg-white text-white dark:text-slate-950 rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:scale-105 transition-all flex items-center justify-center gap-4 active:scale-95 disabled:opacity-50">
+               {isDownloading ? <RefreshCw size={20} className="animate-spin" /> : <FileDown size={20} strokeWidth={3} />} Physical Dispatch
+             </button>
           </div>
+          <div className="absolute top-0 right-0 p-4 opacity-[0.02] pointer-events-none dark:opacity-[0.05]"><BarChart3 size={400} /></div>
         </div>
 
+        {/* Global KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
           {[
-            { label: 'Revenue Pool', value: totalSales, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-500/10', icon: DollarSign },
-            { label: 'Filtered Profit', value: netProfit, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10', icon: TrendingUp },
-            { label: 'Outflows (Exp)', value: totalExpenses, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10', icon: Receipt },
-            { label: 'Asset Value', value: totalInventoryValue, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: Package },
+            { label: 'Gross Yield', value: totalSales, color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-500/10', icon: DollarSign },
+            { label: 'Net Surplus', value: netProfit, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10', icon: TrendingUp },
+            { label: 'Expenditures', value: totalExpenses, color: 'text-rose-500', bg: 'bg-rose-50 dark:bg-rose-500/10', icon: Receipt },
+            { label: 'Assets', value: totalInventoryValue, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', icon: Package },
             { label: 'Receivables', value: totalReceivables, color: 'text-violet-600', bg: 'bg-violet-50 dark:bg-violet-500/10', icon: Scale },
-            { label: 'Net Margin', value: (netProfit / (totalSales || 1)) * 100, isPercent: true, color: 'text-cyan-600', bg: 'bg-cyan-50 dark:bg-cyan-500/10', icon: Activity },
+            { label: 'Margin Efficiency', value: (netProfit / (totalSales || 1)) * 100, isPercent: true, color: 'text-cyan-600', bg: 'bg-cyan-50 dark:bg-cyan-500/10', icon: Activity },
           ].map((stat, i) => (
-            <div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm group hover:shadow-lg transition-all">
-              <div className={`${stat.bg} ${stat.color} p-2.5 rounded-xl group-hover:scale-110 transition-transform mb-4 w-fit`}><stat.icon size={18} /></div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 truncate">{stat.label}</p>
-              <h4 className="text-xl font-black dark:text-white truncate tracking-tighter">{stat.isPercent ? '' : state.settings.currency}{stat.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}{stat.isPercent ? '%' : ''}</h4>
+            <div key={i} className="bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm group hover:shadow-xl transition-all flex flex-col justify-between">
+              <div className={`${stat.bg} ${stat.color} p-3 rounded-2xl group-hover:scale-110 transition-transform mb-6 w-fit`}><stat.icon size={20} strokeWidth={2.5}/></div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 truncate">{stat.label}</p>
+                <h4 className="text-2xl font-black dark:text-white truncate tracking-tighter">{stat.isPercent ? '' : state.settings.currency}{stat.value.toLocaleString(undefined, { maximumFractionDigits: 1 })}{stat.isPercent ? '%' : ''}</h4>
+              </div>
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-8 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm">
-            <div className="mb-10">
-              <h4 className="font-black text-xl dark:text-white uppercase tracking-tighter flex items-center gap-3"><BarChart3 size={24} className="text-indigo-600" /> Volume Pulse</h4>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">{isLifetime ? 'Twelve Month Aggregate' : 'Filtered Period Daily Breakdown'}</p>
+        {/* High-Fidelity Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-10 rounded-[56px] border border-slate-100 dark:border-slate-800 shadow-sm">
+            <div className="flex items-center justify-between mb-12">
+               <div>
+                  <h4 className="font-black text-2xl dark:text-white uppercase tracking-tighter flex items-center gap-4"><TrendingUp size={28} className="text-indigo-600" /> Operational Velocity</h4>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Comparing terminal yield against daily outflows</p>
+               </div>
+               <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-indigo-600 shadow-[0_0_10px_rgba(99,102,241,0.5)]"/> <span className="text-[10px] font-black text-slate-500 uppercase">Revenue</span></div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]"/> <span className="text-[10px] font-black text-slate-500 uppercase">Expense</span></div>
+               </div>
             </div>
-            <div className="h-[350px] w-full">
+            <div className="h-[400px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartData}>
-                  <defs><linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs>
+                  <defs>
+                    <linearGradient id="yieldGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={state.settings.theme === 'dark' ? '#1e293b' : '#f1f5f9'} />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 900}} />
                   <YAxis hide />
-                  <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.2)', fontSize: '12px', fontWeight: '900'}} />
-                  <Area type="monotone" dataKey="sales" name="Revenue" stroke="#6366f1" strokeWidth={5} fill="url(#salesGrad)" />
-                  <Bar dataKey="expenses" name="Expenditure" fill="#f43f5e" radius={[6, 6, 0, 0]} barSize={10} />
+                  <Tooltip cursor={{fill: 'rgba(99,102,241,0.05)'}} contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.2)', fontSize: '12px', fontWeight: '900'}} />
+                  <Area type="monotone" dataKey="sales" name="Yield" stroke="#6366f1" strokeWidth={6} fill="url(#yieldGrad)" />
+                  <Bar dataKey="expenses" name="Expenditure" fill="#f43f5e" radius={[10, 10, 0, 0]} barSize={12} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 p-8 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col">
-            <div className="mb-8"><h4 className="font-black text-xl dark:text-white uppercase tracking-tighter flex items-center gap-3"><PieIcon size={24} className="text-amber-500" /> Revenue Hub</h4></div>
-            <div className="flex-1 space-y-4 overflow-y-auto max-h-[350px] custom-scrollbar pr-2">
-               {topCategories.map((cat, i) => (
-                  <div key={i} className="group flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border border-transparent hover:border-indigo-100 transition-all">
-                     <div className="flex items-center gap-5">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs text-white shadow-xl" style={{backgroundColor: COLORS[i % COLORS.length]}}>{i + 1}</div>
-                        <div className="min-w-0">
-                           <p className="font-black text-sm dark:text-white uppercase truncate tracking-tight">{cat.name}</p>
-                           <p className="text-[10px] font-bold text-slate-400 uppercase">{cat.volume} Transactions</p>
-                        </div>
-                     </div>
-                     <p className="text-base font-black text-slate-800 dark:text-white">{state.settings.currency}{cat.revenue.toLocaleString()}</p>
-                  </div>
+          <div className="bg-white dark:bg-slate-900 p-10 rounded-[56px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col">
+            <h4 className="font-black text-2xl dark:text-white uppercase tracking-tighter flex items-center gap-4 mb-10"><CreditCard size={28} className="text-amber-500" /> Settlement Flow</h4>
+            <div className="flex-1 w-full h-[250px]">
+               <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={paymentData} innerRadius={80} outerRadius={110} paddingAngle={10} dataKey="value">
+                      {paymentData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: '20px', border: 'none', fontWeight: '900' }} />
+                  </PieChart>
+               </ResponsiveContainer>
+            </div>
+            <div className="mt-8 space-y-4">
+               {paymentData.map((p, i) => (
+                 <div key={i} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border border-transparent hover:border-slate-200 transition-all">
+                    <div className="flex items-center gap-4">
+                       <div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[i % COLORS.length]}} />
+                       <span className="text-[11px] font-black dark:text-white tracking-widest">{p.name}</span>
+                    </div>
+                    <span className="font-black text-sm dark:text-indigo-400">{state.settings.currency}{p.value.toLocaleString()}</span>
+                 </div>
                ))}
-               {topCategories.length === 0 && <div className="py-24 text-center opacity-30 font-black text-[10px] uppercase tracking-[0.3em]">No Activity Records</div>}
             </div>
           </div>
+        </div>
+
+        {/* Detailed Leaderboards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+           <div className="bg-white dark:bg-slate-900 p-10 rounded-[56px] border border-slate-100 dark:border-slate-800 shadow-sm">
+              <div className="flex items-center justify-between mb-8">
+                 <h4 className="font-black text-xl dark:text-white uppercase tracking-tighter flex items-center gap-3"><Award size={24} className="text-amber-400" /> Top Assets</h4>
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Yield Optimization</p>
+              </div>
+              <div className="space-y-4">
+                 {topProducts.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/40 rounded-3xl group hover:bg-white dark:hover:bg-slate-800 transition-all border border-transparent hover:border-indigo-100 shadow-sm">
+                       <div className="flex items-center gap-6">
+                          <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-700 flex items-center justify-center font-black text-lg text-indigo-600 shadow-sm">{i+1}</div>
+                          <div>
+                             <p className="font-black text-sm dark:text-white uppercase truncate max-w-[140px] tracking-tight">{p.name}</p>
+                             <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{p.qty} Units Liquidated</p>
+                          </div>
+                       </div>
+                       <div className="text-right">
+                          <p className="font-black text-base dark:text-emerald-400">{state.settings.currency}{p.revenue.toLocaleString()}</p>
+                          <p className="text-[8px] font-black text-slate-300 uppercase">Gross Return</p>
+                       </div>
+                    </div>
+                 ))}
+                 {topProducts.length === 0 && <div className="py-20 text-center opacity-20"><Package size={48} className="mx-auto mb-3"/><p className="text-[10px] font-black uppercase">No Sales Logged</p></div>}
+              </div>
+           </div>
+
+           <div className="bg-white dark:bg-slate-900 p-10 rounded-[56px] border border-slate-100 dark:border-slate-800 shadow-sm">
+              <div className="flex items-center justify-between mb-8">
+                 <h4 className="font-black text-xl dark:text-white uppercase tracking-tighter flex items-center gap-3"><UserCheck size={24} className="text-emerald-500" /> Key Clients</h4>
+                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Loyalty Index</p>
+              </div>
+              <div className="space-y-4">
+                 {topCustomers.map((c, i) => (
+                    <div key={i} className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/40 rounded-3xl group hover:bg-white dark:hover:bg-slate-800 transition-all border border-transparent hover:border-emerald-100 shadow-sm">
+                       <div className="flex items-center gap-6">
+                          <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-700 flex items-center justify-center font-black text-lg text-emerald-600 shadow-sm">{i+1}</div>
+                          <div>
+                             <p className="font-black text-sm dark:text-white uppercase truncate max-w-[140px] tracking-tight">{c.name}</p>
+                             <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{c.visits} Historical Sessions</p>
+                          </div>
+                       </div>
+                       <div className="text-right">
+                          <p className="font-black text-base dark:text-emerald-400">{state.settings.currency}{c.total.toLocaleString()}</p>
+                          <p className="text-[8px] font-black text-slate-300 uppercase">Contribution</p>
+                       </div>
+                    </div>
+                 ))}
+                 {topCustomers.length === 0 && <div className="py-20 text-center opacity-20"><UserCheck size={48} className="mx-auto mb-3"/><p className="text-[10px] font-black uppercase">No Data Nodes</p></div>}
+              </div>
+           </div>
+        </div>
+
+        {/* Footer Disclaimer for PDF */}
+        <div className="p-10 border-t border-slate-100 dark:border-slate-800 text-center space-y-4">
+           <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Confidential Terminal Audit Report</p>
+           <p className="text-[9px] font-bold text-slate-400 leading-relaxed max-w-2xl mx-auto">This report provides a fiscal overview for internal auditing purposes only. Data is sourced from the local encrypted vault. Generated via Sarvari Seller Pro Professional Edition v1.3.2.</p>
         </div>
       </div>
     </div>
