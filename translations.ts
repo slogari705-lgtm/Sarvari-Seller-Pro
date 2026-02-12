@@ -17,7 +17,20 @@ export const translations = {
     netProfit: 'Net Profit',
     search: 'Search...',
     aiInsights: 'AI Insights',
-    logExpense: 'Log Expense'
+    logExpense: 'Log Expense',
+    language: 'Language',
+    theme: 'Theme',
+    appearance: 'Appearance',
+    localization: 'Localization',
+    invoiceSettings: 'Invoice Settings',
+    loyaltySettings: 'Loyalty & Rewards',
+    security: 'Security',
+    backup: 'Backup & Recovery',
+    about: 'About System',
+    shopProfile: 'Shop Profile',
+    saveChanges: 'Save Configuration',
+    light: 'Light',
+    dark: 'Dark'
   },
   ps: {
     dashboard: 'ډشبورډ',
@@ -33,10 +46,23 @@ export const translations = {
     loan: 'پورونه',
     totalSales: 'ټول پلور',
     orders: 'سپارښتنې',
-    netProfit: 'خ خالص ګټه',
+    netProfit: 'خالص ګټه',
     search: 'پلټنه...',
     aiInsights: 'د هوښیار بصیرت',
-    logExpense: 'لګښت ثبتول'
+    logExpense: 'لګښت ثبتول',
+    language: 'ژبه',
+    theme: 'بڼه',
+    appearance: 'ظاهري بڼه',
+    localization: 'سیمه ییز تنظیمات',
+    invoiceSettings: 'د فاکتور تنظیمات',
+    loyaltySettings: 'وفاداري او جایزې',
+    security: 'امنیت',
+    backup: 'بیک اپ او بیا رغونه',
+    about: 'د سیسټم په اړه',
+    shopProfile: 'د هټۍ پروفایل',
+    saveChanges: 'تنظیمات خوندي کول',
+    light: 'روښانه',
+    dark: 'توره'
   },
   dr: {
     dashboard: 'داشبورد',
@@ -55,6 +81,19 @@ export const translations = {
     netProfit: 'سود خالص',
     search: 'جستجو...',
     aiInsights: 'بینش هوشمند',
-    logExpense: 'ثبت هزینه'
+    logExpense: 'ثبت هزینه',
+    language: 'زبان',
+    theme: 'تم',
+    appearance: 'ظاهر',
+    localization: 'تنظیمات منطقه‌ای',
+    invoiceSettings: 'تنظیمات فاکتور',
+    loyaltySettings: 'وفاداری و پاداش',
+    security: 'امنیت',
+    backup: 'پشتیبان‌گیری',
+    about: 'درباره سیستم',
+    shopProfile: 'پروفایل فروشگاه',
+    saveChanges: 'ذخیره تنظیمات',
+    light: 'روشن',
+    dark: 'تاریک'
   }
 };

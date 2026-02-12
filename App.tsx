@@ -20,11 +20,15 @@ import {
   Trash2,
   Boxes,
   LogOut,
-  User as UserIcon
+  User as UserIcon,
+  CloudUpload,
+  CloudOff,
+  RefreshCw
 } from 'lucide-react';
 import { AppState, View } from './types';
 import { translations } from './translations';
-import { loadState, saveState, createSnapshot } from './db';
+import { loadState, saveState, createSnapshot, getSyncQueue } from './db';
+import { processSyncQueue } from './syncService';
 import Dashboard from './components/Dashboard';
 import Products from './components/Products';
 import Customers from './components/Customers';
@@ -40,12 +44,12 @@ import Returns from './components/Returns';
 import DashboardCostume from './components/DashboardCostume';
 
 const INITIAL_STATE: AppState = {
-  // Initializing empty users array to prevent runtime errors in Login component
   users: [],
   products: [],
   customers: [],
   invoices: [],
   expenses: [],
+  syncQueue: [],
   templates: [{ id: 'modern', name: 'Standard Modern', layout: 'modern', brandColor: '#6366f1', showLogo: true }],
   loanTransactions: [],
   expenseCategories: ['Rent', 'Utilities', 'Supplies', 'Marketing', 'Maintenance', 'Other'],
@@ -105,6 +109,9 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   
   const [isAppLocked, setIsAppLocked] = useState(false);
 
@@ -115,17 +122,72 @@ export default function App() {
       if (saved) {
         setState({ ...INITIAL_STATE, ...saved });
       }
+      const queue = await getSyncQueue();
+      setPendingSyncCount(queue.length);
       setIsLoading(false);
+      
+      if (navigator.onLine) {
+        handleSync();
+      }
     };
     init();
+
+    // Capture PWA Install Prompt
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
+
+  useEffect(() => {
+    const refreshSyncCount = async () => {
+      const queue = await getSyncQueue();
+      setPendingSyncCount(queue.length);
+    };
+
+    window.addEventListener('sarvari-sync-complete', refreshSyncCount);
+    
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'TRIGGER_SYNC') {
+        handleSync();
+      }
+    };
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.addEventListener('message', handleMessage);
+    }
+
+    return () => {
+      window.removeEventListener('sarvari-sync-complete', refreshSyncCount);
+      if (navigator.serviceWorker) {
+        navigator.serviceWorker.removeEventListener('message', handleMessage);
+      }
+    };
+  }, []);
+
+  const handleSync = async () => {
+    if (isSyncing || !navigator.onLine) return;
+    setIsSyncing(true);
+    await processSyncQueue();
+    setIsSyncing(false);
+  };
 
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  // Persistent Save Hook to IndexedDB
   useEffect(() => {
     if (isLoading) return;
     const saveToDb = async () => {
@@ -134,12 +196,11 @@ export default function App() {
     saveToDb();
   }, [state, isLoading]);
 
-  // Auto-Snapshot Backup System
   useEffect(() => {
     if (isLoading) return;
     const backupInterval = setInterval(() => {
       createSnapshot(stateRef.current, 'Automated Vault Snapshot');
-    }, 10 * 60 * 1000); // Every 10 minutes
+    }, 15 * 60 * 1000); 
     return () => clearInterval(backupInterval);
   }, [isLoading]);
 
@@ -152,7 +213,10 @@ export default function App() {
   }, [state.settings.theme, isRTL]);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const handleOnline = () => {
+      setIsOnline(true);
+      handleSync();
+    };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -280,6 +344,21 @@ export default function App() {
         </nav>
 
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+          {pendingSyncCount > 0 && (
+             <button 
+               onClick={handleSync}
+               disabled={!isOnline || isSyncing}
+               className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${isOnline ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-100 text-slate-400'}`}
+             >
+                {isSyncing ? <RefreshCw className="animate-spin" size={20}/> : (isOnline ? <CloudUpload size={20}/> : <CloudOff size={20}/>)}
+                {(sidebarOpen || mobileMenuOpen) && (
+                   <div className="flex flex-col items-start leading-none">
+                      <span className="font-black text-[9px] uppercase tracking-widest">{isSyncing ? 'Syncing...' : (isOnline ? 'Cloud Sync' : 'Offline')}</span>
+                      <span className="text-[8px] font-bold opacity-70">{pendingSyncCount} Pending Items</span>
+                   </div>
+                )}
+             </button>
+          )}
           <button onClick={() => updateState('settings', { ...state.settings, theme: state.settings.theme === 'dark' ? 'light' : 'dark' })} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
             {state.settings.theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">{state.settings.theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
@@ -323,7 +402,7 @@ export default function App() {
           <div className="max-w-7xl mx-auto">
             {(() => {
               switch (currentView) {
-                case 'dashboard': return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} />;
+                case 'dashboard': return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} onInstallApp={handleInstallApp} showInstallBtn={!!deferredPrompt} />;
                 case 'dashboard-costume': return <DashboardCostume state={state} setCurrentView={setCurrentView} />;
                 case 'customers': return <Customers state={state} updateState={updateState} setCurrentView={setCurrentView} />;
                 case 'terminal': return <Terminal state={state} updateState={updateState} />;
@@ -335,7 +414,7 @@ export default function App() {
                 case 'loans': return <Loans state={state} updateState={updateState} setCurrentView={setCurrentView} />;
                 case 'trash': return <Trash state={state} updateState={updateState} />;
                 case 'returns': return <Returns state={state} setCurrentView={setCurrentView} />;
-                default: return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} />;
+                default: return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} onInstallApp={handleInstallApp} showInstallBtn={!!deferredPrompt} />;
               }
             })()}
           </div>

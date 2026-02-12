@@ -124,10 +124,6 @@ export interface Expense {
   isDeleted?: boolean;
 }
 
-/**
- * Interface representing a system user for authentication.
- * Added to fix the import error in Login.tsx.
- */
 export interface User {
   id: string;
   username: string;
@@ -165,8 +161,26 @@ export interface DbSnapshot {
   label: string;
 }
 
+// Sync System Types
+export type SyncActionType = 
+  | 'CREATE_INVOICE' 
+  | 'UPDATE_PRODUCT' 
+  | 'CREATE_EXPENSE' 
+  | 'UPDATE_CUSTOMER' 
+  | 'LOAN_TRANSACTION'
+  | 'VOID_INVOICE'
+  | 'RESTORE_ITEM';
+
+export interface SyncAction {
+  id: string;
+  type: SyncActionType;
+  timestamp: string;
+  payload: any;
+  status: 'pending' | 'syncing' | 'failed';
+  retryCount: number;
+}
+
 export interface AppState {
-  // Added users array to AppState to support authentication logic in Login.tsx
   users: User[];
   products: Product[];
   customers: Customer[];
@@ -176,6 +190,7 @@ export interface AppState {
   loanTransactions: LoanTransaction[];
   expenseCategories: string[];
   lastSync?: string;
+  syncQueue: SyncAction[]; // Track pending syncs in memory + IDB
   lastLocalBackup?: string;
   lastFileBackup?: string;
   settings: {
