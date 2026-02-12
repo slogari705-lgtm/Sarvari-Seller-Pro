@@ -190,7 +190,7 @@ export interface AppState {
   loanTransactions: LoanTransaction[];
   expenseCategories: string[];
   lastSync?: string;
-  syncQueue: SyncAction[]; // Track pending syncs in memory + IDB
+  syncQueue: SyncAction[]; 
   lastLocalBackup?: string;
   lastFileBackup?: string;
   settings: {
@@ -221,6 +221,12 @@ export interface AppState {
     autoFileBackup: boolean;
     autoLocalBackup: boolean;
     autoBackupFolderLinked: boolean;
+    cloudBackup: {
+      provider: 'none' | 'google-drive' | 'dropbox';
+      lastSync?: string;
+      isEnabled: boolean;
+      autoSyncInterval: number; // in minutes
+    };
     cardDesign: CardDesign;
     loyaltySettings: {
       pointsPerUnit: number; 

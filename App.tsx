@@ -73,6 +73,11 @@ const INITIAL_STATE: AppState = {
     autoFileBackup: true,
     autoLocalBackup: true,
     autoBackupFolderLinked: false,
+    cloudBackup: {
+      provider: 'none',
+      isEnabled: false,
+      autoSyncInterval: 60
+    },
     cardDesign: {
       layout: 'horizontal',
       theme: 'mesh',
@@ -198,8 +203,9 @@ export default function App() {
 
   useEffect(() => {
     if (isLoading) return;
+    // Enhanced Snapshot Logic: Every 15 mins for Local Reliability
     const backupInterval = setInterval(() => {
-      createSnapshot(stateRef.current, 'Automated Vault Snapshot');
+      createSnapshot(stateRef.current, 'Automated Vault Pulse');
     }, 15 * 60 * 1000); 
     return () => clearInterval(backupInterval);
   }, [isLoading]);
