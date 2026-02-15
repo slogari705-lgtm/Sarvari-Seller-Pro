@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
@@ -126,7 +125,6 @@ export default function App() {
   const [isAppLocked, setIsAppLocked] = useState(false);
   const [isDashboardSubOpen, setIsDashboardSubOpen] = useState(true);
 
-  // Load from IndexedDB on start
   useEffect(() => {
     const init = async () => {
       const saved = await loadState();
@@ -136,44 +134,9 @@ export default function App() {
       const queue = await getSyncQueue();
       setPendingSyncCount(queue.length);
       setIsLoading(false);
-      
-      if (navigator.onLine) {
-        handleSync();
-      }
+      if (navigator.onLine) handleSync();
     };
     init();
-
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-  }, []);
-
-  const handleInstallApp = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') setDeferredPrompt(null);
-  };
-
-  useEffect(() => {
-    const refreshSyncCount = async () => {
-      const queue = await getSyncQueue();
-      setPendingSyncCount(queue.length);
-    };
-    window.addEventListener('sarvari-sync-complete', refreshSyncCount);
-    
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'TRIGGER_SYNC') handleSync();
-    };
-    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', handleMessage);
-
-    return () => {
-      window.removeEventListener('sarvari-sync-complete', refreshSyncCount);
-      if (navigator.serviceWorker) navigator.serviceWorker.removeEventListener('message', handleMessage);
-    };
   }, []);
 
   const handleSync = async () => {
@@ -188,17 +151,8 @@ export default function App() {
 
   useEffect(() => {
     if (isLoading) return;
-    const saveToDb = async () => { await saveState(stateRef.current); };
-    saveToDb();
+    saveState(stateRef.current);
   }, [state, isLoading]);
-
-  useEffect(() => {
-    if (isLoading) return;
-    const backupInterval = setInterval(() => {
-      createSnapshot(stateRef.current, 'Automated Vault Pulse');
-    }, 15 * 60 * 1000); 
-    return () => clearInterval(backupInterval);
-  }, [isLoading]);
 
   const t = translations[state.settings.language || 'en'];
   const isRTL = state.settings.language === 'ps' || state.settings.language === 'dr';
@@ -208,241 +162,105 @@ export default function App() {
     document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
   }, [state.settings.theme, isRTL]);
 
-  useEffect(() => {
-    const handleOnline = () => { setIsOnline(true); handleSync(); };
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
   const updateState = <K extends keyof AppState>(key: K, value: AppState[K]) => setState(prev => ({ ...prev, [key]: value }));
 
   if (isLoading) return null;
 
-  if (isAppLocked && state.settings.security?.isLockEnabled && state.settings.security?.passcode) {
-    return (
-      <LockScreen 
-        correctPasscode={state.settings.security.passcode} 
-        securityQuestion={state.settings.security.securityQuestion}
-        securityAnswer={state.settings.security.securityAnswer}
-        highSecurityMode={state.settings.security.highSecurityMode}
-        onUnlock={() => setIsAppLocked(false)} 
-        shopName={state.settings.shopName} 
-      />
-    );
-  }
-
-  const coreNav = [
-    { id: 'terminal', label: t.terminal, icon: ShoppingCart },
-  ];
-
-  const inventoryNav = [
-    { id: 'products', label: t.products, icon: Boxes },
-    { id: 'customers', label: t.customers, icon: Users },
-  ];
-
-  const auditingNav = [
-    { id: 'invoices', label: t.invoices, icon: FileText },
-    { id: 'expenses', label: t.expenses, icon: Receipt },
-    { id: 'reports', label: t.reports, icon: BarChart3 },
-  ];
-
   return (
     <div className={`flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden ${isRTL ? 'font-arabic' : ''}`}>
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[50] lg:hidden animate-in fade-in" onClick={() => setMobileMenuOpen(false)}/>
-      )}
+      {mobileMenuOpen && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[50] lg:hidden" onClick={() => setMobileMenuOpen(false)}/>}
 
-      <aside className={`fixed lg:static inset-y-0 left-0 z-[60] ${sidebarOpen ? 'w-64' : 'w-20'} ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col shadow-xl lg:shadow-none`}>
-        <div className="p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 shrink-0">
+      <aside className={`fixed lg:static inset-y-0 left-0 z-[60] ${sidebarOpen ? 'w-72' : 'w-24'} ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} bg-white dark:bg-slate-900 border-r dark:border-slate-800 transition-all duration-300 flex flex-col`}>
+        <div className="p-8 flex items-center justify-between border-b dark:border-slate-800">
           {(sidebarOpen || mobileMenuOpen) && (
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg">S</div>
-              <div className="flex flex-col">
-                <span className="font-black text-lg tracking-tighter dark:text-white leading-none">Sarvari</span>
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Professional</span>
-              </div>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-xl">S</div>
+              <span className="font-black text-xl tracking-tighter dark:text-white">Sarvari</span>
             </div>
           )}
-          {!sidebarOpen && !mobileMenuOpen && (
-            <div className="mx-auto w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-xl">S</div>
-          )}
-          <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden p-2 text-slate-400 hover:bg-slate-100 rounded-lg"><X size={20}/></button>
+          <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden p-2"><X /></button>
         </div>
 
-        <nav className="flex-1 px-3 py-6 space-y-4 overflow-y-auto custom-scrollbar">
-          {/* Dashboard Contextual Sidebar Section */}
-          <div className="space-y-1">
+        <nav className="flex-1 px-4 py-8 space-y-6 overflow-y-auto">
+          {/* Dashboard Contextual Branching */}
+          <div className="space-y-2">
             <button 
-              onClick={() => { setCurrentView('dashboard'); if(sidebarOpen) setIsDashboardSubOpen(!isDashboardSubOpen); }}
-              className={`w-full flex items-center justify-between px-3 py-3 rounded-xl transition-all group ${currentView === 'dashboard' || currentView === 'dashboard-costume' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+              onClick={() => { setCurrentView('dashboard'); setIsDashboardSubOpen(!isDashboardSubOpen); }}
+              className={`w-full flex items-center justify-between px-4 py-4 rounded-[20px] transition-all ${currentView === 'dashboard' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
             >
               <div className="flex items-center gap-4">
-                <LayoutDashboard size={20} className={currentView === 'dashboard' ? 'scale-110' : ''} />
-                {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{t.dashboard}</span>}
+                <LayoutDashboard size={24} />
+                {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-xs uppercase tracking-widest">{t.dashboard}</span>}
               </div>
-              {(sidebarOpen || mobileMenuOpen) && (isDashboardSubOpen ? <ChevronUp size={14} className="opacity-50" /> : <ChevronDown size={14} className="opacity-50" />)}
+              {(sidebarOpen || mobileMenuOpen) && (isDashboardSubOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}
             </button>
             
             {isDashboardSubOpen && (sidebarOpen || mobileMenuOpen) && (
-              <div className="ml-9 space-y-1 mt-1 animate-in slide-in-from-top-2 duration-200">
+              <div className="ml-8 pl-4 border-l-2 border-slate-100 dark:border-slate-800 space-y-2 py-1">
                 <button 
                   onClick={() => setCurrentView('dashboard-costume')}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all ${currentView === 'dashboard-costume' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 font-black' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${currentView === 'dashboard-costume' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 font-black border border-indigo-100 dark:border-indigo-800 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
                 >
-                  <Wand2 size={15} />
-                  <span className="text-[10px] uppercase tracking-widest">{t.dashboardCostume}</span>
-                  {currentView === 'dashboard-costume' && <div className="w-1 h-1 bg-indigo-600 rounded-full ml-auto animate-pulse" />}
+                  <Wand2 size={16} />
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em]">Designer</span>
+                  {currentView === 'dashboard-costume' && <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full ml-auto animate-pulse" />}
                 </button>
               </div>
             )}
           </div>
 
-          <div>
-            <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Operational</p>
-            {coreNav.map((item) => (
-              <button 
-                key={item.id} 
-                onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
-                className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-              >
-                <item.icon size={20} className={currentView === item.id ? 'text-white scale-110' : 'group-hover:scale-110 transition-transform'} /> 
-                {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
-              </button>
-            ))}
-          </div>
-
-          <div>
-            <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Inventory</p>
-            {inventoryNav.map((item) => (
-              <button 
-                key={item.id} 
-                onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
-                className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-              >
-                <item.icon size={20} className={currentView === item.id ? 'text-white scale-110' : 'group-hover:scale-110 transition-transform'} /> 
-                {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
-              </button>
-            ))}
-          </div>
-
-          <div>
-            <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>Analytics</p>
-            {auditingNav.map((item) => (
-              <button 
-                key={item.id} 
-                onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
-                className={`w-full flex items-center gap-4 px-3 py-3 rounded-xl transition-all group ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 dark:shadow-none' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-              >
-                <item.icon size={20} className={currentView === item.id ? 'text-white scale-110' : 'group-hover:scale-110 transition-transform'} /> 
-                {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[12px] uppercase tracking-wider">{item.label}</span>}
-              </button>
-            ))}
-          </div>
-          
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-             <p className={`px-4 text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] mb-2 ${(!sidebarOpen && !mobileMenuOpen) ? 'hidden' : ''}`}>System Tools</p>
-             {[
-               { id: 'settings', label: t.settings, icon: SettingsIcon },
-               { id: 'loans', label: t.loan, icon: History },
-               { id: 'trash', label: 'Trash', icon: Trash2 }
-             ].map((item) => (
-               <button 
-                 key={item.id} 
-                 onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
-                 className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl transition-all ${currentView === item.id ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 font-black' : 'text-slate-400 hover:text-indigo-500'}`}
-               >
-                 <item.icon size={18} />
-                 {(sidebarOpen || mobileMenuOpen) && <span className="font-bold text-[11px] uppercase tracking-widest">{item.label}</span>}
-               </button>
-             ))}
-          </div>
+          {[
+            { id: 'terminal', label: t.terminal, icon: ShoppingCart },
+            { id: 'products', label: t.products, icon: Boxes },
+            { id: 'customers', label: t.customers, icon: Users },
+            { id: 'invoices', label: t.invoices, icon: FileText },
+            { id: 'expenses', label: t.expenses, icon: Receipt },
+            { id: 'reports', label: t.reports, icon: BarChart3 },
+            { id: 'settings', label: t.settings, icon: SettingsIcon }
+          ].map((item) => (
+            <button 
+              key={item.id} 
+              onClick={() => { setCurrentView(item.id as View); setMobileMenuOpen(false); }} 
+              className={`w-full flex items-center gap-4 px-4 py-4 rounded-[20px] transition-all ${currentView === item.id ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+            >
+              <item.icon size={24} />
+              {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-xs uppercase tracking-widest">{item.label}</span>}
+            </button>
+          ))}
         </nav>
-
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-2 bg-slate-50/50 dark:bg-slate-900/50 backdrop-blur-md">
-          {pendingSyncCount > 0 && (
-             <button 
-               onClick={handleSync}
-               disabled={!isOnline || isSyncing}
-               className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all ${isOnline ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}
-             >
-                {isSyncing ? <RefreshCw className="animate-spin" size={20}/> : (isOnline ? <CloudUpload size={20}/> : <CloudOff size={20}/>)}
-                {(sidebarOpen || mobileMenuOpen) && (
-                   <div className="flex flex-col items-start leading-none">
-                      <span className="font-black text-[9px] uppercase tracking-widest">{isSyncing ? 'Processing' : (isOnline ? 'Push Updates' : 'Offline')}</span>
-                      <span className="text-[8px] font-bold opacity-70">{pendingSyncCount} Ledger Items</span>
-                   </div>
-                )}
-             </button>
-          )}
-
-          {/* System Health Status Widget */}
-          {(sidebarOpen || mobileMenuOpen) && (
-            <div className="px-4 py-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-between group">
-              <div className="flex items-center gap-3">
-                 <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-rose-500 animate-pulse'}`} />
-                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{isOnline ? 'Linked' : 'Local Node'}</span>
-              </div>
-              <Zap size={10} className={`${isOnline ? 'text-amber-400' : 'text-slate-300'}`} />
-            </div>
-          )}
-
-          <button onClick={() => updateState('settings', { ...state.settings, theme: state.settings.theme === 'dark' ? 'light' : 'dark' })} className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-700 shadow-sm">
-            {state.settings.theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-            {(sidebarOpen || mobileMenuOpen) && <span className="font-black text-[10px] uppercase tracking-widest">{state.settings.theme === 'dark' ? 'Daylight' : 'Nocturnal'}</span>}
-          </button>
-        </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0 z-40">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-slate-50/50 dark:bg-slate-950/50">
+        <header className="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b dark:border-slate-800 px-8 flex items-center justify-between shrink-0 z-40">
           <div className="flex items-center gap-4">
-            <button onClick={() => setMobileMenuOpen(true)} className="lg:hidden p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-200 rounded-2xl">
-              <Menu size={24}/>
-            </button>
-            <div>
-              <h2 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] mb-0.5">{state.settings.shopName}</h2>
-              <div className="flex items-center gap-2">
-                 <h3 className="text-lg font-black dark:text-white uppercase tracking-tighter">
-                   {currentView.replace('-', ' ')}
-                 </h3>
-                 <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded border">BUILD 1.3.3</span>
-              </div>
-            </div>
+            <button onClick={() => setMobileMenuOpen(true)} className="lg:hidden p-3 bg-slate-100 dark:bg-slate-800 rounded-xl"><Menu /></button>
+            <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">{currentView.replace('-', ' ')}</h3>
           </div>
-
-          <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:flex w-11 h-11 bg-slate-50 dark:bg-slate-800 rounded-2xl items-center justify-center text-slate-400 hover:text-indigo-600 transition-all">
-              <Layout size={20} />
+          <div className="flex items-center gap-4">
+            <button onClick={() => updateState('settings', { ...state.settings, theme: state.settings.theme === 'dark' ? 'light' : 'dark' })} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">
+               {state.settings.theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             </button>
-            <button onClick={() => setCurrentView('settings')} className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-90 transition-all border-4 border-white/10">
-               <UserIcon size={20} strokeWidth={3} />
-            </button>
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black">U</div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar bg-slate-50/30 dark:bg-slate-950/30">
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
           <div className="max-w-7xl mx-auto">
             {(() => {
               switch (currentView) {
-                case 'dashboard': return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} onInstallApp={handleInstallApp} showInstallBtn={!!deferredPrompt} />;
+                case 'dashboard': return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} />;
                 case 'dashboard-costume': return <DashboardCostume state={state} setCurrentView={setCurrentView} />;
-                case 'customers': return <Customers state={state} updateState={updateState} setCurrentView={setCurrentView} />;
                 case 'terminal': return <Terminal state={state} updateState={updateState} />;
-                case 'settings': return <Settings state={state} updateState={updateState} />;
                 case 'products': return <Products state={state} updateState={updateState} />;
+                case 'customers': return <Customers state={state} updateState={updateState} />;
                 case 'invoices': return <Invoices state={state} updateState={updateState} setCurrentView={setCurrentView} />;
                 case 'expenses': return <Expenses state={state} updateState={updateState} />;
                 case 'reports': return <Reports state={state} />;
+                case 'settings': return <Settings state={state} updateState={updateState} />;
                 case 'loans': return <Loans state={state} updateState={updateState} setCurrentView={setCurrentView} />;
                 case 'trash': return <Trash state={state} updateState={updateState} />;
                 case 'returns': return <Returns state={state} setCurrentView={setCurrentView} />;
-                default: return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} onInstallApp={handleInstallApp} showInstallBtn={!!deferredPrompt} />;
+                default: return <Dashboard state={state} setCurrentView={setCurrentView} sidebarOpen={sidebarOpen} />;
               }
             })()}
           </div>

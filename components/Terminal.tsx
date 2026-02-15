@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Search, 
@@ -33,7 +32,6 @@ import {
   Trash2,
   MinusCircle,
   PlusCircle,
-  // Added missing Check icon import
   Check
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -61,7 +59,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
   
   const [cashReceived, setCashReceived] = useState<number | ''>('');
   const [finishedInvoice, setFinishedInvoice] = useState<Invoice | null>(null);
-  const [receiptPrintMode, setReceiptPrintMode] = useState<PrintLayout>('thermal');
   const [pickingProduct, setPickingProduct] = useState<Product | null>(null);
   
   const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false);
@@ -83,7 +80,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
 
   const t = translations[state.settings.language || 'en'];
 
-  // Enhanced Cart Key Logic
   const getCartItemKey = (item: CartItem | { id: string; variationId?: string }) => {
     return item.variationId ? `${item.id}-${item.variationId}` : item.id;
   };
@@ -144,6 +140,12 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
     let scanner: Html5Qrcode | null = null;
     const startScanner = async () => {
       try {
+        // Ensure element exists in DOM before initialization
+        const container = document.getElementById("camera-reader");
+        if (!container) {
+           setTimeout(startScanner, 100);
+           return;
+        }
         scanner = new Html5Qrcode("camera-reader");
         scannerRef.current = scanner;
         await scanner.start(
@@ -161,6 +163,7 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
         setIsCameraOpen(false);
       }
     };
+
     const stopScanner = async () => {
       if (scannerRef.current) {
         try {
@@ -170,8 +173,10 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
         scannerRef.current = null;
       }
     };
+
     if (isCameraOpen) startScanner();
     else stopScanner();
+
     return () => { if (scannerRef.current?.isScanning) scannerRef.current.stop().catch(console.error); };
   }, [isCameraOpen]);
 
@@ -198,21 +203,16 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
     ));
   }, [state.products, searchTerm]);
 
-  // Robust addToCart Logic
   const addToCart = (product: Product, variation?: ProductVariation) => {
     const target = variation || product;
     const availableStock = Number(target.stock) || 0;
     
-    // Calculate current quantity in cart for this specific variation/product
     const existingInCart = cart.find(item => 
       item.id === product.id && item.variationId === variation?.id
     );
     const currentQtyInCart = existingInCart?.quantity || 0;
 
-    if (currentQtyInCart >= availableStock) {
-      // Visual alert or snackbar could go here
-      return;
-    }
+    if (currentQtyInCart >= availableStock) return;
 
     const itemPrice = Number(target.salePrice ?? target.price) || 0;
     const itemCost = Number(target.costPrice) || 0;
@@ -251,7 +251,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
       return prev.map(item => {
         if (item.id === id && item.variationId === variationId) {
           const newQty = Math.max(0, item.quantity + delta);
-          // Check stock limit
           if (newQty > item.stock) return item;
           return { ...item, quantity: newQty };
         }
@@ -352,7 +351,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
       </header>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {/* Customer Assignment Sub-Header */}
         <div className="p-6 bg-slate-50/50 dark:bg-slate-900/30 border-b dark:border-slate-800 relative">
           <div className="flex items-center justify-between mb-3">
              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Client Authorization</label>
@@ -401,7 +399,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
           )}
         </div>
 
-        {/* Cart Item List */}
         <div className="p-6 space-y-4">
           {cart.map(item => (
             <div key={getCartItemKey(item)} className="p-5 bg-white dark:bg-slate-900 rounded-[36px] border border-slate-100 dark:border-slate-800 shadow-sm group hover:border-indigo-200 transition-all">
@@ -464,12 +461,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
                <span>-{state.settings.currency}{discountValue.toLocaleString()}</span>
              </div>
            )}
-           {selectedCustomer && selectedCustomer.totalDebt > 0 && (
-             <div className="flex justify-between text-[10px] font-black text-rose-500 uppercase tracking-widest">
-               <span>Historical Balance</span>
-               <span>{state.settings.currency}{selectedCustomer.totalDebt.toLocaleString()}</span>
-             </div>
-           )}
         </div>
         
         <div className="flex items-center justify-between pb-2">
@@ -509,7 +500,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
         type="danger" 
       />
       
-      {/* Sidebar - Left: Analytics & Quick Picks */}
       <aside className="hidden xl:flex w-80 flex-col bg-white dark:bg-slate-900 rounded-[48px] border border-slate-100 dark:border-slate-800 p-6 shrink-0 shadow-sm overflow-hidden">
         <div className="flex items-center gap-2 mb-8 bg-slate-50 dark:bg-slate-950 p-1.5 rounded-[24px]">
            <button onClick={() => setSidebarTab('picks')} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${sidebarTab === 'picks' ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -544,12 +534,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
                     </button>
                   );
                 })}
-                {state.products.filter(p => p.isFavorite && !p.isDeleted).length === 0 && (
-                  <div className="py-20 text-center space-y-4 opacity-20">
-                     <Star size={40} className="mx-auto" />
-                     <p className="text-[10px] font-black uppercase tracking-widest">No Favorites Configured</p>
-                  </div>
-                )}
              </div>
           ) : (
              <div className="space-y-8 animate-in fade-in">
@@ -563,39 +547,20 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
                          </AreaChart>
                       </ResponsiveContainer>
                    </div>
-                   <div className="mt-6 flex justify-between items-end relative z-10">
-                      <div><p className="text-[8px] font-black uppercase opacity-60">Avg. Basket</p><p className="text-2xl font-black">{state.settings.currency}{(sessionData.reduce((a,b)=>a+b.value,0)/(sessionData.length||1)).toLocaleString(undefined, {maximumFractionDigits:0})}</p></div>
-                      <div className="text-right"><p className="text-[8px] font-black uppercase opacity-60">Success Rate</p><p className="text-2xl font-black">98.2%</p></div>
-                   </div>
                    <Activity size={100} className="absolute -bottom-4 -right-4 opacity-10 group-hover:scale-125 transition-transform" />
-                </div>
-                
-                <div className="space-y-4 p-2">
-                   <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-3">Temporal Logs</h5>
-                   {state.invoices.filter(i => !i.isDeleted).slice(-5).reverse().map(inv => (
-                     <div key={inv.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/40 p-4 rounded-3xl border border-transparent hover:border-indigo-100 transition-all">
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-black dark:text-white uppercase tracking-tighter">#INV-{inv.id.padStart(4,'0')}</p>
-                          <p className="text-[8px] text-slate-400 font-black uppercase mt-0.5">{new Date(inv.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                        </div>
-                        <p className="text-sm font-black text-indigo-600">{state.settings.currency}{inv.total.toLocaleString()}</p>
-                     </div>
-                   ))}
                 </div>
              </div>
           )}
         </div>
 
-        {/* Hardware Status Lockup */}
         <div className="mt-8 p-8 bg-slate-950 rounded-[40px] text-white flex flex-col items-center gap-5 relative overflow-hidden group">
            <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center animate-pulse border border-white/20">
               <Barcode size={32} />
            </div>
            <div className="text-center relative z-10">
               <p className="text-[11px] font-black uppercase tracking-[0.3em]">Scanner Online</p>
-              <p className="text-[9px] font-bold text-slate-500 uppercase mt-2 leading-relaxed">System monitoring HID hardware inputs for rapid registration</p>
+              <p className="text-[9px] font-bold text-slate-500 uppercase mt-2 leading-relaxed">Monitoring hardware HID inputs</p>
            </div>
-           <div className="absolute inset-0 bg-indigo-600 opacity-0 group-hover:opacity-10 transition-opacity" />
            {lastScannedSku && (
              <div className="absolute inset-0 bg-emerald-600 flex items-center justify-center animate-in fade-in zoom-in duration-300">
                <p className="font-black text-xs uppercase tracking-widest flex items-center gap-3">
@@ -606,7 +571,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
         </div>
       </aside>
 
-      {/* Main Terminal View - Center: Grid & Search */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="bg-white dark:bg-slate-900 p-6 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm mb-6 shrink-0 relative overflow-hidden">
           <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
@@ -646,7 +610,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
           </div>
         </header>
 
-        {/* Dynamic Product Matrix */}
         <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-10">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-6">
             {filteredProducts.map(p => {
@@ -685,21 +648,33 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
               );
             })}
           </div>
-          {filteredProducts.length === 0 && (
-             <div className="py-32 text-center space-y-6 opacity-20">
-                <Search size={80} strokeWidth={1} className="mx-auto" />
-                <p className="font-black text-xl uppercase tracking-[0.4em]">Resource Not Found</p>
-             </div>
-          )}
         </div>
       </div>
 
-      {/* Cart Container - Right Desktop Sidebar */}
       <div className={`fixed inset-y-0 right-0 z-[100] w-full max-w-md xl:static xl:block ${isCartOpen ? 'translate-x-0' : 'translate-x-full xl:translate-x-0'} transition-transform duration-500 shadow-2xl xl:shadow-none`}>
          <CartContent />
       </div>
 
-      {/* Variation Selection Modal */}
+      {isCameraOpen && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-2xl animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-slate-900 rounded-[48px] w-full max-w-lg shadow-2xl overflow-hidden border border-white/10 flex flex-col animate-in zoom-in-95">
+              <header className="p-8 border-b flex items-center justify-between">
+                 <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><Camera size={24}/></div>
+                    <h3 className="text-xl font-black dark:text-white uppercase tracking-tighter">Optical Scanner</h3>
+                 </div>
+                 <button onClick={() => setIsCameraOpen(false)} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl text-slate-400 hover:text-rose-600 transition-all"><X size={24}/></button>
+              </header>
+              <div className="p-6">
+                <div id="camera-reader" className="w-full aspect-square bg-black rounded-[32px] overflow-hidden shadow-inner border-4 border-slate-100 dark:border-slate-800"></div>
+                <div className="mt-6 p-5 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl text-center border border-indigo-100 dark:border-indigo-800">
+                   <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Position product barcode within the visual frame</p>
+                </div>
+              </div>
+           </div>
+        </div>
+      )}
+
       {pickingProduct && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-2xl animate-in fade-in duration-300">
            <div className="bg-white dark:bg-slate-900 rounded-[64px] w-full max-w-2xl shadow-2xl overflow-hidden border border-white/10 flex flex-col animate-in zoom-in-95">
@@ -735,15 +710,8 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
                         <div className="relative z-10 flex items-center justify-between mt-auto">
                           <div>
                             <p className="text-indigo-600 font-black text-2xl tabular-nums">{state.settings.currency}{v.price.toLocaleString()}</p>
-                            <p className={`text-[9px] font-black uppercase tracking-widest mt-2 ${available < 5 ? 'text-rose-500' : 'text-slate-400'}`}>
-                               Available Nodes: {available}
-                            </p>
-                          </div>
-                          <div className="p-4 bg-slate-50 dark:bg-slate-700 rounded-3xl shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                             <ArrowRight size={22} strokeWidth={3}/>
                           </div>
                         </div>
-                        <Layers className="absolute -bottom-8 -right-8 text-indigo-500 opacity-[0.03] group-hover:scale-125 transition-transform duration-1000" size={180} />
                      </button>
                    );
                  })}
@@ -752,43 +720,28 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
         </div>
       )}
 
-      {/* Manual Markdown Discount Modal */}
       {isDiscountModalOpen && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-200">
            <div className="bg-white dark:bg-slate-900 rounded-[48px] w-full max-md shadow-2xl p-10 border border-white/10 animate-in zoom-in-95">
               <div className="flex flex-col items-center text-center space-y-6">
                  <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-[32px] flex items-center justify-center shadow-lg"><Tag size={36}/></div>
-                 <div>
-                    <h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">Price Markdown</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Authorized Discretionary Discount</p>
-                 </div>
-                 <div className="w-full space-y-3">
-                    <div className="flex justify-between px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                       <span>Apply Reduction</span>
-                       <span className="text-indigo-600">Max: {state.settings.currency}{subtotal.toLocaleString()}</span>
-                    </div>
-                    <div className="relative">
-                       <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-2xl text-slate-300">{state.settings.currency}</span>
-                       <input 
-                        type="number" 
-                        value={discountValue || ''} 
-                        onChange={e => setDiscountValue(Math.min(subtotal, Number(e.target.value)))} 
-                        className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-[28px] py-6 px-14 font-black text-4xl text-center dark:text-white outline-none" 
-                        placeholder="0.00" 
-                        autoFocus 
-                       />
-                    </div>
-                 </div>
+                 <h3 className="text-2xl font-black dark:text-white uppercase tracking-tighter">Price Markdown</h3>
+                 <input 
+                  type="number" 
+                  value={discountValue || ''} 
+                  onChange={e => setDiscountValue(Math.min(subtotal, Number(e.target.value)))} 
+                  className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-[28px] py-6 px-14 font-black text-4xl text-center dark:text-white outline-none" 
+                  placeholder="0.00" 
+                  autoFocus 
+                 />
                  <button onClick={() => setIsDiscountModalOpen(false)} className="w-full py-6 bg-indigo-600 text-white rounded-[28px] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-indigo-700 active:scale-95 transition-all">
                     Commit Adjustment
                  </button>
-                 <button onClick={() => { setDiscountValue(0); setIsDiscountModalOpen(false); }} className="text-[10px] font-black text-rose-500 uppercase hover:underline">Reset Discount</button>
               </div>
            </div>
         </div>
       )}
 
-      {/* Checkout Selection Modal */}
       {isCheckoutOpen && (
         <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-2xl animate-in fade-in duration-300">
            <div className="bg-white dark:bg-slate-900 rounded-[56px] w-full max-w-2xl shadow-2xl overflow-hidden border border-white/10 flex flex-col animate-in zoom-in-95">
@@ -799,7 +752,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
                     </div>
                     <div>
                        <h3 className="text-3xl font-black dark:text-white uppercase tracking-tighter">Settlement Module</h3>
-                       <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em] mt-2">Finalizing transaction ledger</p>
                     </div>
                  </div>
                  <button onClick={() => setIsCheckoutOpen(false)} className="p-4 bg-slate-50 dark:bg-slate-800 rounded-full text-slate-400 hover:text-rose-500 transition-all">
@@ -808,59 +760,24 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
               </header>
 
               <div className="flex-1 overflow-y-auto p-12 custom-scrollbar space-y-10">
-                 <div className="p-10 bg-slate-50 dark:bg-slate-950 rounded-[48px] border border-slate-100 dark:border-slate-800 text-center space-y-2 relative overflow-hidden group">
-                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] relative z-10">Total Aggregate Payable</p>
-                    <h2 className="text-6xl font-black dark:text-white tracking-tighter tabular-nums relative z-10">{state.settings.currency}{total.toLocaleString()}</h2>
-                    <CheckCircle className="absolute -bottom-10 -right-10 text-emerald-500 opacity-[0.03] group-hover:scale-125 transition-transform duration-700" size={240} />
+                 <div className="p-10 bg-slate-50 dark:bg-slate-950 rounded-[48px] border border-slate-100 dark:border-slate-800 text-center">
+                    <h2 className="text-6xl font-black dark:text-white tracking-tighter tabular-nums">{state.settings.currency}{total.toLocaleString()}</h2>
                  </div>
-
-                 <div className="space-y-6">
-                    <label className="block text-[11px] font-black text-indigo-600 uppercase tracking-[0.3em] ml-2">Settlement Protocol</label>
-                    <div className="grid grid-cols-3 gap-4">
-                       {[
-                         { id: 'cash', label: 'Cash', icon: Banknote, color: 'text-emerald-500' },
-                         { id: 'card', label: 'Card', icon: CreditCard, color: 'text-blue-500' },
-                         { id: 'transfer', label: 'Transfer', icon: RefreshCw, color: 'text-indigo-500' }
-                       ].map(method => (
-                         <button 
-                           key={method.id} 
-                           onClick={() => setPaymentMethod(method.id as any)}
-                           className={`p-6 rounded-[36px] border-4 transition-all flex flex-col items-center gap-4 group ${paymentMethod === method.id ? 'border-indigo-600 bg-white dark:bg-slate-800 shadow-xl' : 'bg-slate-50 dark:bg-slate-950 border-transparent opacity-60 hover:opacity-100'}`}
-                         >
-                            <method.icon size={32} className={paymentMethod === method.id ? method.color : 'text-slate-400'} />
-                            <span className="font-black text-xs uppercase tracking-widest dark:text-white">{method.label}</span>
-                         </button>
-                       ))}
-                    </div>
+                 <div className="grid grid-cols-3 gap-4">
+                    {['cash', 'card', 'transfer'].map(method => (
+                      <button 
+                        key={method} 
+                        onClick={() => setPaymentMethod(method as any)}
+                        className={`p-6 rounded-[36px] border-4 transition-all flex flex-col items-center gap-4 ${paymentMethod === method ? 'border-indigo-600 bg-white dark:bg-slate-800 shadow-xl' : 'bg-slate-50 dark:bg-slate-950 border-transparent opacity-60'}`}
+                      >
+                         <span className="font-black text-xs uppercase tracking-widest dark:text-white">{method}</span>
+                      </button>
+                    ))}
                  </div>
-
-                 {paymentMethod === 'cash' && (
-                    <div className="space-y-6 animate-in slide-in-from-bottom-4">
-                       <label className="block text-[11px] font-black text-indigo-600 uppercase tracking-[0.3em] ml-2">Remittance Magnitude (Optional)</label>
-                       <div className="relative">
-                          <input 
-                            type="number" 
-                            value={cashReceived} 
-                            onChange={e => setCashReceived(e.target.value === '' ? '' : Number(e.target.value))} 
-                            placeholder="Enter amount received..." 
-                            className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-indigo-500 rounded-[32px] py-6 px-10 font-black text-3xl text-center dark:text-white outline-none" 
-                          />
-                       </div>
-                       {typeof cashReceived === 'number' && cashReceived > total && (
-                          <div className="p-8 bg-emerald-50 dark:bg-emerald-950/20 rounded-[36px] border-2 border-emerald-200 dark:border-emerald-900/50 flex items-center justify-between animate-in zoom-in">
-                             <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Return Balance Change</p>
-                             <p className="text-3xl font-black text-emerald-600">{state.settings.currency}{(cashReceived - total).toLocaleString()}</p>
-                          </div>
-                       )}
-                    </div>
-                 )}
               </div>
 
               <footer className="p-10 border-t bg-slate-50 dark:bg-slate-950 shrink-0">
-                 <button 
-                  onClick={finalizeSale} 
-                  className="w-full py-7 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-indigo-100 dark:shadow-none hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-4"
-                 >
+                 <button onClick={finalizeSale} className="w-full py-7 bg-indigo-600 text-white rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-4">
                     <CheckCircle2 size={24}/> Authorize Transaction
                  </button>
               </footer>
@@ -868,7 +785,6 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
         </div>
       )}
 
-      {/* Invoice Success Screen */}
       {finishedInvoice && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-3xl animate-in fade-in duration-500">
            <div className="bg-white dark:bg-slate-900 rounded-[64px] w-full max-xl shadow-2xl overflow-hidden border border-white/10 flex flex-col animate-in zoom-in-95 duration-500">
@@ -876,30 +792,7 @@ export default function Terminal({ state, updateState }: { state: AppState; upda
                  <div className="w-28 h-28 bg-emerald-500 text-white rounded-[40px] flex items-center justify-center shadow-2xl shadow-emerald-500/20 animate-bounce">
                     <Check size={56} strokeWidth={4} />
                  </div>
-                 <div className="space-y-3">
-                    <h2 className="text-4xl font-black dark:text-white uppercase tracking-tighter">Settlement Complete</h2>
-                    <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.3em]">Ledger Record #INV-{finishedInvoice.id.padStart(4, '0')} Synchronized</p>
-                 </div>
-                 <div className="w-full p-8 bg-slate-50 dark:bg-slate-800/50 rounded-[40px] border border-slate-100 dark:border-slate-800">
-                    <div className="flex justify-between items-center mb-6 border-b dark:border-slate-800 pb-6">
-                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Remitted</p>
-                       <p className="text-3xl font-black dark:text-white">{state.settings.currency}{finishedInvoice.paidAmount.toLocaleString()}</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                       <button 
-                        onClick={() => handlePrintReceipt(finishedInvoice, 'thermal')} 
-                        className="py-5 bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 rounded-3xl font-black text-[10px] uppercase tracking-widest hover:border-indigo-500 transition-all flex items-center justify-center gap-3 active:scale-95"
-                       >
-                          <Printer size={18}/> Thermal Tape
-                       </button>
-                       <button 
-                        onClick={() => handlePrintReceipt(finishedInvoice, 'a4')} 
-                        className="py-5 bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 rounded-3xl font-black text-[10px] uppercase tracking-widest hover:border-indigo-500 transition-all flex items-center justify-center gap-3 active:scale-95"
-                       >
-                          <Layout size={18}/> Formal A4
-                       </button>
-                    </div>
-                 </div>
+                 <h2 className="text-4xl font-black dark:text-white uppercase tracking-tighter">Settlement Complete</h2>
               </div>
               <footer className="p-12 border-t bg-slate-50 dark:bg-slate-950 shrink-0">
                  <button onClick={() => setFinishedInvoice(null)} className="w-full py-7 bg-slate-900 dark:bg-white text-white dark:text-slate-950 rounded-[32px] font-black text-xs uppercase tracking-[0.3em] shadow-xl active:scale-95 transition-all">
